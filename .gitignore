@@ -34,3 +34,6 @@ assets/fonts/scans/
 
 # Intermediate frames and voiceover for the handoff video; the .py rebuilds them.
 handoff/.build/
+
+# Per-machine folder locations (written by ./run setup.py)
+paths.json

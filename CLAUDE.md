@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project context. Read this before touching anything.
+Project context. Read this before touching anything. First time on this machine? See SETUP.md. File locations are in paths.json (resolved by scripts/config.py).
 
 ---
 

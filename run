@@ -25,6 +25,11 @@ if [ ! -x "$python" ]; then
     exit 1
 fi
 
+# First run: ask where footage, assets, build output and cuts live (writes paths.json).
+if [ ! -f "$here/paths.json" ] && [ -t 0 ] && [ "${1:-}" != "setup.py" ]; then
+    "$python" "$here/scripts/setup.py"
+fi
+
 if [ "$#" -eq 0 ]; then
     echo "usage: ./run <script.py|-m module> [args…]" >&2
     echo "  scripts/ is on the path, so ./run roundtrip.py works as well as scripts/roundtrip.py" >&2

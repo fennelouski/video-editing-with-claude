@@ -7,6 +7,7 @@ Changing a value here changes it for every stage. Never hard-code these in a sta
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 # --------------------------------------------------------------------------------------
@@ -15,7 +16,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-ASSETS = ROOT / "assets"
+# Where the big, un-versioned folders live. Resolution order, first hit wins:
+#   1. paths.json at the repo root (written by `./run setup.py`; see SETUP.md)
+#   2. a folder of that name in a parent directory (the repo sits inside the video folder)
+#   3. inside the repo
+_PATH_KEYS = ("footage", "assets", "build", "cuts")
+
+
+def _find_path(key: str) -> Path:
+    cfg = ROOT / "paths.json"
+    if cfg.is_file():
+        chosen = json.loads(cfg.read_text()).get(key)
+        if chosen:
+            return Path(chosen).expanduser()
+    for parent in list(ROOT.parents)[:3]:
+        if (parent / key).is_dir():
+            return parent / key
+    return ROOT / key
+
+
+FOOTAGE = _find_path("footage")
+ASSETS = _find_path("assets")
+BUILD = _find_path("build")
+CUTS = _find_path("cuts")
+
 CUTOUTS = ASSETS / "cutouts"
 TEXTURES = ASSETS / "textures"
 FONTS = ASSETS / "fonts"
@@ -23,11 +47,9 @@ FOLEY = ASSETS / "foley"
 MUSIC = ASSETS / "music"
 LUTS = ASSETS / "luts"
 
-FOOTAGE = ROOT / "footage"
 SCRIPT_DIR = ROOT / "script"
 TEMPLATES = ROOT / "templates"
 
-BUILD = ROOT / "build"
 TRANSCRIPTS = BUILD / "transcripts"
 ROUGHCUT = BUILD / "roughcut"
 PLAN_DIR = BUILD / "plan"

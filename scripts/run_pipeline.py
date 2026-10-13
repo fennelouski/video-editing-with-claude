@@ -88,7 +88,7 @@ def preflight(verbose: bool = True) -> list[str]:
     # Case-folded, because all three Canon bodies write `.MOV` and a lower-case glob matched
     # none of them: preflight reported an empty footage/ while sitting on a gigabyte of it.
     if not any(p.suffix.lower() in (".mp4", ".mov") for p in C.FOOTAGE.rglob("*")):
-        problems.append(f"no footage in {C.FOOTAGE.relative_to(C.ROOT)}/  →  drop a clip in footage/a-cam/")
+        problems.append(f"no footage in {C.FOOTAGE}  →  drop a clip in {C.FOOTAGE / "a-cam"}, or run ./run setup.py to point at your footage")
 
     grain = list(C.TEXTURES.glob("paper-grain*"))
     if not grain:
