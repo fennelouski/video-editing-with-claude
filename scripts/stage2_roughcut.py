@@ -998,6 +998,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="wanted runtime; tightens breath toward the [S-002] floor and reports "
                          "any shortfall rather than cutting her lines to hit a number")
     ap.add_argument("--project", default="video001")
+    ap.add_argument("--assembly", type=Path, help="explicit ordered narration source manifest")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
 
@@ -1150,6 +1151,11 @@ def main(argv: list[str] | None = None) -> int:
     if failed:
         print("Stage 2 finished with a cut that does not read cleanly", file=sys.stderr)
         return 1
+    if args.assembly and not args.dry_run:
+        if args.no_verify or args.no_render:
+            raise ValueError("Narration assembly requires rendering and read-back")
+        from multisource import assemble
+        assemble(args.assembly, args.project, args.preview)
     print("Stage 2 complete")
     return 0
 

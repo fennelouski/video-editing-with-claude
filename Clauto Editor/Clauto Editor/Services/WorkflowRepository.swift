@@ -13,6 +13,7 @@ struct EditRun: Codable, Identifiable, Sendable {
     var failure: String? = nil
     var created = Date()
     var ownerProcessID = Int32(ProcessInfo.processInfo.processIdentifier)
+    var narrationCount: Int? = nil
 }
 
 struct StageEventRecord: Codable, Identifiable, Sendable {
@@ -44,6 +45,13 @@ struct CutVersion: Codable, Identifiable, Sendable {
     var savedSchemaChecked: Bool? = nil
     var briefHash: String? = nil
     var approvedScript: String? = nil
+    var primaryOutputPrefix: String? = nil
+    func preferredArtifact(_ suffix: String) -> String? {
+        if let prefix = primaryOutputPrefix, [".heard.txt", ".edl.json", ".preview.mp4", ".mp4"].contains(suffix) {
+            return artifacts.contains(prefix + suffix) ? prefix + suffix : nil
+        }
+        return artifacts.first { $0.hasSuffix(suffix) }
+    }
     var folderName: String { String(format: "v%03d", number) }
     func briefChanged(_ project: Project) -> Bool {
         guard let briefHash else { return false }
@@ -96,6 +104,7 @@ actor WorkflowRepository {
     func settings(_ run: EditRun, project: Project, engine: URL) throws -> [String: String] {
         try validate(run, project: project)
         let settings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+        guard ((run.narrationCount ?? 1) > 1) == (settings["assembly"] != nil) else { throw ProjectFailure.invalidProject }
         let expected = ["footage": try safe("inputs/footage", in: run.folder), "script": try safe("inputs/script", in: run.folder),
                         "assets": try safe("assets", in: project.folder), "build": run.folder, "cuts": try safe("cuts", in: project.folder),
                         "templates": engine.appendingPathComponent("templates")]
@@ -114,17 +123,39 @@ actor WorkflowRepository {
         guard let script = settings["approved_script"], script.hasPrefix("/"),
               URL(fileURLWithPath: script).resolvingSymlinksInPath().path.hasPrefix((try safe("inputs/script", in: run.folder)).resolvingSymlinksInPath().path + "/"),
               fm.fileExists(atPath: script) else { throw WorkflowFailure.invalid("The saved script is unavailable. Approve a script and start a new run.") }
+        if let assembly = settings["assembly"] {
+            guard URL(fileURLWithPath: assembly).standardizedFileURL == (try safe("inputs/narration-order.json", in: run.folder)).standardizedFileURL else { throw ProjectFailure.invalidProject }
+            let data = try Data(contentsOf: URL(fileURLWithPath: assembly))
+            guard settings["assembly_sha256"] == SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() else {
+                throw WorkflowFailure.invalid("The narration order changed. Start a new run with the intended clips.")
+            }
+            let spec = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard spec?["schema_version"] as? Int == 2, let sources = spec?["sources"] as? [[String: String]], sources.count >= 2,
+                  Set(sources.compactMap { $0["source"] }).count == sources.count else { throw ProjectFailure.invalidProject }
+            let intake = try safe("inputs/footage/a-cam", in: run.folder)
+            let linked = try fm.contentsOfDirectory(at: intake, includingPropertiesForKeys: nil)
+            guard sources.allSatisfy({ value in linked.contains { $0.resolvingSymlinksInPath().path == value["source"] && $0.deletingPathExtension().lastPathComponent == value["key"] } }),
+                  sources.count == linked.count else { throw WorkflowFailure.invalid("The narration order changed. Start a new run with the intended clips.") }
+        }
         return settings
     }
 
-    func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil) throws -> EditRun {
+    func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) throws -> EditRun {
         let missing = project.manifest.files.filter { !fm.fileExists(atPath: project.folder.appendingPathComponent($0.relativePath).path) }
         guard missing.isEmpty else { throw ProjectFailure.missingFile(missing.map(\.name).joined(separator: ", ")) }
         let footage = project.manifest.files.filter { $0.group == .footage }
-        guard let primary = primaryID.flatMap({ id in footage.first { $0.id == id } }) ?? (footage.count == 1 ? footage.first : nil) else {
-            throw WorkflowFailure.invalid("Choose the narration clip for this cut. The current engine finishes one narration source per run; other footage remains available in the project.")
+        let ordered = try narrationIDs.map { id -> ProjectFile in
+            guard let file = footage.first(where: { $0.id == id }) else { throw ProjectFailure.invalidProject }; return file
         }
-        guard !primary.name.lowercased().hasSuffix(".insv") else { throw ProjectFailure.unsupportedCamera }
+        guard Set(narrationIDs).count == narrationIDs.count else { throw ProjectFailure.invalidProject }
+        guard let primary = ordered.first ?? primaryID.flatMap({ id in footage.first { $0.id == id } }) ?? (footage.count == 1 ? footage.first : nil) else {
+            throw WorkflowFailure.invalid("Choose and order the narration clips for this cut.")
+        }
+        let selected = ordered.isEmpty ? [primary] : ordered
+        guard selected.allSatisfy({ !$0.name.lowercased().hasSuffix(".insv") }) else { throw ProjectFailure.unsupportedCamera }
+        guard Set(selected.map { URL(fileURLWithPath: $0.name).deletingPathExtension().lastPathComponent.lowercased() }).count == selected.count else {
+            throw WorkflowFailure.invalid("Narration clips need distinct names before transcription. Rename the project copies or choose clips with different names.")
+        }
         let engineVersion = try String(contentsOf: engine.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         guard project.manifest.engineVersion == engineVersion else { throw WorkflowFailure.invalid("This project uses a different engine version. Choose its original engine before running.") }
         var paths = try decoder.decode([String: String].self, from: Data(contentsOf: project.folder.appendingPathComponent("paths.json")))
@@ -157,13 +188,27 @@ actor WorkflowRepository {
         try fm.copyItem(at: project.folder.appendingPathComponent("brief.md"), to: inputs.appendingPathComponent("brief.md"))
         let narration = inputs.appendingPathComponent("footage/a-cam")
         try fm.createDirectory(at: narration, withIntermediateDirectories: true)
-        try fm.createSymbolicLink(at: narration.appendingPathComponent(primary.name), withDestinationURL: project.folder.appendingPathComponent(primary.relativePath).resolvingSymlinksInPath())
+        for file in selected {
+            try fm.createSymbolicLink(at: narration.appendingPathComponent(file.name), withDestinationURL: project.folder.appendingPathComponent(file.relativePath).resolvingSymlinksInPath())
+        }
+        if selected.count > 1 {
+            let spec: [String: Any] = ["schema_version": 2, "sources": selected.map {
+                ["source": project.folder.appendingPathComponent($0.relativePath).resolvingSymlinksInPath().path,
+                 "key": URL(fileURLWithPath: $0.name).deletingPathExtension().lastPathComponent]
+            }]
+            let order = inputs.appendingPathComponent("narration-order.json")
+            let data = try JSONSerialization.data(withJSONObject: spec, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: order)
+            paths["assembly"] = order.path
+            paths["assembly_sha256"] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
         paths["footage"] = inputs.appendingPathComponent("footage").path
         paths["script"] = inputs.appendingPathComponent("script").path
         paths["build"] = folder.path
         paths["cuts"] = project.folder.appendingPathComponent("cuts").path
         try encoder.encode(paths).write(to: folder.appendingPathComponent("paths.json"), options: .atomic)
-        let run = EditRun(folder: folder, projectID: project.id, label: label)
+        var run = EditRun(folder: folder, projectID: project.id, label: label)
+        run.narrationCount = selected.count
         try save(run)
         prepared = true
         return run
@@ -345,12 +390,26 @@ actor WorkflowRepository {
                     artifacts.append(relative)
                 }
             }
-            guard artifacts.contains(where: { $0.hasSuffix(".heard.txt") }) else { throw WorkflowFailure.invalid("Read-back is missing. This cut remains unverified and the previous version stays current.") }
+            let runSettings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+            let assembled = (run.narrationCount ?? 1) > 1
+            guard assembled == (runSettings["assembly"] != nil) else { throw ProjectFailure.invalidProject }
+            if assembled {
+                for suffix in [".edl.json", ".heard.txt", ".preview.mp4", ".roughcut.fcpxml"] {
+                    guard artifacts.contains("roughcut/assembly/selected" + suffix) else {
+                        throw WorkflowFailure.invalid("The assembled result is incomplete. The previous version stays current.")
+                    }
+                }
+            }
+            let readbacks = artifacts.filter { $0.hasSuffix(".heard.txt") }
+            guard !readbacks.isEmpty, try readbacks.allSatisfy({ !(try String(contentsOf: safe($0, in: folder), encoding: .utf8)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+                throw WorkflowFailure.invalid("Read-back is missing or empty. This cut remains unverified and the previous version stays current.")
+            }
             let briefHash = SHA256.hash(data: try Data(contentsOf: safe("inputs/brief.md", in: run.folder))).map { String(format: "%02x", $0) }.joined()
             let planObject = try JSONSerialization.jsonObject(with: Data(try plan(run).text.utf8)) as? [String: Any]
             guard let script = planObject?["script"] as? String, script == URL(fileURLWithPath: script).lastPathComponent,
                   artifacts.contains("inputs/script/" + script) else { throw WorkflowFailure.invalid("The approved script is missing from the run snapshot.") }
-            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script)
+            let prefix = assembled ? "roughcut/assembly/selected" : nil
+            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix)
             try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"), options: .atomic)
             try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
             return version
@@ -385,7 +444,7 @@ actor WorkflowRepository {
         guard let version = try versions(project: project).first(where: { $0.id == requested.id }) else { throw ProjectFailure.invalidProject }
         let root = try safe("cuts/" + version.folderName, in: project.folder)
         func text(_ suffix: String) throws -> String? {
-            guard let file = version.artifacts.first(where: { $0.hasSuffix(suffix) }) else { return nil }
+            guard let file = version.preferredArtifact(suffix) else { return nil }
             return try String(contentsOf: safe(file, in: root), encoding: .utf8)
         }
         var sections: [HandoffReport.Section] = []
@@ -405,10 +464,12 @@ actor WorkflowRepository {
         } else { throw ProjectFailure.invalidProject }
         guard let readback = try text(".heard.txt") else { throw WorkflowFailure.invalid("Read-back is unavailable. Reconnect the version's drive and retry.") }
         sections.append(.init(title: "Rendered audio read-back", text: readback))
-        if let edlFile = version.artifacts.first(where: { $0.hasSuffix(".edl.json") }) {
+        if let edlFile = version.preferredArtifact(".edl.json") {
             struct EDL: Decodable {
-                struct Span: Decodable { var start: Double; var end: Double; var reason: String? }
+                struct Span: Decodable { var start: Double; var end: Double; var reason: String?; var source: String?; var source_start: Double?; var source_end: Double? }
+                struct Segment: Decodable { var source: String; var start: Double; var end: Double }
                 var source: String; var fps: Double; var keeps: [Span]; var drops: [Span]
+                var segments: [Segment]? = nil
             }
             let edl = try decoder.decode(EDL.self, from: Data(contentsOf: safe(edlFile, in: root)))
             guard edl.fps.isFinite, edl.fps > 0 else { throw ProjectFailure.invalidProject }
@@ -416,6 +477,7 @@ actor WorkflowRepository {
             let xml = try XMLDocument(contentsOf: safe(timelineFile, in: root), options: .nodeLoadExternalEntitiesNever)
             let clips = try xml.nodes(forXPath: "//sequence/spine/asset-clip").compactMap { $0 as? XMLElement }
             guard clips.count == edl.keeps.count else { throw WorkflowFailure.invalid("The saved timeline and cut points disagree. Rebuild the cut before exporting its shot list.") }
+            guard edl.segments == nil || edl.segments?.count == clips.count else { throw ProjectFailure.invalidProject }
             func seconds(_ value: String?) throws -> Double {
                 guard let value, value.hasSuffix("s") else { throw ProjectFailure.invalidProject }
                 let parts = value.dropLast().split(separator: "/")
@@ -424,24 +486,41 @@ actor WorkflowRepository {
                 throw ProjectFailure.invalidProject
             }
             var timeline = 0.0
-            let rows = try edl.keeps.enumerated().map { index, span -> String in
+            var rows: [String] = []
+            for (index, span) in edl.keeps.enumerated() {
                 let clip = clips[index]
                 let at = try seconds(clip.attribute(forName: "offset")?.stringValue)
                 let start = try seconds(clip.attribute(forName: "start")?.stringValue)
                 let duration = try seconds(clip.attribute(forName: "duration")?.stringValue)
                 func snapped(_ value: Double) -> Double { (value * edl.fps).rounded() / edl.fps }
+                let sourceStart = edl.segments?[index].start ?? span.start
+                let sourceEnd = edl.segments?[index].end ?? span.end
+                if let segment = edl.segments?[index] {
+                    let assets = try xml.nodes(forXPath: "//resources/asset").compactMap { $0 as? XMLElement }
+                    guard let asset = assets.first(where: { $0.attribute(forName: "id")?.stringValue == clip.attribute(forName: "ref")?.stringValue }),
+                          let representation = asset.elements(forName: "media-rep").first,
+                          let path = representation.attribute(forName: "src")?.stringValue.flatMap({ URL(string: $0) }), path.isFileURL,
+                          path.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: segment.source).resolvingSymlinksInPath().standardizedFileURL else {
+                        throw WorkflowFailure.invalid("The shot list's source and saved timeline disagree.")
+                    }
+                }
                 guard span.start.isFinite, span.end.isFinite, span.start >= 0, span.end > span.start,
-                      abs(at - snapped(timeline)) < 0.000001, abs(start - snapped(span.start)) < 0.000001,
+                      sourceStart.isFinite, sourceEnd.isFinite, sourceStart >= 0, sourceEnd > sourceStart,
+                      abs(sourceEnd - sourceStart - (span.end - span.start)) < 0.000001,
+                      abs(at - snapped(timeline)) < 0.000001, abs(start - snapped(sourceStart)) < 0.000001,
                       abs(duration - snapped(span.end - span.start)) < 0.000001 else {
                     throw WorkflowFailure.invalid("The saved timeline and cut points changed. Rebuild the cut before exporting its shot list.")
                 }
                 timeline += span.end - span.start
-                return String(format: "Shot %d | Timeline %.3fs | Source %.3f-%.3fs | Duration %.3fs", index + 1, at, start, start + duration, duration)
-                    + "\n" + (span.reason ?? "Retained source footage")
+                rows.append(String(format: "Shot %d | Timeline %.3fs | Source %.3f-%.3fs | Duration %.3fs", index + 1, at, start, start + duration, duration)
+                    + "\n" + (edl.segments.map { URL(fileURLWithPath: $0[index].source).lastPathComponent + " | " } ?? "") + (span.reason ?? "Retained source footage"))
             }
             sections.append(.init(title: "Shot list", text: URL(fileURLWithPath: edl.source).lastPathComponent + String(format: " | %.6f fps\n\n", edl.fps) + rows.joined(separator: "\n\n")))
             if !edl.drops.isEmpty {
-                sections.append(.init(title: "Removed spans and reasons", text: edl.drops.map { String(format: "%.3f-%.3fs | ", $0.start, $0.end) + ($0.reason ?? "No reason recorded") }.joined(separator: "\n")))
+                sections.append(.init(title: "Removed spans and reasons", text: edl.drops.map {
+                    ($0.source.map { URL(fileURLWithPath: $0).lastPathComponent + " | " } ?? "") +
+                    String(format: "%.3f-%.3fs | ", $0.source_start ?? $0.start, $0.source_end ?? $0.end) + ($0.reason ?? "No reason recorded")
+                }.joined(separator: "\n")))
             }
         } else { throw WorkflowFailure.invalid("The shot list is unavailable for this version.") }
         if let sheet = try text(".build-sheet.md") {

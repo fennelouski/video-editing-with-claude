@@ -27,6 +27,7 @@ struct ProjectView: View {
             Picker("Project view", selection: $tab) {
                 Text("Brief").tag("Brief"); Text("Files").tag("Files"); Text("Cut").tag("Cut")
             }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 12)
+                .accessibilityIdentifier("projectTabs")
             Divider()
             if tab == "Brief" { BriefView(brief: $draft, store: store) }
             else if tab == "Files" { FilesView(store: store, project: project) }
@@ -35,6 +36,7 @@ struct ProjectView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     TextField("Ask Claude about this cut…", text: $message).textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Change request").accessibilityIdentifier("changeRequest")
                     Button("Save Request", systemImage: "arrow.down.doc") {
                         let submitted = message
                         Task { if await store.queueRequest(submitted), message == submitted { message = "" } }
@@ -100,7 +102,7 @@ private struct FilesView: View {
                     Text("Drop footage, recordings, images or scripts").font(.headline)
                     Spacer()
                     Button("Add Files…", systemImage: "plus") { Task { await store.intake(await FileDialogs.files(), copy: copyMedia) } }
-                        .disabled(store.working).accessibilityIdentifier("addFiles")
+                        .disabled(store.working || store.runningProjectID == project.id).accessibilityIdentifier("addFiles")
                 }
                 Toggle("Copy media into this project", isOn: $copyMedia)
                 Text("Media is referenced by default. Scripts and notes are copied so you can edit them; originals stay untouched.").font(.caption).foregroundStyle(.secondary)
@@ -112,6 +114,11 @@ private struct FilesView: View {
                 ForEach(FileGroup.allCases) { group in
                     GroupBox(group.rawValue) {
                         VStack(alignment: .leading, spacing: 12) {
+                            Button("Choose \(group.rawValue)…") {
+                                Task { await store.intake(await FileDialogs.files(), group: group, copy: copyMedia) }
+                            }.disabled(store.working || store.runningProjectID == project.id)
+                                .accessibilityLabel("Choose files for \(group.rawValue.lowercased())")
+                                .accessibilityIdentifier("chooseGroup\(group.rawValue)")
                             let files = project.manifest.files.filter { $0.group == group }
                             if files.isEmpty { Text("Drop \(group.rawValue.lowercased()) here, or use Add Files.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(12) }
                             ForEach(files) { file in fileRow(file) }
@@ -144,7 +151,9 @@ private struct FilesView: View {
                 }.disabled(store.working)
             }
             Button("Reveal", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
-            Button("Remove", systemImage: "minus.circle") { Task { await store.remove(file) } }.disabled(store.working)
+                .accessibilityLabel("Reveal \(file.name) in Finder")
+            Button("Remove", systemImage: "minus.circle") { Task { await store.remove(file) } }.disabled(store.working || store.runningProjectID == project.id)
+                .accessibilityLabel("Remove \(file.name) from project")
         }
     }
 }
@@ -154,6 +163,7 @@ private struct CutView: View {
     @State private var versionLabel = "First cut"
     @State private var comparison: UUID?
     @State private var primaryID: UUID?
+    @State private var narrationIDs: [UUID] = []
     var body: some View {
         ScrollView {
             if let project = store.selected {
@@ -162,18 +172,34 @@ private struct CutView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Make a first cut").font(.title2.bold())
                     Text("The engine transcribes and cuts locally, then pauses for your graphic-plan review. Original media stays untouched.").foregroundStyle(.secondary)
-                    TextField("Name this version", text: $versionLabel).textFieldStyle(.roundedBorder)
+                    TextField("Name this version", text: $versionLabel).textFieldStyle(.roundedBorder).accessibilityIdentifier("versionLabel")
                     Picker("Narration clip", selection: $primaryID) {
                         Text("Choose a clip").tag(Optional<UUID>.none)
                         ForEach(project.manifest.files.filter { $0.group == .footage }) { file in
                             Text(file.name).tag(Optional(file.id))
                         }
+                    }.accessibilityIdentifier("narrationClip")
+                    Button("Add Clip to Narration Order") {
+                        if let id = primaryID, !narrationIDs.contains(id) { narrationIDs.append(id) }
+                    }.disabled(primaryID == nil || primaryID.map { narrationIDs.contains($0) } == true || store.runningProjectID != nil)
+                        .accessibilityIdentifier("addNarrationClip")
+                    ForEach(Array(narrationIDs.enumerated()), id: \.element) { index, id in
+                        HStack {
+                            Text("\(index + 1). " + (project.manifest.files.first { $0.id == id }?.name ?? "Unavailable clip"))
+                            Spacer()
+                            Button("Move Up") { narrationIDs.swapAt(index, index - 1) }.disabled(index == 0 || store.runningProjectID != nil)
+                                .accessibilityLabel("Move narration clip \(index + 1) up")
+                            Button("Remove") { narrationIDs.removeAll { $0 == id } }.disabled(store.runningProjectID != nil)
+                                .accessibilityLabel("Remove narration clip \(index + 1)")
+                        }
                     }
-                    Text("The current engine finishes one narration source per run. Choose it explicitly; other clips are preserved for subsequent cuts and b-roll.").font(.caption).foregroundStyle(.secondary)
+                    Text(narrationIDs.isEmpty ? "Choose one clip, or add several in their spoken order. Other footage stays available for b-roll." : "Clips are cut individually, then assembled in this order and listened back again. Review cross-clip takes before approving the plan.")
+                        .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button("Check Project") { Task { await store.checkProject() } }.disabled(store.checking || store.runningProjectID != nil)
-                        Button("Run Current Inputs") { Task { await store.beginCut(label: versionLabel, primaryID: primaryID) } }
+                        Button("Run Current Inputs") { Task { await store.beginCut(label: versionLabel, primaryID: primaryID, narrationIDs: narrationIDs) } }
                             .buttonStyle(.borderedProminent).disabled(store.checking || store.runningProjectID != nil)
+                            .accessibilityIdentifier("runInputs")
                         if store.runningProjectID == project.id { Button("Stop") { Task { await store.cancel() } } }
                     }
                     if let summary = store.checkSummary { Text(summary).textSelection(.enabled) }
@@ -200,6 +226,7 @@ private struct CutView: View {
                                     Text(piece.status == "warn" ? "Needs attention" : "Missing").bold()
                                     Text(piece.notes.joined(separator: "\n"))
                                     Button("Choose Files…") { Task { await store.satisfy(piece, urls: await FileDialogs.files()) } }
+                                        .accessibilityLabel("Choose files for missing \(piece.ref)")
                                 }
                             }.dropDestination(for: URL.self) { urls, _ in Task { await store.satisfy(piece, urls: urls) }; return true }
                         }
@@ -239,19 +266,19 @@ private struct CutView: View {
     private func versionResults(_ version: CutVersion, project: Project) -> some View {
         let folder = project.folder.appendingPathComponent("cuts/" + version.folderName)
         return VStack(alignment: .leading, spacing: 12) {
-            if let preview = version.artifacts.first(where: { $0.hasSuffix(".mp4") }) {
+            if let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
                 CutPreview(url: folder.appendingPathComponent(preview)).id(version.id).frame(height: 240)
             }
             Text(version.savedSchemaChecked == true ? "The saved timeline passed Final Cut's schema check. Review the import before editing." : "Final Cut's schema check is unverified for this saved cut. Review the timeline import before editing.")
                 .font(.caption).foregroundStyle(.secondary)
-            ForEach(version.artifacts.filter { $0.hasSuffix(".fcpxml") }, id: \.self) { artifact in
+            ForEach(version.artifacts.filter { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }, id: \.self) { artifact in
                 Button("Open Timeline in Final Cut") { NSWorkspace.shared.open(folder.appendingPathComponent(artifact)) }
             }
             Button("Reveal Version") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
             Button("Export Script & Shot List PDF") {
                 Task { if let url = await store.exportHandoff(version) { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
             }.disabled(store.exportingPDF)
-            ForEach(version.artifacts.filter { $0.hasSuffix(".heard.txt") || $0.hasSuffix(".edl.json") }, id: \.self) { artifact in
+            ForEach([version.preferredArtifact(".heard.txt"), version.preferredArtifact(".edl.json")].compactMap { $0 }, id: \.self) { artifact in
                 DisclosureGroup(artifact.hasSuffix(".heard.txt") ? "Rendered audio read-back" : "Cut points and reasons") {
                     Text((try? String(contentsOf: folder.appendingPathComponent(artifact), encoding: .utf8)) ?? "File unavailable").font(.caption).textSelection(.enabled)
                 }

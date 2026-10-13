@@ -1,6 +1,7 @@
 # Implementation checklist
 
-Baseline: upstream `556b0ae` (13 October 2026). Work lives on local branch
+Baseline: upstream `556b0ae` (13 October 2026), reconfirmed against public main
+before the later local increment was saved. Work lives on local branch
 `codex/clauto-native-foundation` in a separate clone. Nothing is pushed.
 
 ## Scope and document reconciliation
@@ -62,7 +63,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M1 tagged engine releases | Pending | ENGINE_VERSION is explicitly 0.1.0-dev; no stable release tag claimed |
 | M2 project folder/CLAUDE.md | Implemented | Schema-checked JSON, brief.md, paths.json, visible folders |
 | M2 engine JSON progress | Implemented | Asset-gate/stream-channel tests |
-| M2 ClaudeSession and verified stream fixtures | Blocked by current session scope | Capture real CLI events only during separately authorized external-AI test |
+| M2 ClaudeSession and verified stream fixtures | Partial, synthetic only | Typed provisional adapter persists each line, resumes identity, rejects unbound/malformed/denied results, recovers interrupted turns and cancels; no live transport or real CLI event capture exists |
 | M3 brief autosave and project reopen | Implemented | Form persists brief.md; actor reload avoids stale manifest overwrite |
 | M3 type classification/reference/copy/remove | Implemented | Mixed intake, source preservation, rollback and containment tests; edited copied scripts retained in visible removed-files/ |
 | M3 audio/music ambiguity | Implemented | What-is-this menu relocates project reference, never original |
@@ -72,6 +73,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M3 docx reading/summary and Replace | Pending | DOCX intake and engine comments parsing are preserved; GUI preview/summary/replace are absent |
 | Projects duplicate/archive/thumbnails | Pending | Create, list, open and recent-project restore implemented |
 | M4 local first-cut orchestration | Implemented, synthetic acceptance passed | Actual cached large-v3 transcription/read-back, stages 1–3 pause, explicit plan approval, strict asset gate, alpha rendering, captions and saved version tested on NAS |
+| M4 ordered narration from several clips | Implemented, synthetic acceptance passed | Explicit GUI order, frozen schema-2 source/key manifest, real assembled read-back, original source/time provenance, aggregate evidence required before saving; two-source cached-model acceptance passed |
 | M4 missing pieces and asset quality | Implemented | Choose/drop and strict engine recheck; missing files, alpha, size and variant warnings stop before render; no green tick merely for a drop |
 | M4 scientific fact/number approval | Partial | Entire saved plan requires human approval; individual Confirm/Edit/Cut escalation cards remain pending |
 | M4 result review | Implemented, partial acceptance | Synthetic GUI preview reaches 00:08 without a crash; tab return resets to paused; read-back and reasons retained; actual Final Cut import remains unverified |
@@ -83,7 +85,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M5 Claude changes/branch/watch/rate-limit/notifications | Pending/blocked | Live Claude requires separately authorized fixture capture; branch, export watch, rate-limit retry and completion notifications are absent |
 | M6 style packs/neutral assets/engine update | Pending | One house style stated in UI |
 | M7 notarized DMG/appcast/live update/diagnostics | Pending | Local Debug app only, no publication or signing credentials |
-| Independent second reviewer | Complete for this increment | Separate read-only review of workflow, PDF/provenance, saved serialization and native player lifecycle; 35 routine core tests passed, 2 opt-ins skipped; GUI and cached-model acceptance run by main agent |
+| Independent second reviewer | Complete for this increment | Read-only workflow, PDF/provenance, saved serialization, native player, multisource, selected-camera import/proof and synthetic conversation reviews; 45 routine core tests passed independently, two opt-ins skipped; acceptance limits recorded in REVIEW.md |
 | Accessibility | Partial | Native controls, labels, keyboard choose equivalents; full VoiceOver/drop UI pass pending |
 
 ## Verification record
@@ -141,6 +143,42 @@ GUI, private media or Claude. See [REVIEW.md](REVIEW.md) for scope and acceptanc
 
 The entire product is not complete when these foundation checks pass.
 
+### Later local increment
+
+- Ordered multisource narration passed the full engine suite at its checkpoint:
+  **568 tests**. The later focused multisource and selected-camera import/proof suite
+  passed **47 tests**. This is not a claim that the full suite was repeated after every
+  tool addition.
+- Actual two-source cached-model acceptance passed in **66.527 seconds**. Both saved
+  final and rough-cut FCPXML pass engine checks and the installed DTD. The saved final
+  timeline references both originals, the handoff shot list names the second source,
+  the assembled read-back is required, and both original hashes remain unchanged.
+  Evidence: `acceptance-result.json` under the NAS project root's
+  `Synthetic Multisource Acceptance 2026-10-13-b94e073a` folder. An earlier failed
+  two-source fixture is preserved as failed evidence.
+- Multisource frame/source mapping, copied intake keys, approval manifest hash,
+  aggregate output selection and failure rollback have regression coverage. This
+  implements ordered narration assembly; multicamera selection/synchronization is
+  still separate work. The new GUI ordering controls have not received interactive
+  acceptance.
+- The build runner no longer terminates all existing app instances. `--build-only`
+  builds/stages/verifies the bundle without launching or interrupting a user session.
+- The provisional Claude adapter has only an injected synthetic transport. Its
+  default transport is disabled, non-fixture transports are refused, and no app
+  preference can enable a network turn. Fixture tests are explicitly synthetic;
+  current CLI payload compatibility still requires separately authorized capture.
+  The final core run passed **45 routine tests**, with **2 opt-in tests skipped**;
+  all eight synthetic conversation tests passed. Complete concurrency diagnostics
+  and the native Debug bundle build/signature verification passed.
+- Selected ONE R import and A/B proof tools were added for local correction work.
+  Import opens card ancestors and source files with no-follow descriptors, pins
+  known sizes/identity, verifies NAS read-back hashes, and creates a fresh local
+  receipt. It cannot write evidence to the card. The proof tool checks source and
+  output ranges, preserves primary-camera audio, and enforces the configured crop
+  ceiling. Synthetic tests cover symlink swaps, changed files, descriptor cleanup,
+  receipt containment and short secondary-camera rejection. No missing original
+  has been imported merely because these tests passed.
+
 ## Local build and evidence
 
 Run the app with `./script/build_and_run.sh`; build without UI with `--build-only`.
@@ -154,14 +192,18 @@ Local logs: `.artifacts/build.log`, `test-build.log`, `core-tests.log`,
 app bundle, venv and build scratch. The development venv's `.pth` overlay depends
 on the import task's already-installed dependency packages; it is not a portable
 clean-machine install and must be replaced by the M1 installer.
+Later increment logs are `multisource-full-engine-tests.log`,
+`multisource-acceptance.log`, `engine-increment-final.log`, `core-tests-current.log`,
+`claude-fixture-tests.log` and `app-increment-final.log`.
 
 ## Current workflow and limits
 
 Add original media, choose the asset library and already-installed model cache, and
 approve an annotated script. Run Current Inputs produces a separate run snapshot.
-The engine currently finishes one narration source per invocation: select it
-explicitly when several clips exist. The app preserves other footage but does not
-claim multicamera/multi-source assembly. It pauses after planning; approve the saved
+Select and order narration clips explicitly. Each run freezes that order and its
+original source keys; the assembled read-back and source time map accompany the
+saved cut. The app preserves other footage. Automatic multicamera selection and
+synchronization remain pending. It pauses after planning; approve the saved
 plan's facts, numbers and timing, then resolve any missing or unsuitable pieces.
 Rendering never receives --no-verify, --allow-missing or --skip-preflight.
 
@@ -196,5 +238,5 @@ Live requests stay queued until a separately authorized real Claude session exis
 Finish clean-machine setup/model measurement and wider GUI/accessibility acceptance.
 When external-AI testing is separately authorized, capture a real Claude CLI stream
 fixture and implement one resumable turn. Complete scientific escalation cards,
-multisource assembly, notifications and branch/watch.
+multicamera selection/synchronization, notifications and branch/watch.
 Keep engine version pinning explicit and never bypass the read-back or asset gates.

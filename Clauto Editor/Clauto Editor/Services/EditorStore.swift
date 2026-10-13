@@ -181,13 +181,13 @@ final class EditorStore {
         catch { notice = error.localizedDescription }
     }
 
-    func beginCut(label: String, primaryID: UUID? = nil) async {
+    func beginCut(label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) async {
         guard let chosen = selected, runningProjectID == nil, !checking else { return }
         runningProjectID = chosen.id; defer { runningProjectID = nil }
         do {
             if let save = saves[chosen.id] { await save.value }
             let project = try await repository.open(chosen.folder)
-            let run = try await workflow.prepare(project: project, engine: engineRoot, label: label, primaryID: primaryID)
+            let run = try await workflow.prepare(project: project, engine: engineRoot, label: label, primaryID: primaryID, narrationIDs: narrationIDs)
             runs[project.id] = run
             await execute(run, project: project, start: 1, stop: 3)
         } catch { notice = error.localizedDescription }

@@ -60,3 +60,38 @@ approval, full VoiceOver, and actual Final Cut import remain unverified. Live Cl
 integration is absent. Synthetic placeholder assets are not production house artwork.
 Final main-agent build/test counts and the wider requirements checklist live in
 [IMPLEMENTATION.md](IMPLEMENTATION.md).
+
+## Later increment review
+
+The same independent reviewer inspected ordered multisource narration and its
+source/key manifest, timeline mapping, aggregate read-back and saved-version gates.
+Fixed findings covered copied intake keys, narration order preservation, source-local
+removed spans, frame tolerance at source boundaries, empty assembled speech, and
+fallback to an individual clip's artifacts when aggregate evidence is missing.
+Synthetic checks passed; actual two-source cached-model acceptance was performed
+separately by the main agent. Interactive GUI narration ordering remains unverified.
+
+The selected ONE R import/proof review reproduced four gaps and verified their
+fixes: descriptor-anchored card ancestors defeat symlink swaps, evidence cannot be
+written to the card or overwrite an existing receipt, expected sizes are rechecked
+after source fingerprinting, and a short secondary-camera input cannot become a
+successful frozen-frame proof. A shared destination-descriptor leak on failed
+source open was also fixed with ExitStack and a regression check. The reviewer
+independently passed **34 synthetic import/proof tests**. Live missing-footage import
+and physical camera synchronization remain unverified.
+
+The provisional synthetic-only Claude adapter review found three additional gaps:
+an unbound result could succeed without any session identity, a process crash could
+lose partial streamed output, and malformed denial/result fields could be treated
+as successful output. Results now require an observed matching identity, each
+received line persists running text/events before UI callbacks, and supplied fields
+must have the expected types. Cancellation uses the specific turn identity so a
+late handler cannot stop a newer turn.
+
+The final independent run passed **45 routine core tests**, including eight
+synthetic conversation fixtures; **two opt-ins skipped**. Whitespace was clean and
+no remaining blocking finding was found in the reviewed synthetic adapter. There
+is no live Claude transport or verified real CLI event capture, so M2 remains
+incomplete. An external planning attempt with private transcripts was rejected by
+automatic approval review before execution; direct human permission is still
+required to override the original privacy restriction.

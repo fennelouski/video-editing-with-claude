@@ -24,11 +24,13 @@ struct PipelineService: Sendable {
                            "HF_HOME": modelCache.appendingPathComponent("huggingface").path,
                            "TORCH_HOME": modelCache.appendingPathComponent("torch").path,
                            "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "CLAUTO_OFFLINE": "1"]
+        var arguments = ["run_pipeline.py", "--from", String(start), "--to", String(stop), "--progress", "json", "--preview", "--strict-assets",
+                         "--project", "video\(project.id.uuidString.prefix(8))", "--aspect", project.manifest.aspect,
+                         "--script", settings["approved_script"]!]
+        if let assembly = settings["assembly"] { arguments += ["--assembly", assembly] }
         do {
             let result = try await runner.run(ProcessCommand(executable: engine.appendingPathComponent("run"),
-                arguments: ["run_pipeline.py", "--from", String(start), "--to", String(stop), "--progress", "json", "--preview", "--strict-assets",
-                            "--project", "video\(project.id.uuidString.prefix(8))", "--aspect", project.manifest.aspect,
-                            "--script", settings["approved_script"]!],
+                arguments: arguments,
                 directory: engine, environment: environment, timeout: .seconds(86_400)), onLine: { line in
                     try? await disk.appendLog(line, run: original)
                     if !line.isError {

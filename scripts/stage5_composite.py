@@ -457,8 +457,11 @@ def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Pat
     import fcpxml as FX
 
     edl = json.loads(edl_path.read_text())
+    segments = edl.get("segments")
+    if segments is not None and len(segments) != len(edl["keeps"]):
+        raise ValueError("The assembly's source segments do not match its retained spans")
     src = C.ROOT / edl["source"]
-    if not src.exists():
+    if segments is None and not src.exists():
         raise FileNotFoundError(f"source media missing: {edl['source']}")
 
     # Cue times are in SOURCE time; the timeline is the cut. Everything must be remapped.
@@ -468,12 +471,16 @@ def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Pat
     timeline = 0.0
     for i, k in enumerate(edl["keeps"]):
         d = k["end"] - k["start"]
+        source = C.ROOT / segments[i]["source"] if segments is not None else src
+        start = segments[i]["start"] if segments is not None else k["start"]
+        if segments is not None and abs(segments[i]["end"] - start - d) > 1e-6:
+            raise ValueError("The assembly's source span changed")
         clips.append(FX.Clip(
-            asset_path=src,
+            asset_path=source,
             offset=C.snap_seconds(timeline),
-            start=C.snap_seconds(k["start"]),
+            start=C.snap_seconds(start),
             duration=C.snap_seconds(d),
-            name=f"{src.stem} {i+1:02d}",
+            name=f"{source.stem} {i+1:02d}",
         ))
         timeline += d
 
@@ -570,6 +577,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage 5 — composite graphics, burn captions, stitch")
     ap.add_argument("plan", nargs="?")
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
+    ap.add_argument("--edl", help="explicit retained-span edit list")
+    ap.add_argument("--transcript", help="explicit word timings for captions")
     ap.add_argument("--graphics-only", action="store_true",
                     help="render the layers but don't build the FCPXML")
     ap.add_argument("--no-captions", action="store_true")
@@ -633,14 +642,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.graphics_only:
         return 0
 
-    edls = sorted(C.ROUGHCUT.glob("*.edl.json"))
+    edls = [cli.resolve_or_exit(args.edl, expect=(".json",), label="edit list")] if args.edl else sorted(C.ROUGHCUT.glob("*.edl.json"))
     if not edls:
         print("! no rough cut EDL found — run stage 2 first")
         return 1
 
     if not args.no_captions and C.CAPTION_MODE in ("itt", "both"):
         import fcpxml as FX
-        tpath = next(iter(sorted(C.TRANSCRIPTS.glob("*.words.json"))), None)
+        tpath = cli.resolve_or_exit(args.transcript, expect=(".json",), label="caption transcript") if args.transcript else next(iter(sorted(C.TRANSCRIPTS.glob("*.words.json"))), None)
         if tpath:
             # Captions live in the same cut timeline as everything else — remap, and drop the
             # words that were edited out.

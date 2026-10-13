@@ -22,7 +22,7 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     Button("New Project", systemImage: "plus") { showNewProject = true }.keyboardShortcut("n")
-                    Button("Open Project…", systemImage: "folder") { Task { if let folder = await FileDialogs.folder(initial: store.projectRoot) { await store.open(folder) } } }
+                    Button("Open Project…", systemImage: "folder") { Task { if let folder = await FileDialogs.folder(initial: store.projectRoot) { await store.open(folder) } } }.keyboardShortcut("o")
                     Button("Setup & Folders", systemImage: "gearshape") { showSetup = true }
                 }.buttonStyle(.bordered).padding().frame(maxWidth: .infinity)
             }

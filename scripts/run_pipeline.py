@@ -141,6 +141,8 @@ def stage_args(stage: Stage, args) -> list[str]:
             out.append("--force")
     elif stage.key == "roughcut":
         out += ["--project", args.project]
+        if getattr(args, "assembly", None):
+            out += ["--assembly", args.assembly]
         if args.aggressive:
             out.append("--aggressive")
         if args.preview:
@@ -149,6 +151,9 @@ def stage_args(stage: Stage, args) -> list[str]:
         out += ["--project", args.project]
         if args.script:
             out.append(args.script)
+        if getattr(args, "assembly", None):
+            from multisource import TRANSCRIPT
+            out += ["--transcript", str(C.TRANSCRIPTS / TRANSCRIPT)]
     elif stage.key == "assets":
         plan = C.PLAN_DIR / f"{args.project}.plan.json"
         if plan.exists():
@@ -162,6 +167,9 @@ def stage_args(stage: Stage, args) -> list[str]:
         if plan.exists():
             out.append(str(plan))
         out += ["--aspect", args.aspect]
+        if getattr(args, "assembly", None):
+            from multisource import EDL, TRANSCRIPT
+            out += ["--edl", str(C.ROUGHCUT / EDL), "--transcript", str(C.TRANSCRIPTS / TRANSCRIPT)]
         if args.no_captions:
             out.append("--no-captions")
     elif stage.key == "watch":
@@ -184,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", default="video001", help="project name, used for filenames")
     ap.add_argument("--strict-assets", action="store_true", help="stop for asset quality warnings as well as missing files")
     ap.add_argument("--script", help="explicit annotated script selected by the editor")
+    ap.add_argument("--assembly", help="explicit ordered narration source manifest")
     ap.add_argument("--model", default=C.WHISPER_MODEL, help="whisper model")
     ap.add_argument("--preview", action="store_true",
                     help="stage 2: also render a flattened preview mp4")

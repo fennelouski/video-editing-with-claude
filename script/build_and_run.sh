@@ -9,7 +9,8 @@ case "$MODE" in
   run|--verify|--debug|--logs|--build-only) ;;
   *) echo "usage: $0 [run|--verify|--debug|--logs|--build-only]" >&2; exit 2 ;;
 esac
-if [ "$MODE" != --build-only ]; then pkill -x "$APP_NAME" >/dev/null 2>&1 || true; fi
+# Never terminate another app instance: it may own unsaved work or a render.
+# Use --build-only while a user session is open; a normal launch opens another instance.
 mkdir -p .artifacts dist
 xcodebuild -project 'Clauto Editor/Clauto Editor.xcodeproj' -scheme 'Clauto Editor' \
   -configuration Debug -destination 'platform=macOS' -derivedDataPath .artifacts/DerivedData \

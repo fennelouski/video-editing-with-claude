@@ -371,24 +371,68 @@ struct WorkflowTests {
         #expect(version.artifacts.contains("inputs/script/APPROVED.MD"))
     }
 
+    @Test func narrationOrderIsExplicitAndFrozenAcrossStages() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let second = root.appendingPathComponent("second.MOV"); try Data("second synthetic original".utf8).write(to: second)
+        let project = try await ProjectRepository().add([second], to: original)
+        let ids = project.manifest.files.filter { $0.group == .footage }.map(\.id).reversed()
+        let disk = WorkflowRepository()
+        let run = try await disk.prepare(project: project, engine: engine, label: "Ordered", narrationIDs: Array(ids))
+        let settings = try await disk.settings(run, project: project, engine: engine)
+        let path = try #require(settings["assembly"])
+        let object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any])
+        let sources = try #require(object["sources"] as? [[String: String]])
+        #expect(sources[0]["source"] == second.path)
+        let changed: [String: Any] = ["schema_version": 2, "sources": Array(sources.reversed())]
+        try JSONSerialization.data(withJSONObject: changed).write(to: URL(fileURLWithPath: path))
+        await #expect(throws: WorkflowFailure.self) { try await disk.settings(run, project: project, engine: engine) }
+        await #expect(throws: ProjectFailure.self) { try await disk.prepare(project: project, engine: engine, label: "Duplicate", narrationIDs: [ids.first!, ids.first!]) }
+        #expect(try Data(contentsOf: second) == Data("second synthetic original".utf8))
+    }
+
+    @Test func copiedNarrationUsesIntakeKeysAndCannotLoseAssemblyEvidence() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let second = root.appendingPathComponent("second.MOV"); try Data("copied synthetic original".utf8).write(to: second)
+        let project = try await ProjectRepository().add([second], to: original, copy: true)
+        let ids = project.manifest.files.filter { $0.group == .footage }.map(\.id)
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Copied", narrationIDs: ids)
+        let settings = try await disk.settings(run, project: project, engine: engine)
+        let assemblyPath = try #require(settings["assembly"])
+        let spec = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: assemblyPath))) as? [String: Any])
+        let sources = try #require(spec["sources"] as? [[String: String]])
+        #expect(sources[1]["key"] == "second")
+        #expect(sources[1]["source"] != second.path)
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(run, project: project) }
+        var version = CutVersion(number: 1, label: "Incomplete", engineVersion: "test", runID: run.id, artifacts: ["roughcut/source.heard.txt"], approvedPlanHash: "test")
+        version.primaryOutputPrefix = "roughcut/assembly/selected"
+        #expect(version.preferredArtifact(".heard.txt") == nil)
+        #expect(try await disk.current(project: project) == nil)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_SYNTHETIC_ACCEPTANCE_ROOT"] != nil,
                    "Requires explicitly prepared synthetic inputs and cached speech models"))
     func fullCachedSpeechToVersionAcceptance() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["CLAUTO_SYNTHETIC_ACCEPTANCE_ROOT"]))
-        struct Input: Decodable { var synthetic: Bool; var approved_script: String; var source: String; var asset_library: String }
+        struct Input: Decodable { var synthetic: Bool; var approved_script: String; var source: String; var sources: [String]?; var asset_library: String }
         let input = try JSONDecoder().decode(Input.self, from: Data(contentsOf: root.appendingPathComponent("fixture.json")))
         #expect(input.synthetic)
         guard input.synthetic else { return }
         let engine = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let repo = ProjectRepository(), disk = WorkflowRepository()
         var project = try await repo.create(name: "Synthetic acceptance only", root: root.appendingPathComponent("projects"), engine: engine, engineVersion: "0.1.0-dev")
-        project = try await repo.add([URL(fileURLWithPath: input.source)], to: project)
+        let sourceURLs = (input.sources ?? [input.source]).map { URL(fileURLWithPath: $0) }
+        project = try await repo.add(sourceURLs, to: project)
         project = try await repo.useFolder(URL(fileURLWithPath: input.asset_library), key: "assets", project: project)
         project = try await repo.useFolder(URL(fileURLWithPath: "/Volumes/Videos/Food Videos/Katie YouTube/Models"), key: "model_cache", project: project)
         try await repo.approveScript(input.approved_script, project: project)
         let sourceHash = SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: input.source)))
+        let sourceHashes = try sourceURLs.map { SHA256.hash(data: try Data(contentsOf: $0)) }
         let service = PipelineService(runner: ProcessRunner(), disk: disk)
-        var run = try await disk.prepare(project: project, engine: engine, label: "Synthetic cached-model acceptance")
+        let narrationIDs = try sourceURLs.map { url in try #require(project.manifest.files.first { $0.originalPath == url.path }?.id) }
+        var run = try await disk.prepare(project: project, engine: engine, label: "Synthetic cached-model acceptance", narrationIDs: narrationIDs)
         run = try await service.execute(run, project: project, engine: engine, start: 1, stop: 3, onEvent: { _ in })
         #expect(run.state == .needsReview, Comment(rawValue: run.failure ?? ""))
         guard run.state == .needsReview else { return }
@@ -405,6 +449,7 @@ struct WorkflowTests {
         #expect(version.artifacts.contains { $0.hasSuffix(".itt") })
         #expect(try await disk.current(project: project)?.id == version.id)
         #expect(SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: input.source))) == sourceHash)
+        for (index, source) in sourceURLs.enumerated() { #expect(SHA256.hash(data: try Data(contentsOf: source)) == sourceHashes[index]) }
         let versionRoot = project.folder.appendingPathComponent("cuts/" + version.folderName)
         let savedTimelines = version.artifacts.filter { $0.hasSuffix(".fcpxml") }.map { versionRoot.appendingPathComponent($0).path }
         let validation = try await ProcessRunner().run(ProcessCommand(executable: engine.appendingPathComponent("run"),
@@ -412,9 +457,17 @@ struct WorkflowTests {
             directory: engine, environment: ["CLAUTO_OFFLINE": "1"], timeout: .seconds(60)))
         try #require(validation.succeeded, Comment(rawValue: validation.output + validation.error))
         try #require(version.savedSchemaChecked == true)
+        if sourceURLs.count > 1 {
+            #expect(version.primaryOutputPrefix == "roughcut/assembly/selected")
+            let xml = try XMLDocument(contentsOf: versionRoot.appendingPathComponent(try #require(version.artifacts.first { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") })))
+            let storyline = try xml.nodes(forXPath: "//sequence/spine/asset-clip").compactMap { $0 as? XMLElement }
+            #expect(Set(storyline.compactMap { $0.attribute(forName: "ref")?.stringValue }).count == sourceURLs.count)
+            #expect(try await disk.handoffReport(version, project: project).sections.contains { $0.title == "Shot list" && $0.text.contains(sourceURLs[1].lastPathComponent) })
+        }
         let report: [String: Any] = ["synthetic_only": true, "project": project.folder.path,
             "run": run.folder.path, "version": version.number, "schema_checked": version.sourceSchemaChecked ?? false,
             "saved_schema_checked": version.savedSchemaChecked ?? false, "engine_saved_validation_passed": validation.exitCode == 0,
+            "source_count": sourceURLs.count,
             "artifacts": version.artifacts, "original_unchanged": true]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: root.appendingPathComponent("acceptance-result.json"), options: .atomic)
     }
