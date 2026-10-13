@@ -150,16 +150,21 @@ The app updates itself the way Straight Up Browser does (see that repo's `DEPLOY
 `mach-lookup` entitlement exception because it is sandboxed. Clauto Editor is not, so omit both and
 do not copy that entitlement block. Verify on a real update that the installer works without them.
 
-**Signing key.** The EdDSA private key lives in this Mac's Keychain (service
-`https://sparkle-project.org`, account `ed25519`); it must never change for an installed app. Two
-options, decide before the first release:
+**Signing key (decided: separate from the Browser's).** A dedicated EdDSA key was generated on
+2026-10-13 in this Mac's Keychain under account `clauto-editor` (service
+`https://sparkle-project.org`). Public half, for `SUPublicEDKey`:
 
-- *Reuse the Browser's key* (the default `generate_appcast` picks up): one key to back up, and the
-  Browser's `sparkle-bin` tools work as is. If it leaks, both apps are affected.
-- *A separate key* (`generate_keys --account clauto-editor`, passed to the tools): isolates the
-  apps, costs a second secret to back up.
+```
+/LljfVeMeOGaHUIwA5Pk1bsI5qOKskCqUAd3uDHHGso=
+```
 
-Whichever is chosen, put the public half in `SUPublicEDKey` and write the choice into this doc.
+- Every Sparkle tool must be told the account: `generate_appcast --account clauto-editor ...`,
+  `sign_update --account clauto-editor ...`. Without it they use the Browser's default key, and the
+  app would reject the result.
+- The private key exists only in this Mac's Keychain. Back it up somewhere durable now, before the
+  first release. Never change it once an app is installed: copies already installed would reject
+  every later update.
+- Do not paste the private key anywhere (docs, chat, repo).
 
 **Hosting and the AWS migration.** The DMG and appcast are static files in the nathanfennel.com
 repo (`public/downloads/`). That site is under the AWS migration policy: until the cutover, a

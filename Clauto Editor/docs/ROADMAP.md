@@ -9,8 +9,8 @@ Ordered so each milestone is usable and testable on its own. "Done" is observabl
 - Sandbox off (done), hardened runtime on, app icon placeholder, bundle id decision.
 - `ProcessRunner` with environment building, cancellation, and tests.
 - Add Sparkle (SPM, 2.6+), the updater controller (off in Debug), and the plist keys, so updates
-  are in from the first signed build rather than bolted on at the end. Decide the signing-key
-  question (ARCHITECTURE.md, "Updates").
+  are in from the first signed build rather than bolted on at the end. Signing key is decided
+  and generated (ARCHITECTURE.md, "Updates"); back it up.
 
 **Done when:** the app launches to an empty project list and can run `ffmpeg -version` with a
 correct explicit `PATH`, from a normal Finder launch (not Xcode).

@@ -72,6 +72,7 @@ That is an engine change, tracked in ROADMAP M6, not an app feature.
   trade-off instead of forcing the largest model (see UX.md, Setup, "Transcription model").
 - **Updates use Sparkle**, the same mechanism and signing setup as Straight Up Browser. See
   ARCHITECTURE.md, "Updates".
+- **Sparkle uses its own EdDSA key** (account `clauto-editor`), separate from the Browser.
 - **Bundle id stays `com.nathanfennel.Clauto-Editor`.**
 - **Engine updates are separate from app updates:** pinned tagged releases, applied on consent.
 
@@ -83,5 +84,3 @@ That is an engine change, tracked in ROADMAP M6, not an app feature.
    import FCPXML or XML with caveats; deferred.
 3. **Her assets.** The cutouts, textures and marker font are one person's scans. A second user
    needs either their own or a bundled neutral set. Decide before M6.
-4. **Sparkle key sharing.** Reuse the Browser's EdDSA key or generate a separate one (see
-   ARCHITECTURE.md, "Updates").
