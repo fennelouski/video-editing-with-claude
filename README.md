@@ -262,3 +262,7 @@ nearest surviving frame and says so.
 **Stage 6's job is to be annoying.** It will flag things that are fine. Read the report, dismiss
 what's wrong, and — importantly — write the "rule going forward" line on every entry it appends
 to `style_guide.md`. An entry without a testable rule teaches the pipeline nothing.
+
+## Clauto Editor (macOS app)
+
+A native app that wraps this pipeline in a GUI: setup, projects, drag and drop, iteration. Design docs: [`Clauto Editor/docs/`](Clauto%20Editor/docs/README.md).

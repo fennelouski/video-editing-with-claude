@@ -37,3 +37,8 @@ handoff/.build/
 
 # Per-machine folder locations (written by ./run setup.py)
 paths.json
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+DerivedData/

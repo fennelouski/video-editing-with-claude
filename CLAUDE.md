@@ -161,7 +161,7 @@ Anything added should be verifiable without a human watching a video:
 
 ## Things not to do
 
-- Don't add a web UI. Two people use this, both comfortable in a terminal.
+- Don't add a web UI. The only GUI is the native macOS app in `Clauto Editor/` (design in `Clauto Editor/docs/`); it drives this engine and must not reimplement it or bypass the rules above.
 - Don't add a "smart" auto-styling system. The point of `taste_principles.md` is that the
   decisions are already made; re-deciding them per video is the failure mode this project exists
   to prevent.
