@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Darwin
 
 @MainActor @Observable
 final class EditorStore {
@@ -8,14 +9,22 @@ final class EditorStore {
     var selectedID: UUID?
     var notice: String?
     var setupChecks: [SetupCheck] = []
-    var details = ""
+    var runDetails: [UUID: String] = [:]
     var checking = false
     var working = false
-    var checkSummary: String?
+    var checkSummaries: [UUID: String] = [:]
     var projectRoot: URL
     var engineRoot: URL
+    var runs: [UUID: EditRun] = [:]
+    var cutVersions: [UUID: [CutVersion]] = [:]
+    var currentCuts: [UUID: CutVersion] = [:]
+    var conversations: [UUID: [LocalMessage]] = [:]
+    var missingPieces: [UUID: [MissingPiece]] = [:]
+    var planReviews: [UUID: String] = [:]
+    var runningProjectID: UUID?
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
+    @ObservationIgnored private let workflow = WorkflowRepository()
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
@@ -29,6 +38,8 @@ final class EditorStore {
     }
 
     var selected: Project? { projects.first { $0.id == selectedID } }
+    var details: String { selectedID.flatMap { runDetails[$0] } ?? "" }
+    var checkSummary: String? { selectedID.flatMap { checkSummaries[$0] } }
 
     func restore() async {
         for path in defaults.stringArray(forKey: recentKey) ?? [] {
@@ -67,40 +78,40 @@ final class EditorStore {
     }
 
     func intake(_ urls: [URL], group: FileGroup? = nil, copy: Bool = false) async {
-        guard let project = selected, !working else { return }
+        guard let project = selected, !working, runningProjectID != project.id else { return }
         working = true; defer { working = false }
         do { update(try await repository.add(urls, to: project, group: group, copy: copy)) }
         catch { notice = error.localizedDescription }
     }
 
     func remove(_ file: ProjectFile) async {
-        guard let project = selected, !working else { return }
+        guard let project = selected, !working, runningProjectID != project.id else { return }
         working = true; defer { working = false }
         do { update(try await repository.remove(file, from: project)) } catch { notice = error.localizedDescription }
     }
 
     func assign(_ group: FileGroup, file: ProjectFile) async {
-        guard let project = selected, !working else { return }
+        guard let project = selected, !working, runningProjectID != project.id else { return }
         working = true; defer { working = false }
         do { update(try await repository.assign(group, to: file, project: project)) } catch { notice = error.localizedDescription }
     }
 
     func preferences(aspect: String? = nil, model: String? = nil) async {
-        guard let project = selected, !working else { return }
+        guard let project = selected, !working, runningProjectID != project.id else { return }
         working = true; defer { working = false }
         do { update(try await repository.preferences(aspect: aspect ?? project.manifest.aspect, model: model ?? project.manifest.whisperModel, project: project)) }
         catch { notice = error.localizedDescription }
     }
 
     func checkSetup() async {
-        guard !checking else { return }
+        guard !checking, runningProjectID == nil else { return }
         checking = true; defer { checking = false }
         setupChecks = await SetupService(runner: runner).check(engine: engineRoot, projectsRoot: projectRoot)
     }
 
     func checkProject() async {
-        guard let project = selected, !checking else { return }
-        checking = true; checkSummary = nil; details = ""; defer { checking = false }
+        guard let project = selected, !checking, runningProjectID == nil else { return }
+        checking = true; checkSummaries[project.id] = nil; runDetails[project.id] = ""; defer { checking = false }
         do {
             try ProjectRepository.validateDrive(project.folder)
             let missing = project.manifest.files.filter {
@@ -116,15 +127,112 @@ final class EditorStore {
                               "CLAUTO_WHISPER_MODEL": project.manifest.whisperModel,
                               "HF_HOME": projectRoot.deletingLastPathComponent().appendingPathComponent("Models/huggingface").path,
                               "TORCH_HOME": projectRoot.deletingLastPathComponent().appendingPathComponent("Models/torch").path]), onLine: nil)
-            details = result.output + result.error
-            if result.cancelled { checkSummary = "Check stopped. Your files are unchanged."; return }
+            runDetails[project.id] = result.output + result.error
+            if result.cancelled { checkSummaries[project.id] = "Check stopped. Your files are unchanged."; return }
             let report = try JSONDecoder().decode(EnginePreflight.self, from: Data(result.output.utf8))
             guard report.ready == result.succeeded else { throw ProjectFailure.invalidProject }
-            checkSummary = report.ready ? "Preflight passed. A cut has not been generated." : "Setup needs attention:\n" + report.problems.joined(separator: "\n")
-        } catch { checkSummary = error.localizedDescription }
+            checkSummaries[project.id] = report.ready ? "Preflight passed. A cut has not been generated." : "Setup needs attention:\n" + report.problems.joined(separator: "\n")
+        } catch { checkSummaries[project.id] = error.localizedDescription }
     }
 
     func cancel() async { await runner.cancel() }
+
+    func loadWorkflow() async {
+        guard let project = selected else { return }
+        do {
+            conversations[project.id] = try await workflow.messages(project: project)
+            cutVersions[project.id] = try await workflow.versions(project: project)
+            currentCuts[project.id] = try await workflow.current(project: project)
+            if runningProjectID != project.id, var run = try await workflow.recentRun(project: project) {
+                if run.state == .running, kill(run.ownerProcessID, 0) != 0 {
+                    run.state = .failed; run.failure = "The previous app session ended during this run. Start a new run; the previous cut is still available."
+                    try await workflow.save(run)
+                }
+                runs[project.id] = run
+                missingPieces[project.id] = (try? await workflow.missing(run)) ?? []
+                planReviews[project.id] = (try? await workflow.plan(run).text) ?? ""
+                runDetails[project.id] = (try? await workflow.logTail(run)) ?? ""
+            }
+        } catch { notice = error.localizedDescription }
+    }
+
+    func queueRequest(_ text: String) async -> Bool {
+        guard let project = selected else { return false }
+        do { conversations[project.id] = try await workflow.queue(text, project: project); return true }
+        catch { notice = error.localizedDescription; return false }
+    }
+
+    func useProjectFolder(_ folder: URL, key: String) async {
+        guard let project = selected, runningProjectID == nil else { return }
+        do { update(try await repository.useFolder(folder, key: key, project: project)) }
+        catch { notice = error.localizedDescription }
+    }
+
+    func approveScript(_ text: String) async {
+        guard let project = selected, runningProjectID == nil else { return }
+        do { try await repository.approveScript(text, project: project); notice = "Approved script saved. New runs will use it." }
+        catch { notice = error.localizedDescription }
+    }
+
+    func beginCut(label: String, primaryID: UUID? = nil) async {
+        guard let chosen = selected, runningProjectID == nil, !checking else { return }
+        runningProjectID = chosen.id; defer { runningProjectID = nil }
+        do {
+            if let save = saves[chosen.id] { await save.value }
+            let project = try await repository.open(chosen.folder)
+            let run = try await workflow.prepare(project: project, engine: engineRoot, label: label, primaryID: primaryID)
+            runs[project.id] = run
+            await execute(run, project: project, start: 1, stop: 3)
+        } catch { notice = error.localizedDescription }
+    }
+
+    func continueCut(approve: Bool) async {
+        guard let project = selected, var run = runs[project.id], runningProjectID == nil, !checking else { return }
+        guard [.needsReview, .needsAssets, .failed].contains(run.state) else { return }
+        runningProjectID = project.id; defer { runningProjectID = nil }
+        do {
+            let plan = try await workflow.plan(run)
+            guard plan.issues.isEmpty else { throw WorkflowFailure.invalid("Resolve the plan's timing or cue issues before rendering: " + plan.issues.joined(separator: "; ")) }
+            if approve { run.approvedPlanHash = plan.hash }
+            await execute(run, project: project, start: 4, stop: 5)
+        } catch { notice = error.localizedDescription }
+    }
+
+    private func execute(_ run: EditRun, project: Project, start: Int, stop: Int) async {
+        do {
+            let result = try await PipelineService(runner: runner, disk: workflow).execute(run, project: project, engine: engineRoot, start: start, stop: stop) { event in
+                await MainActor.run {
+                    var progress = self.runs[project.id] ?? run
+                    progress.state = .running; progress.events.append(event); self.runs[project.id] = progress
+                }
+            }
+            runs[project.id] = result
+            if result.state == .complete {
+                do { _ = try await workflow.snapshot(result, project: project) }
+                catch {
+                    var failed = result; failed.state = .failed; failed.failure = error.localizedDescription
+                    runs[project.id] = failed; try await workflow.save(failed); throw error
+                }
+                cutVersions[project.id] = try await workflow.versions(project: project)
+                currentCuts[project.id] = try await workflow.current(project: project)
+            }
+            missingPieces[project.id] = (try? await workflow.missing(result)) ?? []
+            planReviews[project.id] = (try? await workflow.plan(result).text) ?? ""
+            runDetails[project.id] = (try? await workflow.logTail(result)) ?? ""
+        } catch { notice = error.localizedDescription }
+    }
+
+    func satisfy(_ piece: MissingPiece, urls: [URL]) async {
+        guard let project = selected, let run = runs[project.id], runningProjectID == nil else { return }
+        do { try await workflow.satisfy(piece, urls: urls, run: run) }
+        catch { notice = error.localizedDescription }
+    }
+
+    func restoreCut(_ version: CutVersion) async {
+        guard let project = selected, runningProjectID == nil else { return }
+        do { try await workflow.restore(version, project: project); currentCuts[project.id] = version }
+        catch { notice = error.localizedDescription }
+    }
 
     func setFolders(projects: URL? = nil, engine: URL? = nil) {
         if let projects { projectRoot = projects; defaults.set(projects.path, forKey: "ClautoProjectsRoot") }

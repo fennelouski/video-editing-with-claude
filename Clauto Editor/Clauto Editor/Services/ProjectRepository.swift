@@ -42,7 +42,8 @@ actor ProjectRepository {
                          "cuts": folder.appendingPathComponent("cuts").path,
                          "script": folder.appendingPathComponent("script").path,
                          "templates": engine.appendingPathComponent("templates").path,
-                         "whisper_model": project.manifest.whisperModel]
+                         "whisper_model": project.manifest.whisperModel,
+                         "model_cache": root.path.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") ? "/Volumes/Videos/Food Videos/Katie YouTube/Models" : root.appendingPathComponent("Models").path]
             try encoder.encode(paths).write(to: folder.appendingPathComponent("paths.json"), options: .atomic)
             try project.brief.markdown.write(to: folder.appendingPathComponent("brief.md"), atomically: true, encoding: .utf8)
             let rules = """
@@ -113,8 +114,13 @@ actor ProjectRepository {
                 let isFolder = (try source.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true
                 let category = group ?? (isFolder ? .footage : FileGroup.classify(source))
                 let copied = copy || category == .scripts || category == .other
+                let isFont = ["woff2", "ttf", "otf"].contains(source.pathExtension.lowercased())
+                let isGrain = source.lastPathComponent.lowercased().hasPrefix("paper-grain")
+                let destinationFolder = category == .graphics && isFont ? "assets/fonts" : (category == .graphics && isGrain ? "assets/textures" : category.folder)
+                try manager.createDirectory(at: project.folder.appendingPathComponent(destinationFolder), withIntermediateDirectories: true)
+                let filename = isFont && !manager.fileExists(atPath: project.folder.appendingPathComponent(destinationFolder + "/" + source.lastPathComponent).path) ? source.lastPathComponent : (isGrain ? "paper-grain-\(UUID().uuidString.prefix(8)).\(source.pathExtension)" : "\(UUID().uuidString.prefix(8))-\(source.lastPathComponent)")
                 let file = ProjectFile(name: source.lastPathComponent, group: category,
-                                       relativePath: "\(category.folder)/\(UUID().uuidString.prefix(8))-\(source.lastPathComponent)",
+                                       relativePath: "\(destinationFolder)/\(filename)",
                                        originalPath: source.path, copied: copied, needsRole: group == nil && category == .audio)
                 let destination = try intakeURL(file, folder: project.folder)
                 if copied { try manager.copyItem(at: source, to: destination) }
@@ -142,14 +148,58 @@ actor ProjectRepository {
         return next
     }
 
+    func useFolder(_ folder: URL, key: String, project: Project) throws -> Project {
+        guard ["assets", "model_cache"].contains(key), manager.fileExists(atPath: folder.path) else { throw ProjectFailure.invalidProject }
+        try Self.validateDrive(project.folder); try Self.validateDrive(folder)
+        var next = try open(project.folder)
+        let file = project.folder.appendingPathComponent("paths.json")
+        var paths = try decoder.decode([String: String].self, from: Data(contentsOf: file))
+        if key == "assets" {
+            // Keep project intake independent of the shared library. Bring in references,
+            // never replace the library's files or redirect future drops into shared folders.
+            var created: [URL] = []
+            do {
+                for kind in ["fonts", "textures", "cutouts", "foley", "music", "luts"] {
+                    let source = folder.appendingPathComponent(kind)
+                    guard manager.fileExists(atPath: source.path) else { continue }
+                    for item in try manager.contentsOfDirectory(at: source, includingPropertiesForKeys: [.isRegularFileKey], options: .skipsHiddenFiles) {
+                        guard (try item.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true else { continue }
+                        let relative = "assets/\(kind)/\(item.lastPathComponent)"
+                        let entry = ProjectFile(name: item.lastPathComponent, group: kind == "music" ? .music : .graphics,
+                                                relativePath: relative, originalPath: item.resolvingSymlinksInPath().path, copied: false, needsRole: false)
+                        let destination = try intakeURL(entry, folder: project.folder)
+                        try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        if manager.fileExists(atPath: destination.path) || (try? manager.destinationOfSymbolicLink(atPath: destination.path)) != nil { continue }
+                        try manager.createSymbolicLink(at: destination, withDestinationURL: item.resolvingSymlinksInPath())
+                        created.append(destination); next.manifest.files.append(entry)
+                    }
+                }
+                try saveManifest(next)
+            } catch { for url in created { try? manager.removeItem(at: url) }; throw error }
+            paths["asset_library"] = folder.resolvingSymlinksInPath().path
+            paths["assets"] = project.folder.appendingPathComponent("assets").path
+        } else { paths[key] = folder.resolvingSymlinksInPath().path }
+        try encoder.encode(paths).write(to: file, options: .atomic)
+        return next
+    }
+
+    func approveScript(_ text: String, project: Project) throws {
+        try Self.validateDrive(project.folder)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowFailure.invalid("Write or add an annotated script first.") }
+        let folder = project.folder.appendingPathComponent("script").resolvingSymlinksInPath()
+        guard folder.path.hasPrefix(project.folder.resolvingSymlinksInPath().path + "/") else { throw ProjectFailure.invalidProject }
+        try text.write(to: folder.appendingPathComponent("script.md"), atomically: true, encoding: .utf8)
+    }
+
     func remove(_ file: ProjectFile, from project: Project) throws -> Project {
         try Self.validateDrive(project.folder)
         var next = try open(project.folder)
-        let destination = try intakeURL(file, folder: project.folder)
+        guard let canonical = next.manifest.files.first(where: { $0.id == file.id }) else { throw ProjectFailure.invalidProject }
+        let destination = try intakeURL(canonical, folder: project.folder)
         var preserved: URL?
         // Copied scripts may contain edits the original doesn't. Keep them in a visible
         // folder rather than discarding user-authored material with a reference removal.
-        if file.copied && manager.fileExists(atPath: destination.path) {
+        if canonical.copied && manager.fileExists(atPath: destination.path) {
             let removed = project.folder.appendingPathComponent("removed-files", isDirectory: true)
             try manager.createDirectory(at: removed, withIntermediateDirectories: true)
             let saved = removed.appendingPathComponent("\(UUID().uuidString.prefix(8))-\(destination.lastPathComponent)")
@@ -159,7 +209,7 @@ actor ProjectRepository {
         do { try saveManifest(next) }
         catch { if let preserved { try? manager.moveItem(at: preserved, to: destination) }; throw error }
         // Remove only the reference after recording it. The target is never deleted.
-        if !file.copied, (try? manager.destinationOfSymbolicLink(atPath: destination.path)) != nil {
+        if !canonical.copied, (try? manager.destinationOfSymbolicLink(atPath: destination.path)) != nil {
             try manager.removeItem(at: destination)
         }
         return next
@@ -169,7 +219,7 @@ actor ProjectRepository {
         try Self.validateDrive(project.folder)
         var next = try open(project.folder)
         guard let index = next.manifest.files.firstIndex(where: { $0.id == file.id }) else { throw ProjectFailure.invalidProject }
-        let old = try intakeURL(file, folder: project.folder)
+        let old = try intakeURL(next.manifest.files[index], folder: project.folder)
         next.manifest.files[index].group = group
         next.manifest.files[index].needsRole = false
         next.manifest.files[index].relativePath = "\(group.folder)/\(old.lastPathComponent)"

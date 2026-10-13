@@ -1,8 +1,8 @@
 """
 Stage 5 — Composite and stitch.
 
-Renders the graphic layer by animating her scanned cutouts on the stop-motion step clock,
-then burns captions and stitches the master.
+Renders scanned cutouts on the stop-motion step clock and assembles an editable Final Cut
+timeline with separate graphic layers and native caption files.
 
 Everything on screen came out of a scanner or a camera. Nothing here draws a shape, generates
 a texture, or invents an image — see style_guide.md [S-001].
@@ -13,12 +13,13 @@ Per taste_principles:
   §4.4  every cutout gets a warm contact shadow, constant direction, never pure black
   §6.7  captions cut, never slide, and never step
 
-Output: build/graphics/<cue>.mov (alpha)  ·  build/exports/<project>.master.mp4
+Output: build/graphics/<cue>.mov (alpha) · build/exports/<project>.fcpxml and .itt
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -156,8 +157,9 @@ class Cutout:
 def find_variants(ref: str) -> list[Path]:
     kind, key = (ref.split(":", 1) + ["", ""])[:2] if ":" in ref else ("cutout", ref)
     base = {"cutout": C.CUTOUTS, "texture": C.TEXTURES}.get(kind, C.CUTOUTS)
+    extensions = {".png", ".tif", ".tiff", ".webp"} | ({".jpg", ".jpeg"} if kind == "texture" else set())
     return sorted(p for p in base.rglob("*") if p.is_file()
-                  and p.suffix.lower() in {".png", ".tif", ".tiff", ".webp"}
+                  and p.suffix.lower() in extensions
                   and p.stem.startswith(key))
 
 
@@ -551,8 +553,15 @@ def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Pat
         print(f"  ! FCPXML validation: {len(problems)} issue(s)")
         for p in problems[:6]:
             print(f"      {p}")
+        raise RuntimeError("FCPXML validation failed; this timeline is not a finished cut")
     else:
         print("  ✓ FCPXML validates")
+    out.with_suffix(".validation.json").write_text(json.dumps({
+        "timeline": out.name,
+        "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+        "problems": [],
+        "schemaChecked": FX.dtd_problems(out) is not None,
+    }, indent=2))
     return out
 
 

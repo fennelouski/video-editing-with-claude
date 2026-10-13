@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -22,7 +23,7 @@ import cli
 import config as C
 
 
-VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".m4v", ".avi"}
+VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".m4v", ".avi", ".mts", ".m2ts", ".mxf"}
 AUDIO_EXTS = {".wav", ".aif", ".aiff", ".flac", ".m4a", ".mp3"}
 
 
@@ -80,7 +81,8 @@ def transcribe(
     compute_type = "float16" if device == "cuda" else "int8"
 
     print(f"  loading whisper model '{model}' on {device} ({compute_type})")
-    asr = whisperx.load_model(model, device, compute_type=compute_type, language=language)
+    options = {"local_files_only": True} if os.environ.get("CLAUTO_OFFLINE") == "1" else {}
+    asr = whisperx.load_model(model, device, compute_type=compute_type, language=language, **options)
     audio_data = whisperx.load_audio(str(audio))
     result = asr.transcribe(audio_data, batch_size=8)
 
@@ -106,6 +108,8 @@ def transcribe(
 
 def _transcribe_cli(audio: Path, model: str, language: str, device: str) -> dict:
     """Fallback path: shell out to the whisperx CLI and read its JSON."""
+    if os.environ.get("CLAUTO_OFFLINE") == "1":
+        raise RuntimeError("The local WhisperX API is required for offline cuts. Complete model setup before retrying.")
     if not shutil.which("whisperx"):
         raise RuntimeError(
             "whisperx is not importable and not on PATH.\n"
@@ -238,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Speech and alignment models ready: {args.download_model}")
         return 0
 
-    clips = find_clips([cli.resolve_or_exit(p, expect=(".mov", ".mp4", ".m4v", ".avi", ".mts", ".mxf"), label='clip')
+    clips = find_clips([cli.resolve_or_exit(p, expect=(".mov", ".mp4", ".m4v", ".avi", ".mts", ".m2ts", ".mxf", ".mkv"), label='clip')
                         for p in args.clips])
     if not clips:
         print(f"! no footage found under {C.path_label(C.FOOTAGE)}/")

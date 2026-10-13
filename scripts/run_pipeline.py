@@ -89,7 +89,7 @@ def preflight(verbose: bool = True) -> list[str]:
 
     # Case-folded, because all three Canon bodies write `.MOV` and a lower-case glob matched
     # none of them: preflight reported an empty footage/ while sitting on a gigabyte of it.
-    if not any(p.suffix.lower() in (".mp4", ".mov", ".mkv", ".m4v", ".avi") for p in C.FOOTAGE.rglob("*")):
+    if not any(p.suffix.lower() in (".mp4", ".mov", ".mkv", ".m4v", ".avi", ".mts", ".m2ts", ".mxf") for p in C.FOOTAGE.rglob("*")):
         problems.append(f"no footage in {C.FOOTAGE}  →  drop a clip in {C.FOOTAGE / "a-cam"}, or run ./run setup.py to point at your footage")
 
     grain = list(C.TEXTURES.glob("paper-grain*"))
@@ -147,12 +147,16 @@ def stage_args(stage: Stage, args) -> list[str]:
             out.append("--preview")
     elif stage.key == "plan":
         out += ["--project", args.project]
+        if args.script:
+            out.append(args.script)
     elif stage.key == "assets":
         plan = C.PLAN_DIR / f"{args.project}.plan.json"
         if plan.exists():
             out.append(str(plan))
         if args.allow_missing:
             out.append("--allow-missing")
+        if args.strict_assets:
+            out.append("--strict-assets")
     elif stage.key == "composite":
         plan = C.PLAN_DIR / f"{args.project}.plan.json"
         if plan.exists():
@@ -178,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip", type=int, nargs="*", default=[], help="skip these stages")
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
     ap.add_argument("--project", default="video001", help="project name, used for filenames")
+    ap.add_argument("--strict-assets", action="store_true", help="stop for asset quality warnings as well as missing files")
+    ap.add_argument("--script", help="explicit annotated script selected by the editor")
     ap.add_argument("--model", default=C.WHISPER_MODEL, help="whisper model")
     ap.add_argument("--preview", action="store_true",
                     help="stage 2: also render a flattened preview mp4")

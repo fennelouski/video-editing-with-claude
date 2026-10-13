@@ -61,6 +61,9 @@ fi
 shift
 for candidate in "$first" "$here/$first" "$here/scripts/$first" "$here/scripts/tools/$first"; do
     if [ -f "$candidate" ]; then
+        if [ "${CLAUTO_OFFLINE:-}" = "1" ]; then
+            exec "$python" "$here/scripts/offline_run.py" "$candidate" "$@"
+        fi
         exec "$python" "$candidate" "$@"
     fi
 done

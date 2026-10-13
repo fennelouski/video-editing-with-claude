@@ -32,6 +32,6 @@ final class Clauto_EditorUITests: XCTestCase {
         }
         let expectation = expectation(for: saved, evaluatedWith: nil)
         await fulfillment(of: [expectation], timeout: 5)
-        XCTAssertFalse(app.buttons["Send"].isEnabled)
+        XCTAssertFalse(app.buttons["Save Request"].isEnabled)
     }
 }

@@ -8,6 +8,11 @@ from pathlib import Path
 import run_pipeline as R
 import config as C
 import stage1_transcribe as S1
+import stage4_assets as S4
+import stage5_composite as S5
+import fcpxml as FX
+import hashlib
+import pytest
 from types import SimpleNamespace
 
 
@@ -85,3 +90,62 @@ def test_model_prefetch_loads_speech_and_alignment_without_footage(monkeypatch):
     assert S1.main(["--download-model", "small"]) == 0
     assert calls == [("speech", ("small", "cpu"), {"compute_type": "int8", "language": "en"}),
                      ("alignment", (), {"language_code": "en", "device": "cpu"})]
+
+
+def test_gui_offline_runner_blocks_network_before_script_execution(tmp_path):
+    script = tmp_path / "network probe.py"
+    script.write_text("import socket; socket.socket().connect(('127.0.0.1', 9))")
+    proc = subprocess.run([str(C.ROOT / "run"), str(script)], env=os.environ | {"CLAUTO_OFFLINE": "1"}, capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert "Clauto is offline" in proc.stderr
+
+
+def test_offline_transcription_cannot_fall_back_to_unrestricted_cli(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUTO_OFFLINE", "1")
+    with pytest.raises(RuntimeError, match="local WhisperX API"):
+        S1._transcribe_cli(tmp_path / "synthetic.wav", "small", "en", "cpu")
+
+
+def test_camera_extensions_and_audio_formats_are_consistent(tmp_path, monkeypatch):
+    for ext in (".MTS", ".m2ts", ".MXF"):
+        (tmp_path / ("narration" + ext)).write_bytes(b"synthetic")
+    monkeypatch.setattr(C, "FOOTAGE", tmp_path)
+    assert len(S1.find_clips(None)) == 3
+    assert {".aif", ".aiff"} <= S4.KIND_DIRS["music"][1]
+    monkeypatch.setattr(C, "TEXTURES", tmp_path)
+    (tmp_path / "paper-grain_v01.jpg").write_bytes(b"synthetic")
+    assert S5.find_variants("texture:paper-grain") == [tmp_path / "paper-grain_v01.jpg"]
+
+
+def test_strict_asset_warnings_stop_before_render(tmp_path, monkeypatch):
+    plan = tmp_path / "video.plan.json"
+    plan.write_text(json.dumps({"project": "video", "cues": []}))
+    monkeypatch.setattr(C, "PLAN_DIR", tmp_path)
+    monkeypatch.setattr(S4, "resolve_ref", lambda ref: S4.Resolution(ref, "texture", ref.split(":")[1], "warn", notes=["Synthetic low resolution"]))
+    assert S4.main([str(plan), "--strict-assets"]) == 3
+    assert json.loads((tmp_path / "video.assets.json").read_text())["warn"] == 2
+
+
+def test_assembled_timeline_has_hash_bound_validation_report(tmp_path, monkeypatch, video):
+    monkeypatch.setattr(C, "PLAN_DIR", tmp_path)
+    (tmp_path / "video.plan.json").write_text(json.dumps({"cues": []}))
+    edl = tmp_path / "video.edl.json"
+    edl.write_text(json.dumps({"source": str(video), "keeps": [{"start": 0, "end": 1}]}))
+    out = tmp_path / "video.fcpxml"
+    assert S5.assemble("video", "16:9", edl, [], out) == out
+    report = json.loads(out.with_suffix(".validation.json").read_text())
+    assert report["sha256"] == hashlib.sha256(out.read_bytes()).hexdigest()
+    assert report["timeline"] == out.name
+    assert report["problems"] == []
+    assert FX.validate(out) == []
+    monkeypatch.setattr(FX, "validate", lambda path: ["synthetic invalid timeline"])
+    with pytest.raises(RuntimeError, match="FCPXML validation failed"):
+        S5.assemble("video", "16:9", edl, [], tmp_path / "invalid.fcpxml")
+    assert not (tmp_path / "invalid.validation.json").exists()
+
+
+def test_explicit_approved_script_is_forwarded_to_planning(tmp_path):
+    script = tmp_path / "Approved script.md"
+    args = SimpleNamespace(project="video", script=str(script))
+    stage = next(s for s in R.STAGES if s.key == "plan")
+    assert R.stage_args(stage, args) == ["--project", "video", str(script)]

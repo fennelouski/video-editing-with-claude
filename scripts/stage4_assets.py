@@ -42,7 +42,7 @@ KIND_DIRS = {
     "broll": (C.FOOTAGE / "broll", VIDEO_EXTS),
     "macro": (C.FOOTAGE / "macro", VIDEO_EXTS),
     "foley": (C.FOLEY, {".wav", ".aif", ".aiff", ".flac"}),
-    "music": (C.MUSIC, {".wav", ".flac", ".mp3", ".m4a"}),
+    "music": (C.MUSIC, {".wav", ".aif", ".aiff", ".flac", ".mp3", ".m4a"}),
 }
 
 MIN_CUTOUT_LONG_EDGE = 2400     # taste_principles §1.2
@@ -239,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--allow-missing", action="store_true",
                     help="report gaps but don't fail the run (Stage 5 will still refuse)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--strict-assets", action="store_true", help="stop for alpha, resolution and variant quality warnings")
     args = ap.parse_args(argv)
 
     # An ACTIVE correction still carrying placeholder text is a rule that
@@ -307,6 +308,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n! {len(missing)} asset(s) missing. The pipeline does not generate them.")
         print(f"  Work through {C.path_label(sheet)}, then re-run Stage 4.")
         return 0 if args.allow_missing else 3
+
+    if args.strict_assets and any(r.status == "warn" for r in results):
+        print("\n! Asset quality needs attention. Resolve the warnings in the build sheet before rendering.")
+        return 3
 
     print("\nStage 4 complete — all assets resolved")
     return 0

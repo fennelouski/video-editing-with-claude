@@ -15,9 +15,9 @@ enum FileGroup: String, Codable, CaseIterable, Identifiable, Sendable {
     }
     static func classify(_ url: URL) -> FileGroup {
         switch url.pathExtension.lowercased() {
-        case "mp4", "mov", "m4v", "mkv", "avi", "mts", "mxf", "insv": .footage
+        case "mp4", "mov", "m4v", "mkv", "avi", "mts", "m2ts", "mxf", "insv": .footage
         case "wav", "aif", "aiff", "mp3", "m4a", "flac": .audio
-        case "png", "jpg", "jpeg", "heic", "tiff", "webp", "svg": .graphics
+        case "png", "jpg", "jpeg", "heic", "tiff", "webp", "svg", "woff2", "ttf", "otf": .graphics
         case "txt", "md", "docx": .scripts
         default: .other
         }
@@ -68,7 +68,13 @@ struct Brief: Equatable, Sendable {
     var markdown: String {
         let sections = [("About", about), ("Audience", audience), ("Length", length), ("Tone", tone),
                         ("Music", music), ("Graphics", graphics), ("Avoid", avoid), ("Script", script)]
-        return "# Video brief\n\n" + sections.map { "## \($0.0)\n\($0.1)" }.joined(separator: "\n\n") + "\n"
+        return "# Video brief\n\n" + sections.map { section in
+            let escaped = section.1.components(separatedBy: "\n").map { line in
+                let heading = String(line.drop(while: { $0 == "\\" }))
+                return sections.contains(where: { "## " + $0.0 == heading }) ? "\\" + line : line
+            }.joined(separator: "\n")
+            return "## \(section.0)\n\(escaped)"
+        }.joined(separator: "\n\n") + "\n"
     }
 
     init() {}
@@ -79,10 +85,12 @@ struct Brief: Equatable, Sendable {
             if line.hasPrefix("## "), names.contains(String(line.dropFirst(3))) {
                 current = String(line.dropFirst(3)); sections[current!] = ""
             } else if let current {
-                sections[current, default: ""] += line + "\n"
+                let heading = String(line.drop(while: { $0 == "\\" }))
+                let decoded = line.hasPrefix("\\") && names.contains(String(heading.dropFirst(3))) && heading.hasPrefix("## ") ? String(line.dropFirst()) : line
+                sections[current, default: ""] += decoded + "\n"
             }
         }
-        let value: (String) -> String = { sections[$0, default: ""].trimmingCharacters(in: .whitespacesAndNewlines) }
+        let value: (String) -> String = { sections[$0, default: ""].trimmingCharacters(in: .newlines) }
         about = value("About"); audience = value("Audience"); length = value("Length"); tone = value("Tone")
         music = value("Music"); graphics = value("Graphics"); avoid = value("Avoid"); script = value("Script")
         if sections.isEmpty { about = markdown }

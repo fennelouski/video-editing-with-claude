@@ -33,8 +33,10 @@ protocol CommandRunning: Sendable {
 }
 
 actor ProcessRunner: CommandRunning {
-    private var active: Process?
+    private var activePID: pid_t?
+    private var activeRun: UUID?
     private var wasCancelled = false
+    private var cancellationTask: Task<Void, Never>?
 
     nonisolated static func environment(overrides: [String: String] = [:]) -> [String: String] {
         var result = ProcessInfo.processInfo.environment
@@ -59,62 +61,96 @@ actor ProcessRunner: CommandRunning {
 
     func run(_ command: ProcessCommand, onLine: (@Sendable (ProcessLine) async -> Void)? = nil) async throws -> ProcessResult {
         try Task.checkCancellation()
-        guard active == nil else { throw ProcessFailure.busy }
-        let process = Process()
+        guard activePID == nil else { throw ProcessFailure.busy }
         let output = Pipe(), errorPipe = Pipe()
-        process.executableURL = command.executable
-        process.arguments = command.arguments
-        process.currentDirectoryURL = command.directory
-        process.environment = Self.environment(overrides: command.environment)
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = errorPipe
-        active = process
-        wasCancelled = false
-        // Drain both pipes concurrently: waiting for exit first deadlocks on a full pipe.
-        let outTask = Task.detached { await Self.drain(output.fileHandleForReading, isError: false, onLine: onLine) }
-        let errTask = Task.detached { await Self.drain(errorPipe.fileHandleForReading, isError: true, onLine: onLine) }
+        let pid = try Self.spawn(command, output: output, error: errorPipe)
+        let runID = UUID()
+        activePID = pid; activeRun = runID; wasCancelled = false
+        try? output.fileHandleForWriting.close()
+        try? errorPipe.fileHandleForWriting.close()
+        let outTask = Task { await Self.drain(output.fileHandleForReading, isError: false, onLine: onLine) }
+        let errTask = Task { await Self.drain(errorPipe.fileHandleForReading, isError: true, onLine: onLine) }
         let timeoutTask = Task { [weak self] in
             try? await Task.sleep(for: command.timeout)
-            if !Task.isCancelled { await self?.cancel() }
+            if !Task.isCancelled { await self?.cancel(runID: runID) }
         }
-        defer { timeoutTask.cancel(); active = nil }
-        let code: Int32
-        do {
-            code = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    process.terminationHandler = { p in continuation.resume(returning: p.terminationStatus) }
-                    do {
-                        try process.run()
-                        try? output.fileHandleForWriting.close()
-                        try? errorPipe.fileHandleForWriting.close()
-                    } catch {
-                        try? output.fileHandleForWriting.close()
-                        try? errorPipe.fileHandleForWriting.close()
-                        continuation.resume(throwing: error)
-                    }
+        defer { timeoutTask.cancel(); activePID = nil; activeRun = nil }
+        return await withTaskCancellationHandler {
+            let code: Int32 = await withCheckedContinuation { continuation in
+                // waitpid is blocking; keep it off the cooperative Swift executor.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    var info = siginfo_t()
+                    var result: Int32
+                    // Keep the exited group leader unreaped during cancellation escalation:
+                    // its reserved PID prevents a signal from reaching a reused group ID.
+                    repeat { result = waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) } while result == -1 && errno == EINTR
+                    let code: Int32 = result == -1 ? -1 : (info.si_code == CLD_EXITED ? info.si_status : 128 + info.si_status)
+                    continuation.resume(returning: code)
                 }
-            } onCancel: { Task { await self.cancel() } }
-        } catch {
-            _ = await outTask.value
-            _ = await errTask.value
-            throw error
-        }
-        let out = await outTask.value
-        let err = await errTask.value
-        return ProcessResult(exitCode: code, output: out, error: err, cancelled: wasCancelled)
+            }
+            let out = await outTask.value
+            let err = await errTask.value
+            if let cancellationTask { await cancellationTask.value }
+            var reapedStatus: Int32 = 0
+            while waitpid(pid, &reapedStatus, 0) == -1 && errno == EINTR { }
+            cancellationTask = nil
+            return ProcessResult(exitCode: code, output: out, error: err, cancelled: wasCancelled)
+        } onCancel: { Task { await self.cancel(runID: runID) } }
     }
 
-    func cancel() {
-        guard let process = active, process.isRunning else { return }
+    func cancel() { if let runID = activeRun { cancel(runID: runID) } }
+
+    private func cancel(runID: UUID) {
+        guard activeRun == runID, let pid = activePID else { return }
+        guard cancellationTask == nil else { return }
         wasCancelled = true
-        process.interrupt()
-        Task {
+        // posix_spawn assigns a new process group before exec. The group contains only
+        // this run, including ffmpeg/model descendants; it never contains the GUI.
+        kill(-pid, SIGINT)
+        cancellationTask = Task {
             try? await Task.sleep(for: .seconds(2))
-            if process.isRunning { process.terminate() }
+            guard activeRun == runID else { return }
+            kill(-pid, SIGTERM)
             try? await Task.sleep(for: .seconds(2))
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            guard activeRun == runID else { return }
+            kill(-pid, SIGKILL)
         }
+    }
+
+    private nonisolated static func spawn(_ command: ProcessCommand, output: Pipe, error: Pipe) throws -> pid_t {
+        var actions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        posix_spawn_file_actions_init(&actions); posix_spawnattr_init(&attributes)
+        defer { posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes) }
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&actions, error.fileHandleForWriting.fileDescriptor, STDERR_FILENO)
+        if let directory = command.directory {
+            let code = posix_spawn_file_actions_addchdir(&actions, directory.path)
+            if code != 0 { throw NSError(domain: NSPOSIXErrorDomain, code: Int(code)) }
+        }
+        var signals = sigset_t(); sigemptyset(&signals)
+        posix_spawnattr_setsigmask(&attributes, &signals)
+        sigaddset(&signals, SIGINT); sigaddset(&signals, SIGTERM); sigaddset(&signals, SIGPIPE)
+        posix_spawnattr_setsigdefault(&attributes, &signals)
+        posix_spawnattr_setpgroup(&attributes, 0)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
+        let arguments = [command.executable.path] + command.arguments
+        let environment = Self.environment(overrides: command.environment).map { "\($0.key)=\($0.value)" }
+        guard !(arguments + environment).contains(where: { $0.utf8.contains(0) }) else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(EINVAL))
+        }
+        var argv = arguments.map { strdup($0) } + [nil]
+        var envp = environment.map { strdup($0) } + [nil]
+        defer { for pointer in argv + envp { free(pointer) } }
+        var pid: pid_t = 0
+        let code = posix_spawn(&pid, command.executable.path, &actions, &attributes, &argv, &envp)
+        if code != 0 {
+            try? output.fileHandleForWriting.close(); try? error.fileHandleForWriting.close()
+            try? output.fileHandleForReading.close(); try? error.fileHandleForReading.close()
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+        }
+        return pid
     }
 
     private nonisolated static func drain(_ handle: FileHandle, isError: Bool,
@@ -122,7 +158,9 @@ actor ProcessRunner: CommandRunning {
         defer { try? handle.close() }
         var captured = Data(), pending = Data()
         while true {
-            let chunk = handle.availableData
+            let chunk: Data = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async { continuation.resume(returning: handle.availableData) }
+            }
             if chunk.isEmpty { break }
             captured.append(chunk)
             if captured.count > 262_144 { captured.removeFirst(captured.count - 262_144) }

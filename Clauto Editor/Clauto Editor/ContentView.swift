@@ -13,7 +13,7 @@ struct ContentView: View {
                     ForEach(store.projects) { project in
                         VStack(alignment: .leading, spacing: 4) {
                             Label(project.manifest.name, systemImage: "film.stack")
-                            Text("Draft · \(project.manifest.files.count) files").font(.caption).foregroundStyle(.secondary)
+                            Text("\(store.currentCuts[project.id].map { "Cut v\($0.number)" } ?? "Draft") · \(project.manifest.files.count) files").font(.caption).foregroundStyle(.secondary)
                         }.padding(.vertical, 4).tag(project.id)
                     }
                 }
