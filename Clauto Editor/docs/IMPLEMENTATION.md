@@ -19,9 +19,11 @@ The older handoff's “no web UI” statement is consistent with the native app.
 Historical “no test suite” statements predate the committed suite and are not a
 reason to discard existing tests.
 
-Nathan's current authorization takes precedence over future product flows:
-no Claude turns, private footage/transcript uploads, paid services, new credentials,
-App Store upload or publication. Change requests persist locally; the UI does not
+Nathan's current authorization takes precedence over future product flows.
+GUI acceptance uses synthetic media and local engine execution; no live Claude
+transport, paid fallback, new credentials, App Store upload or publication is enabled.
+A separately authorized private pizza-planning CLI turn is outside GUI acceptance
+and does not complete M2. Change requests persist locally; the UI does not
 pretend Claude answered or applied them. Run drives the local engine with explicit
 plan approval. Debug Sparkle checks are disabled. Final Cut is not launched during
 development/testing.
@@ -63,7 +65,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M1 tagged engine releases | Pending | ENGINE_VERSION is explicitly 0.1.0-dev; no stable release tag claimed |
 | M2 project folder/CLAUDE.md | Implemented | Schema-checked JSON, brief.md, paths.json, visible folders |
 | M2 engine JSON progress | Implemented | Asset-gate/stream-channel tests |
-| M2 ClaudeSession and verified stream fixtures | Partial, synthetic only | Typed provisional adapter persists each line, resumes identity, rejects unbound/malformed/denied results, recovers interrupted turns and cancels; no live transport or real CLI event capture exists |
+| M2 ClaudeSession and verified stream fixtures | Partial, synthetic only | Typed provisional adapter persists each line, resumes identity, rejects unbound/malformed/denied results, recovers interrupted turns and cancels; no live app transport, and compatibility with separately captured real CLI events remains unverified |
 | M3 brief autosave and project reopen | Implemented | Form persists brief.md; actor reload avoids stale manifest overwrite |
 | M3 type classification/reference/copy/remove | Implemented | Mixed intake, source preservation, rollback and containment tests; edited copied scripts retained in visible removed-files/ |
 | M3 audio/music ambiguity | Implemented | What-is-this menu relocates project reference, never original |

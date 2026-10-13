@@ -92,6 +92,8 @@ The final independent run passed **45 routine core tests**, including eight
 synthetic conversation fixtures; **two opt-ins skipped**. Whitespace was clean and
 no remaining blocking finding was found in the reviewed synthetic adapter. There
 is no live Claude transport or verified real CLI event capture, so M2 remains
-incomplete. An external planning attempt with private transcripts was rejected by
-automatic approval review before execution; direct human permission is still
-required to override the original privacy restriction.
+incomplete. An external planning attempt with private transcripts was initially
+rejected by automatic approval review before execution. A later separately
+authorized CLI planning turn was allowed after the original direct-human approval
+was supplied. That private turn is outside this synthetic adapter review and does
+not verify the app's live integration.
