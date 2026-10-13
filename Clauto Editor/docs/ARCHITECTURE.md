@@ -113,6 +113,8 @@ named.
 | Non-interactive `setup.py` (`--footage ... --assets ... --build ... --cuts ...`) | Setup without prompts | M1 |
 | Machine-readable preflight (`--dry-run --json`) | Setup "Check" step and Needs-assets list | M1 |
 | Versioned engine releases (git tags, `ENGINE_VERSION`) | Pinning and updates | M1 |
+| Whisper model choice: a `CLAUTO_WHISPER_MODEL` env var (or `whisper_model` in `paths.json`) read by `stage1_transcribe`, replacing the hard-coded default | Setup model choice | M1 |
+| Model prefetch command (`./run stage1_transcribe.py --download-model NAME`) | Download during setup, with progress | M1 |
 | Style pack loading | Other looks | M6 |
 
 ## Installer details
@@ -129,6 +131,49 @@ named.
 - Large downloads (PyTorch, Whisper model) show real progress bars (bytes), and can be resumed.
 - Offline or failed downloads leave a half-installed state that the next run detects and repairs.
 
+## Updates (Sparkle)
+
+The app updates itself the way Straight Up Browser does (see that repo's `DEPLOYMENT.md`,
+`scripts/release.sh` and `Browser-Info.plist`). Reuse the pattern; do not invent a second one.
+
+| Piece | Clauto Editor |
+|---|---|
+| Framework | Sparkle 2.6 or later via Swift Package Manager (`https://github.com/sparkle-project/Sparkle`) |
+| Updater | `SPUStandardUpdaterController` started at launch; a "Check for Updates..." menu item |
+| Feed | `https://nathanfennel.com/downloads/clauto-editor-appcast.xml` (own filename; the downloads folder already holds other apps' feeds) |
+| Download | `https://nathanfennel.com/downloads/Clauto-Editor.dmg`, notarized and stapled |
+| Info.plist keys | `SUFeedURL`, `SUPublicEDKey`, `SUEnableAutomaticChecks` = true, `SUAutomaticallyUpdate` = true (silent install, live after next relaunch) |
+| Signing | Developer ID Application certificate; Sparkle EdDSA signature on every appcast entry; notarization with the `notary` keychain profile |
+| Release script | `scripts/release.sh` modelled on the Browser's: clean tagged commit on `origin/main`, tests, archive, export, notarize, DMG, `generate_appcast`, validation, provenance file |
+
+**Not sandboxed means simpler.** The Browser needs `SUEnableInstallerLauncherService` and a
+`mach-lookup` entitlement exception because it is sandboxed. Clauto Editor is not, so omit both and
+do not copy that entitlement block. Verify on a real update that the installer works without them.
+
+**Signing key.** The EdDSA private key lives in this Mac's Keychain (service
+`https://sparkle-project.org`, account `ed25519`); it must never change for an installed app. Two
+options, decide before the first release:
+
+- *Reuse the Browser's key* (the default `generate_appcast` picks up): one key to back up, and the
+  Browser's `sparkle-bin` tools work as is. If it leaks, both apps are affected.
+- *A separate key* (`generate_keys --account clauto-editor`, passed to the tools): isolates the
+  apps, costs a second secret to back up.
+
+Whichever is chosen, put the public half in `SUPublicEDKey` and write the choice into this doc.
+
+**Hosting and the AWS migration.** The DMG and appcast are static files in the nathanfennel.com
+repo (`public/downloads/`). That site is under the AWS migration policy: until the cutover, a
+release deploy goes to both Vercel and AWS from the same commit, and after cutover to AWS only.
+`release.sh` must not hard-code a host-specific step; the publish step is "commit the files to the
+website repo and deploy it by that repo's verified command". Check the appcast URL from the live
+domain after every publish, because skipping or botching it means installed copies never update.
+
+**Engine updates are not app updates.** Sparkle replaces the `.app`. The engine checkout and venv
+live in Application Support and are updated by the app from tagged releases, on user consent, never
+mid-run. Each app version declares the engine versions it supports.
+
+**Debug builds** must not check for updates (the Browser does the same with `startsUpdater`).
+
 ## Security and trust
 
 - Not sandboxed, so the app can run any child process and read any path the user gives it. Treat
@@ -140,8 +185,8 @@ named.
 - Claude's tool allowlist is scoped to the project folder and engine. No network tools beyond
   what the CLI itself needs.
 - Secrets: the app stores none. Sign-in belongs to Claude Code's own keychain handling.
-- Hardened runtime and Developer ID signing, then notarize. No `disable-library-validation`
-  unless a measured need appears.
+- Hardened runtime and Developer ID signing, then notarize. Sparkle ships signed; no
+  `disable-library-validation` unless a measured need appears.
 - Logs can contain file names and paths; "Collect diagnostics" shows what it includes before
   saving and uploads nothing.
 

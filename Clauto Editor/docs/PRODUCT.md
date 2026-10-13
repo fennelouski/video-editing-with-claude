@@ -40,7 +40,7 @@ Three promises:
   Missing assets produce a build sheet, never an AI substitute.
 - **No cloud service, accounts, or telemetry in v1.** Footage never leaves the Mac except as
   Claude Code sends context to Anthropic under the user's own Claude login.
-- **No store distribution, no sandbox.**
+- **No store distribution, no sandbox.** Distribution is a notarized DMG from nathanfennel.com.
 - **No silent decisions about facts.** Anything scientific or numeric is escalated to the user
   (`config.ESCALATE_TO_HUMAN`); the UI shows these as "Needs your answer" cards.
 
@@ -66,17 +66,22 @@ That is an engine change, tracked in ROADMAP M6, not an app feature.
 - Every failure shows one sentence plus a button. No raw stack traces in the main UI.
 - Re-running the same brief on the same footage yields the same cut (the engine is deterministic).
 
+## Decisions
+
+- **Whisper model is the user's choice at setup.** The download is accepted; the app offers the
+  trade-off instead of forcing the largest model (see UX.md, Setup, "Transcription model").
+- **Updates use Sparkle**, the same mechanism and signing setup as Straight Up Browser. See
+  ARCHITECTURE.md, "Updates".
+- **Bundle id stays `com.nathanfennel.Clauto-Editor`.**
+- **Engine updates are separate from app updates:** pinned tagged releases, applied on consent.
+
 ## Open questions
 
-1. **Whisper size.** WhisperX pulls PyTorch and models, several GB. Offer a "small, faster, less
-   accurate" model choice in setup?
-2. **Whose Claude.** The app uses the user's own Claude login. Does the user need a paid plan, and
+1. **Whose Claude.** The app uses the user's own Claude login. Does the user need a paid plan, and
    what does the app do when a rate limit hits mid-run? (Plan: pause, show reset time, resume.)
-3. **Engine updates.** Pin to a tagged release and update on user consent, or track `main`?
-   Recommendation: pinned tags, with an "Update engine" button.
-4. **Other editors.** Final Cut only for now because the engine emits FCPXML. DaVinci and Premiere
+2. **Other editors.** Final Cut only for now because the engine emits FCPXML. DaVinci and Premiere
    import FCPXML or XML with caveats; deferred.
-5. **Her assets.** The cutouts, textures and marker font are one person's scans. A second user
+3. **Her assets.** The cutouts, textures and marker font are one person's scans. A second user
    needs either their own or a bundled neutral set. Decide before M6.
-6. **Name and bundle id.** Currently `com.nathanfennel.Clauto-Editor`; change before shipping
-   outside the family.
+4. **Sparkle key sharing.** Reuse the Browser's EdDSA key or generate a separate one (see
+   ARCHITECTURE.md, "Updates").

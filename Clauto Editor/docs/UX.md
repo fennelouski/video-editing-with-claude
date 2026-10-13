@@ -16,8 +16,27 @@ disclosure showing the live command output for people who care.
 | Claude Code | Detect `claude`. If missing, run Anthropic's installer (`claude install` once any bootstrap is present). | Link to install help |
 | Sign in | `claude auth status`; if signed out, run `claude auth login` and show "Finish signing in in your browser". Poll status. | Retry; explain plan requirement |
 | Engine | Clone this repo at a pinned tag to `~/Library/Application Support/Clauto Editor/engine`, create the venv, `pip install -r requirements.txt` | Retry; show last 20 log lines |
+| Transcription model | Choose the speech model (below). Downloaded now so the first run is not stuck waiting. | Retry; falls back to the smallest installed model |
 | Folders | Pick where **footage**, **assets**, **build** and **cuts** live. Defaults suggested; each has a Choose... button and a drop target. Writes `paths.json` in the engine (the same file `./run setup.py` writes). | |
 | Check | Run `./run run_pipeline.py --dry-run` and translate preflight into green ticks. | Each red item has a fix button |
+
+### Transcription model
+
+The engine's transcription (WhisperX) takes a model name, and its default is `large-v3`
+(`stage1_transcribe.py`). The setup step shows the choices in plain terms:
+
+| Choice | Model | Good for | Approx. download* |
+|---|---|---|---|
+| Fast | `small` | Quick drafts, clear audio | under 1 GB |
+| Balanced | `medium` | Most videos | about 1.5 GB |
+| Best (recommended default) | `large-v3` | Accuracy, noisy rooms, accents | about 3 GB |
+
+\*Plus PyTorch and the alignment model, which every choice needs. Sizes are estimates; M1
+measures them and the screen shows the real figure and free disk space before downloading.
+
+The choice is saved in the app settings, changeable later in Settings (downloads the new model on
+demand, keeps the old one until the user removes it). Each project can override it. The engine
+needs a way to receive it: see the `--model` item in ARCHITECTURE.md's engine changes.
 
 Setup is re-enterable from Settings, and every step is idempotent: running it twice changes
 nothing.

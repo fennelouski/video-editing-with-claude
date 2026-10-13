@@ -8,15 +8,19 @@ Ordered so each milestone is usable and testable on its own. "Done" is observabl
   states.
 - Sandbox off (done), hardened runtime on, app icon placeholder, bundle id decision.
 - `ProcessRunner` with environment building, cancellation, and tests.
+- Add Sparkle (SPM, 2.6+), the updater controller (off in Debug), and the plist keys, so updates
+  are in from the first signed build rather than bolted on at the end. Decide the signing-key
+  question (ARCHITECTURE.md, "Updates").
 
 **Done when:** the app launches to an empty project list and can run `ffmpeg -version` with a
 correct explicit `PATH`, from a normal Finder launch (not Xcode).
 
 ## M1: Setup
 
-- Engine changes: `CLAUTO_PATHS`, `script`/`templates` keys, non-interactive `setup.py`,
+- Engine changes: `CLAUTO_WHISPER_MODEL` and model prefetch, `CLAUTO_PATHS`, `script`/`templates` keys, non-interactive `setup.py`,
   `--dry-run --json`, engine version tags.
-- `SetupService` for Homebrew, tools, Claude Code, sign-in, engine, venv, folders, final check.
+- `SetupService` for Homebrew, tools, Claude Code, sign-in, engine, venv, transcription model
+  choice (measure the real download sizes), folders, final check.
 - Setup window per UX.md section 1.
 
 **Done when:** on a fresh macOS user account, a person with no Terminal use gets to a green final
@@ -69,11 +73,14 @@ editing engine code.
 
 ## M7: Ship
 
-- Developer ID signing, notarization, DMG, in-app update check.
+- `scripts/release.sh` adapted from Straight Up Browser: notarized DMG, signed appcast at
+  `nathanfennel.com/downloads/clauto-editor-appcast.xml`, validation, provenance. Publish through
+  the website repo's current deploy policy.
+- Verify an end-to-end update: install build N, publish N+1, confirm it self-updates.
 - Crash and log collection (local only), first-run onboarding polish, accessibility pass.
 
-**Done when:** a notarized DMG installs on a clean Mac without Gatekeeper warnings and passes the
-M1 to M5 acceptance flows.
+**Done when:** a notarized DMG installs on a clean Mac without Gatekeeper warnings, passes the
+M1 to M5 acceptance flows, and a published newer build installs itself on the older one.
 
 ## Risks
 
@@ -82,5 +89,6 @@ M1 to M5 acceptance flows.
 | Install size and time (PyTorch, Whisper) | Early measurement in M1, model-size choice, resumable downloads |
 | Claude Code CLI output format changes | Fixtures plus a version check; pin a tested range and warn outside it |
 | Headless Claude cannot ask for permission | Tight allowlist designed in M2; fail with a clear "needs permission" message, not a hang |
+| Sparkle key lost or swapped | Back up the Keychain item; never change the key after release |
 | One look only | Said plainly in the UI; M6 is the real fix |
 | Engine assumptions of two terminal users | Each engine change in ARCHITECTURE.md is small, tested and additive |
