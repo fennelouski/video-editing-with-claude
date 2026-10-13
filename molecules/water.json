@@ -1,0 +1,25 @@
+{
+  "name": "Water",
+  "source": "Trivial structure; included as the kit's smallest worked example.",
+  "reviewed_by": "PLACEHOLDER — not yet reviewed",
+  "reviewed_on": "1970-01-01",
+  "_warning": [
+    "The reviewer fields above are placeholders and must be replaced before this is rendered.",
+    "config.ESCALATE_TO_HUMAN treats a structure as a scientific claim: she checks every",
+    "molecule, and the pipeline never adjudicates chemistry. This file exists to show the",
+    "format, not to be drawn.",
+    "",
+    "Geometry is stated per atom rather than inferred. Water's oxygen is 'tetrahedral' because",
+    "its two lone pairs occupy tetrahedral positions — a fact about lone pairs, which is",
+    "precisely the kind of thing a bond count cannot tell you."
+  ],
+  "atoms": [
+    {"id": "O1", "element": "O", "geometry": "tetrahedral", "label": "oxygen"},
+    {"id": "H1", "element": "H", "geometry": "linear"},
+    {"id": "H2", "element": "H", "geometry": "linear"}
+  ],
+  "bonds": [
+    {"a": "O1", "b": "H1", "kind": "single"},
+    {"a": "O1", "b": "H2", "kind": "single"}
+  ]
+}

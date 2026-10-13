@@ -1,0 +1,585 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.13">
+    <resources>
+        <format id="r1" name="FFVideoFormat1080p2398" frameDuration="1001/24000s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)" />
+        <asset id="r2" name="MVI_0043" start="0s" duration="811811/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="03B961CD656E2A709634E71C57CDB826" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0043.MOV" />
+        </asset>
+        <asset id="r3" name="MVI_0040" start="0s" duration="17683666/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="6BC483C88F3C130F866D907FAE0142E3" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0040.MOV" />
+        </asset>
+        <asset id="r4" name="MVI_0036" start="0s" duration="3394391/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="0B61360719D4AD9AE790BB4277FA91D0" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0036.MOV" />
+        </asset>
+        <asset id="r5" name="MVI_0037" start="0s" duration="6211205/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="D7794989DF2C66C171F39DD36435CD88" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0037.MOV" />
+        </asset>
+        <asset id="r6" name="MVI_0038" start="0s" duration="17467450/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="F4E391CE48E643C8233869128E8C5EA5" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0038.MOV" />
+        </asset>
+        <asset id="r7" name="MVI_0041" start="0s" duration="3887884/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="4C3C1D41D5D426AF582151EFFEFA999C" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0041.MOV" />
+        </asset>
+        <asset id="r8" name="MVI_0042" start="0s" duration="1199198/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="DFA91D158898F9E608162A02D1B05080" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0042.MOV" />
+        </asset>
+        <asset id="r9" name="MVI_0045" start="0s" duration="4813809/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="F01394093C6FE1C8355419A0B24772B4" src="file:///Users/nathan/Documents/Videos/footage/a-cam/MVI_0045.MOV" />
+        </asset>
+        <asset id="r10" name="Best Yeast Broll" start="0s" duration="414414/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="06E41EF6C8B9E1FB9760B9ECFBBA21D3" src="file:///Users/nathan/Documents/Videos/footage/broll/Best%20Yeast%20Broll.MOV" />
+        </asset>
+        <asset id="r11" name="Katie Dancing" start="0s" duration="1617616/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="783FCC20C7CB1C56C2A9FAFC3F874ECC" src="file:///Users/nathan/Documents/Videos/footage/broll/Katie%20Dancing.MOV" />
+        </asset>
+        <asset id="r12" name="title_placeholder" start="0s" duration="56056/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="8175E93C9F74722295E648CD0514EA1C" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/title_placeholder.mov" />
+        </asset>
+        <asset id="r13" name="chapter-01_placeholder" start="0s" duration="62062/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="8151CB907CAAE762CC9630AA25306AE0" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-01_placeholder.mov" />
+        </asset>
+        <asset id="r14" name="chapter-02_placeholder" start="0s" duration="56056/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="EAB30CAFDD8167A77AC333CEFB8D79F5" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-02_placeholder.mov" />
+        </asset>
+        <asset id="r15" name="picture-pasteur-portrait" start="0s" duration="184184/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="805FBFD373408D46A2831155398E6609" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/picture-pasteur-portrait.mov" />
+        </asset>
+        <asset id="r16" name="picture-pasteur-flask-wellcome" start="0s" duration="256256/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="892B6E947B4135F7B9E0F259CB999634" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/picture-pasteur-flask-wellcome.mov" />
+        </asset>
+        <asset id="r17" name="chapter-03_placeholder" start="0s" duration="56056/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="7FB67DCBE8FD13FD357107BB1F355594" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-03_placeholder.mov" />
+        </asset>
+        <asset id="r18" name="picture-yeast-sem" start="0s" duration="208208/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="5A642BB444506FCA428FD5D0ED8B84A6" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/picture-yeast-sem.mov" />
+        </asset>
+        <asset id="r19" name="MVI_0026" start="0s" duration="350350/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="60C86789E575FA5A63E707855991B6FF" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0026.MOV" />
+        </asset>
+        <asset id="r20" name="chapter-04_placeholder" start="0s" duration="70070/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="19DCFAA8C1C41A3C96CEF0F1B6655A44" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-04_placeholder.mov" />
+        </asset>
+        <asset id="r21" name="MVI_0027" start="0s" duration="615615/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="E1253D242F071CD32FB44B7AD5454C6D" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0027.MOV" />
+        </asset>
+        <asset id="r22" name="MVI_0028" start="0s" duration="229229/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="A4860CDA8D575AFA4824F6D90132A8AB" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0028.MOV" />
+        </asset>
+        <asset id="r23" name="MVI_0031" start="0s" duration="321321/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="43FBB5053548F2D8EBD2628C7015853F" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0031.MOV" />
+        </asset>
+        <asset id="r24" name="MVI_0029" start="0s" duration="385385/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="6248E1E1205A0863E6F6356405D34174" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0029.MOV" />
+        </asset>
+        <asset id="r25" name="chapter-05_placeholder" start="0s" duration="62062/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="AE63E800850E606D7977BF148B682CB8" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-05_placeholder.mov" />
+        </asset>
+        <asset id="r26" name="chapter-06_placeholder" start="0s" duration="56056/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="98A6D099A222913C742069BC1CBC327D" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-06_placeholder.mov" />
+        </asset>
+        <asset id="r27" name="chapter-07_placeholder" start="0s" duration="62062/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="8BEC0470627A3103745F36241EBC72D3" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-07_placeholder.mov" />
+        </asset>
+        <asset id="r28" name="chapter-08_placeholder" start="0s" duration="56056/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="DBD0F5C3CF1F2335AE5E90EDDC6CAD21" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-08_placeholder.mov" />
+        </asset>
+        <asset id="r29" name="chapter-09_placeholder" start="0s" duration="62062/24000s" hasVideo="1" format="r1">
+            <media-rep kind="original-media" sig="84FEA0D9F0646AF9AA0CB78B477431C3" src="file:///Users/nathan/Documents/Videos/build/graphics/yeast001/chapter-09_placeholder.mov" />
+        </asset>
+        <asset id="r30" name="MVI_0023" start="0s" duration="792792/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="61CC66764CFE690791060300122CACB9" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0023.MOV" />
+        </asset>
+        <asset id="r31" name="MVI_0025" start="0s" duration="1728727/24000s" hasVideo="1" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="21C98FC86240424DB9786F3A670AAEA3" src="file:///Users/nathan/Documents/Videos/footage/broll/MVI_0025.MOV" />
+        </asset>
+        <asset id="r32" name="Audiio_AsTallAsPine_ATAP_TwinLakes" start="0s" duration="4167163/24000s" hasVideo="0" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="CF3B1860C1A0B1495D9725861E1EF516" src="file:///Users/nathan/Documents/Videos/assets/music/Audiio_AsTallAsPine_ATAP_TwinLakes.wav" />
+        </asset>
+        <asset id="r33" name="Audiio_SK_Commercial_TwoBigReasons30" start="0s" duration="771771/24000s" hasVideo="0" format="r1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" sig="C02C1D7F289829B29BB22BF42DE6A833" src="file:///Users/nathan/Documents/Videos/assets/music/Audiio_SK_Commercial_TwoBigReasons30.wav" />
+        </asset>
+    </resources>
+    <library>
+        <event name="Handmade pipeline">
+            <project name="yeast001 — rough cut">
+                <sequence format="r1" duration="18819801/24000s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <asset-clip ref="r2" offset="0s" name="MVI_0043 01" start="322322/24000s" duration="53053/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r10" lane="2" offset="322322/24000s" name="starter glass, bubbles breaking at the surface" start="96096/24000s" duration="53053/24000s" role="Video" />
+                            <asset-clip ref="r32" lane="-2" offset="322322/24000s" name="Audiio_AsTallAsPine_ATAP_TwinLakes (bed)" start="0s" duration="719719/24000s" format="r1" audioRole="Music">
+                                <adjust-volume amount="-28.9dB" />
+                            </asset-clip>
+                            <marker start="322322/24000s" duration="1001/24000s" value="take · hook VO — yeast bubbling in action" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r2" offset="53053/24000s" name="MVI_0043 02" start="468468/24000s" duration="70070/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r11" lane="2" offset="468468/24000s" name="Katie dancing, both arms up" start="1363362/24000s" duration="70070/24000s" role="Video" />
+                            <marker start="468468/24000s" duration="1001/24000s" value="take · hook VO — way too excited about yeast" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="123123/24000s" name="MVI_0040 03" start="16051035/24000s" duration="127127/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0000 1.0000">
+                                <param name="scale">
+                                    <keyframeAnimation>
+                                        <keyframe time="16051035/24000s" value="1.0000 1.0000" interp="linear" />
+                                        <keyframe time="16178162/24000s" value="1.0500 1.0500" interp="linear" />
+                                    </keyframeAnimation>
+                                </param>
+                            </adjust-transform>
+                            <marker start="16051035/24000s" duration="1001/24000s" value="take · hook claim — you don't need sugar, you need time" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r4" offset="250250/24000s" name="MVI_0036 04" start="844844/24000s" duration="83083/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r12" lane="1" offset="906906/24000s" name="title_placeholder" start="0s" duration="56056/24000s" role="Graphics.Cutouts" />
+                            <marker start="844844/24000s" duration="1001/24000s" value="take · name + promise (take 4)" completed="0" />
+                            <marker start="906906/24000s" duration="1001/24000s" value="GFX: title card — 'Yeast' (§6.1, first graphic &lt;30 s)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="333333/24000s" name="MVI_0037 05" start="456456/24000s" duration="317317/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r13" lane="1" offset="463463/24000s" name="chapter-01_placeholder" start="0s" duration="62062/24000s" role="Graphics.Cutouts" />
+                            <marker start="456456/24000s" duration="1001/24000s" value="take · yeast is really old — Egypt, Asia, Europe" completed="0" />
+                            <marker start="463463/24000s" duration="1001/24000s" value="GFX: chapter card — Yeast is old" completed="0" />
+                            <marker start="576576/24000s" duration="1001/24000s" value="GFX: timeline card — Egypt · Asia · Europe (vague on purpose)" completed="0" />
+                            <chapter-marker start="456456/24000s" duration="1001/24000s" value="Yeast is old" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="650650/24000s" name="MVI_0037 06" start="789789/24000s" duration="73073/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="789789/24000s" duration="1001/24000s" value="take · it's around, it grows on grapes" completed="0" />
+                            <marker start="789789/24000s" duration="1001/24000s" value="BROLL: wild yeast bloom on dark grapes (macro) — Storyblocks if needed" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="723723/24000s" name="MVI_0038 07" start="5083078/24000s" duration="177177/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5083078/24000s" duration="1001/24000s" value="take · yeast in the air, on the grapes — not inoculated" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="900900/24000s" name="MVI_0038 08" start="5271266/24000s" duration="54054/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5271266/24000s" duration="1001/24000s" value="take · yeast in the air, on the grapes — not inoculated (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="954954/24000s" name="MVI_0038 09" start="5336331/24000s" duration="114114/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5336331/24000s" duration="1001/24000s" value="take · yeast in the air, on the grapes — not inoculated (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="1069068/24000s" name="MVI_0038 10" start="5476471/24000s" duration="156156/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5476471/24000s" duration="1001/24000s" value="take · yeast in the air, on the grapes — not inoculated (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="1225224/24000s" name="MVI_0038 11" start="5654649/24000s" duration="26026/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5654649/24000s" duration="1001/24000s" value="take · yeast in the air, on the grapes — not inoculated (5)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1251250/24000s" name="MVI_0037 12" start="1584583/24000s" duration="43043/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1584583/24000s" duration="1001/24000s" value="take · brewers → friends making doughs" completed="0" />
+                            <marker start="1596595/24000s" duration="1001/24000s" value="GFX: the exchange — brewer's jar passed to the baker (§6.4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1294293/24000s" name="MVI_0037 13" start="1641640/24000s" duration="149149/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1641640/24000s" duration="1001/24000s" value="take · brewers → friends making doughs (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1443442/24000s" name="MVI_0037 14" start="1803802/24000s" duration="267267/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1803802/24000s" duration="1001/24000s" value="take · brewers → friends making doughs (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1710709/24000s" name="MVI_0037 15" start="2387385/24000s" duration="39039/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2387385/24000s" duration="1001/24000s" value="take · bakers get bubbly batches — passed back and forth" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1749748/24000s" name="MVI_0037 16" start="2441439/24000s" duration="168168/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2441439/24000s" duration="1001/24000s" value="take · bakers get bubbly batches — passed back and forth (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="1917916/24000s" name="MVI_0038 17" start="6108102/24000s" duration="73073/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="6108102/24000s" duration="1001/24000s" value="take · selective breeding (the term)" completed="0" />
+                            <marker start="6108102/24000s" duration="1001/24000s" value="GFX: key term — Selective breeding (§6.3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="1990989/24000s" name="MVI_0037 18" start="5112107/24000s" duration="160160/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5112107/24000s" duration="1001/24000s" value="take · they may not know what they're breeding — dud batch" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="2151149/24000s" name="MVI_0037 19" start="5395390/24000s" duration="90090/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5395390/24000s" duration="1001/24000s" value="take · successful batch passed on — genes selected" completed="0" />
+                            <marker start="5395390/24000s" duration="1001/24000s" value="GFX: dud batch ✗ pushed out, good batch ✓ passed on (§6.6)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="2241239/24000s" name="MVI_0037 20" start="5498493/24000s" duration="111111/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5498493/24000s" duration="1001/24000s" value="take · successful batch passed on — genes selected (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r5" offset="2352350/24000s" name="MVI_0037 21" start="5621616/24000s" duration="177177/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5621616/24000s" duration="1001/24000s" value="take · successful batch passed on — genes selected (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="2529527/24000s" name="MVI_0038 22" start="7464457/24000s" duration="14014/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r14" lane="1" offset="7471464/24000s" name="chapter-02_placeholder" start="0s" duration="56056/24000s" role="Graphics.Cutouts" />
+                            <marker start="7464457/24000s" duration="1001/24000s" value="take · until Louis Pasteur — gooseneck, microbes" completed="0" />
+                            <marker start="7471464/24000s" duration="1001/24000s" value="GFX: chapter card — Louis Pasteur" completed="0" />
+                            <chapter-marker start="7464457/24000s" duration="1001/24000s" value="Louis Pasteur" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="2543541/24000s" name="MVI_0038 23" start="7490483/24000s" duration="258258/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r15" lane="1" offset="7529522/24000s" name="picture-pasteur-portrait" start="0s" duration="184184/24000s" role="Graphics.Cutouts" />
+                            <marker start="7490483/24000s" duration="1001/24000s" value="take · until Louis Pasteur — gooseneck, microbes (2)" completed="0" />
+                            <marker start="7529522/24000s" duration="1001/24000s" value="GFX: Pasteur portrait (Wikipedia, public domain) — see cuts/yeast001/wikipedia/" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="2801799/24000s" name="MVI_0038 24" start="7808801/24000s" duration="79079/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="7808801/24000s" duration="1001/24000s" value="take · until Louis Pasteur — gooseneck, microbes (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="2880878/24000s" name="MVI_0038 25" start="7908901/24000s" duration="185185/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="7908901/24000s" duration="1001/24000s" value="take · until Louis Pasteur — gooseneck, microbes (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3066063/24000s" name="MVI_0041 26" start="731731/24000s" duration="206206/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r16" lane="1" offset="827827/24000s" name="picture-pasteur-flask-wellcome" start="0s" duration="256256/24000s" role="Graphics.Cutouts" />
+                            <marker start="731731/24000s" duration="1001/24000s" value="take · aside — glass bulb, stretches a neck" completed="0" />
+                            <marker start="827827/24000s" duration="1001/24000s" value="GFX: swan-neck flask (Wellcome photo, CC BY 4.0) — to be redrawn as a cutout" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3272269/24000s" name="MVI_0041 27" start="986986/24000s" duration="303303/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="986986/24000s" duration="1001/24000s" value="take · open here, gooseneck shape — heats it to kill what's inside" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3575572/24000s" name="MVI_0041 28" start="2513511/24000s" duration="64064/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2513511/24000s" duration="1001/24000s" value="take · if spontaneous generation were true, the food breaks down" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3639636/24000s" name="MVI_0041 29" start="2592590/24000s" duration="154154/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2592590/24000s" duration="1001/24000s" value="take · if spontaneous generation were true, the food breaks down (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3793790/24000s" name="MVI_0041 30" start="2763761/24000s" duration="130130/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2763761/24000s" duration="1001/24000s" value="take · germ theory — germs get stuck in the downspout" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="3923920/24000s" name="MVI_0041 31" start="2910908/24000s" duration="178178/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2910908/24000s" duration="1001/24000s" value="take · germ theory — germs get stuck in the downspout (2)" completed="0" />
+                            <marker start="2996994/24000s" duration="1001/24000s" value="GFX: flask — dust settling in the bend (rust mark)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="4102098/24000s" name="MVI_0041 32" start="3100097/24000s" duration="34034/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3100097/24000s" duration="1001/24000s" value="take · germ theory — germs get stuck in the downspout (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="4136132/24000s" name="MVI_0041 33" start="3236233/24000s" duration="118118/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3236233/24000s" duration="1001/24000s" value="take · nothing happens to the food — and that's what happens" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="4254250/24000s" name="MVI_0041 34" start="3523520/24000s" duration="92092/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3523520/24000s" duration="1001/24000s" value="take · Pasteur proves there is no spontaneous generation" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r7" offset="4346342/24000s" name="MVI_0041 35" start="3631628/24000s" duration="201201/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3631628/24000s" duration="1001/24000s" value="take · Pasteur proves there is no spontaneous generation (2)" completed="0" />
+                            <chapter-marker start="3832829/24000s" duration="1001/24000s" value="One bug" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="4547543/24000s" name="MVI_0038 36" start="9950941/24000s" duration="395395/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r17" lane="1" offset="9957948/24000s" name="chapter-03_placeholder" start="0s" duration="56056/24000s" role="Graphics.Cutouts" />
+                            <marker start="9950941/24000s" duration="1001/24000s" value="take · we meet Saccharomyces cerevisiae" completed="0" />
+                            <marker start="9957948/24000s" duration="1001/24000s" value="GFX: chapter card — One bug" completed="0" />
+                            <marker start="9974965/24000s" duration="1001/24000s" value="GFX: name card — Saccharomyces cerevisiae (the recurring card)" completed="0" />
+                            <chapter-marker start="9950941/24000s" duration="1001/24000s" value="One bug" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="4942938/24000s" name="MVI_0038 37" start="10358348/24000s" duration="220220/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="10358348/24000s" duration="1001/24000s" value="take · we meet Saccharomyces cerevisiae (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="5163158/24000s" name="MVI_0038 38" start="10597587/24000s" duration="166166/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0800 1.0800" />
+                            <video ref="r18" lane="1" offset="10597587/24000s" name="picture-yeast-sem" start="0s" duration="208208/24000s" role="Graphics.Cutouts" />
+                            <marker start="10597587/24000s" duration="1001/24000s" value="take · a fungus, single cell, thrives in fertile environments" completed="0" />
+                            <marker start="10597587/24000s" duration="1001/24000s" value="GFX: S. cerevisiae micrograph (Wikipedia, CC BY 3.0) — see cuts/yeast001/wikipedia/" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="5329324/24000s" name="MVI_0038 39" start="10779769/24000s" duration="95095/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0800 1.0800" />
+                            <marker start="10779769/24000s" duration="1001/24000s" value="take · a fungus, single cell, thrives in fertile environments (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r8" offset="5424419/24000s" name="MVI_0042 40" start="34034/24000s" duration="270270/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="34034/24000s" duration="1001/24000s" value="take · aside — sourdough uses yeast too, plus lactic bacteria" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r8" offset="5694689/24000s" name="MVI_0042 41" start="319319/24000s" duration="194194/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="319319/24000s" duration="1001/24000s" value="take · aside — sourdough uses yeast too, plus lactic bacteria (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r8" offset="5888883/24000s" name="MVI_0042 42" start="612612/24000s" duration="201201/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="612612/24000s" duration="1001/24000s" value="take · setting sourdough aside — S. cerevisiae is repeatable" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r8" offset="6090084/24000s" name="MVI_0042 43" start="824824/24000s" duration="348348/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="824824/24000s" duration="1001/24000s" value="take · setting sourdough aside — S. cerevisiae is repeatable (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="6438432/24000s" name="MVI_0038 44" start="13175162/24000s" duration="29029/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13175162/24000s" duration="1001/24000s" value="take · from a mother ferment to measured yeast on hand" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="6467461/24000s" name="MVI_0038 45" start="13256243/24000s" duration="274274/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13256243/24000s" duration="1001/24000s" value="take · from a mother ferment to measured yeast on hand (2)" completed="0" />
+                            <marker start="13443430/24000s" duration="1001/24000s" value="GFX: comparison — a mother ferment (jar) vs measured yeast (packet) (§6.6)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="6741735/24000s" name="MVI_0038 46" start="13542529/24000s" duration="143143/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13542529/24000s" duration="1001/24000s" value="take · from a mother ferment to measured yeast on hand (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="6884878/24000s" name="MVI_0038 47" start="13702689/24000s" duration="48048/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13702689/24000s" duration="1001/24000s" value="take · from a mother ferment to measured yeast on hand (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="6932926/24000s" name="MVI_0038 48" start="13771758/24000s" duration="160160/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13771758/24000s" duration="1001/24000s" value="take · from a mother ferment to measured yeast on hand (5)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="7093086/24000s" name="MVI_0038 49" start="13950937/24000s" duration="99099/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13950937/24000s" duration="1001/24000s" value="take · our way of baking and brewing changes" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="7192185/24000s" name="MVI_0038 50" start="14294280/24000s" duration="233233/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="14294280/24000s" duration="1001/24000s" value="take · because we can be intentional — measure the organism" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="7425418/24000s" name="MVI_0038 51" start="15591576/24000s" duration="384384/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r19" lane="2" offset="15591576/24000s" name="insert — the jars of dry yeast, wide" start="72072/24000s" duration="144144/24000s" role="Video" />
+                            <marker start="15591576/24000s" duration="1001/24000s" value="take · used all over — big brewers to at-home enthusiasts" completed="0" />
+                            <marker start="15735720/24000s" duration="1001/24000s" value="BROLL: a big bakery / brewery floor — Storyblocks, only if nothing real turns up" completed="0" />
+                            <chapter-marker start="15975960/24000s" duration="1001/24000s" value="What's on the shelf" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="7809802/24000s" name="MVI_0045 52" start="535535/24000s" duration="171171/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r20" lane="1" offset="542542/24000s" name="chapter-04_placeholder" start="0s" duration="70070/24000s" role="Graphics.Cutouts" />
+                            <marker start="535535/24000s" duration="1001/24000s" value="take · off camera I have examples of yeast you might find" completed="0" />
+                            <marker start="542542/24000s" duration="1001/24000s" value="GFX: chapter card — What's on the shelf" completed="0" />
+                            <chapter-marker start="535535/24000s" duration="1001/24000s" value="What's on the shelf" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="7980973/24000s" name="MVI_0045 53" start="842842/24000s" duration="172172/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r21" lane="2" offset="842842/24000s" name="insert — jar of dry yeast" start="144144/24000s" duration="172172/24000s" role="Video" />
+                            <marker start="842842/24000s" duration="1001/24000s" value="take · active dry, pre-seeded with sugar — you don't need it" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8153145/24000s" name="MVI_0045 54" start="1421420/24000s" duration="48048/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r22" lane="2" offset="1421420/24000s" name="insert — shallow jar, fine granules" start="36036/24000s" duration="48048/24000s" role="Video" />
+                            <marker start="1421420/24000s" duration="1001/24000s" value="take · instant yeast right here" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8201193/24000s" name="MVI_0045 55" start="1505504/24000s" duration="230230/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r22" lane="2" offset="1505504/24000s" name="insert — shallow jar, continued" start="82082/24000s" duration="120120/24000s" role="Video" />
+                            <video ref="r23" lane="2" offset="1735734/24000s" name="insert — fresh yeast cube in the glass" start="24024/24000s" duration="85085/24000s" role="Video" />
+                            <marker start="1505504/24000s" duration="1001/24000s" value="take · instant — smaller, wakes faster" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8431423/24000s" name="MVI_0045 56" start="1747746/24000s" duration="85085/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r23" lane="2" offset="1747746/24000s" name="insert — fresh yeast cube in the glass" start="24024/24000s" duration="85085/24000s" role="Video" />
+                            <marker start="1747746/24000s" duration="1001/24000s" value="take · fresh yeast — fragrant, straight into a dough, short shelf life" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8516508/24000s" name="MVI_0045 57" start="1851850/24000s" duration="77077/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r23" lane="2" offset="1851850/24000s" name="insert — fresh yeast cube in the glass" start="109109/24000s" duration="77077/24000s" role="Video" />
+                            <marker start="1851850/24000s" duration="1001/24000s" value="take · fresh yeast — fragrant, straight into a dough, short shelf life (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8593585/24000s" name="MVI_0045 58" start="1953952/24000s" duration="208208/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r23" lane="2" offset="1953952/24000s" name="insert — fresh yeast cube in the glass" start="186186/24000s" duration="30030/24000s" role="Video" />
+                            <marker start="1953952/24000s" duration="1001/24000s" value="take · fresh yeast — fragrant, straight into a dough, short shelf life (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="8801793/24000s" name="MVI_0045 59" start="2588586/24000s" duration="230230/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2588586/24000s" duration="1001/24000s" value="take · eats through its food and goes dormant — dried yeast lasts" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9032023/24000s" name="MVI_0045 60" start="2837835/24000s" duration="98098/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2837835/24000s" duration="1001/24000s" value="take · eats through its food and goes dormant — dried yeast lasts (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9130121/24000s" name="MVI_0045 61" start="2946944/24000s" duration="92092/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2946944/24000s" duration="1001/24000s" value="take · eats through its food and goes dormant — dried yeast lasts (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9222213/24000s" name="MVI_0045 62" start="3051048/24000s" duration="159159/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3051048/24000s" duration="1001/24000s" value="take · eats through its food and goes dormant — dried yeast lasts (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9381372/24000s" name="MVI_0045 63" start="3219216/24000s" duration="148148/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r24" lane="2" offset="3219216/24000s" name="insert — mead yeast packet with the jars" start="48048/24000s" duration="148148/24000s" role="Video" />
+                            <marker start="3219216/24000s" duration="1001/24000s" value="take · mead yeast packet — it's just S. cerevisiae, all the same bug" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9529520/24000s" name="MVI_0045 64" start="3386383/24000s" duration="74074/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r24" lane="2" offset="3386383/24000s" name="insert — mead yeast packet with the jars" start="196196/24000s" duration="74074/24000s" role="Video" />
+                            <marker start="3386383/24000s" duration="1001/24000s" value="take · mead yeast packet — it's just S. cerevisiae, all the same bug (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9603594/24000s" name="MVI_0045 65" start="3481478/24000s" duration="22022/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r24" lane="2" offset="3481478/24000s" name="insert — mead yeast packet with the jars" start="270270/24000s" duration="18018/24000s" role="Video" />
+                            <marker start="3481478/24000s" duration="1001/24000s" value="take · mead yeast packet — it's just S. cerevisiae, all the same bug (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9625616/24000s" name="MVI_0045 66" start="3515512/24000s" duration="152152/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3515512/24000s" duration="1001/24000s" value="take · mead yeast packet — it's just S. cerevisiae, all the same bug (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9777768/24000s" name="MVI_0045 67" start="3700697/24000s" duration="191191/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3700697/24000s" duration="1001/24000s" value="take · mead yeast packet — it's just S. cerevisiae, all the same bug (5)" completed="0" />
+                            <marker start="3760757/24000s" duration="1001/24000s" value="GFX: name card returns — Saccharomyces cerevisiae" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="9968959/24000s" name="MVI_0045 68" start="4043039/24000s" duration="456456/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4043039/24000s" duration="1001/24000s" value="take · a different way to reach the brewer — same thing in the baking aisle" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r9" offset="10425415/24000s" name="MVI_0045 69" start="4502498/24000s" duration="272272/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0000 1.0000">
+                                <param name="scale">
+                                    <keyframeAnimation>
+                                        <keyframe time="4502498/24000s" value="1.0000 1.0000" interp="linear" />
+                                        <keyframe time="4774770/24000s" value="1.0600 1.0600" interp="linear" />
+                                    </keyframeAnimation>
+                                </param>
+                            </adjust-transform>
+                            <marker start="4502498/24000s" duration="1001/24000s" value="take · someone with a marketing degree — it's all the same S. cerevisiae" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="10697687/24000s" name="MVI_0040 70" start="758758/24000s" duration="103103/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r25" lane="1" offset="765765/24000s" name="chapter-05_placeholder" start="0s" duration="62062/24000s" role="Graphics.Cutouts" />
+                            <marker start="758758/24000s" duration="1001/24000s" value="take · why so many names, so many formats?" completed="0" />
+                            <marker start="765765/24000s" duration="1001/24000s" value="GFX: chapter card — Access and need" completed="0" />
+                            <chapter-marker start="758758/24000s" duration="1001/24000s" value="Access and need" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="10800790/24000s" name="MVI_0040 71" start="1087086/24000s" duration="33033/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1087086/24000s" duration="1001/24000s" value="take · the answer is access and need" completed="0" />
+                            <marker start="1087086/24000s" duration="1001/24000s" value="GFX: key term — Access and need" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="10833823/24000s" name="MVI_0040 72" start="1125124/24000s" duration="772772/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1125124/24000s" duration="1001/24000s" value="take · industrial bakers vs the farm in Kansas" completed="0" />
+                            <marker start="1413412/24000s" duration="1001/24000s" value="GFX: the two bakers — bakery / farmhouse an hour from a shop (§6.6)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="11606595/24000s" name="MVI_0040 73" start="1909908/24000s" duration="24024/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="1909908/24000s" duration="1001/24000s" value="take · industrial bakers vs the farm in Kansas (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="11630619/24000s" name="MVI_0040 74" start="2154152/24000s" duration="100100/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2154152/24000s" duration="1001/24000s" value="take · fresh, dry — active dry and instant" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="11730719/24000s" name="MVI_0040 75" start="2946944/24000s" duration="247247/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="2946944/24000s" duration="1001/24000s" value="take · why doesn't the large baker use instant?" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="11977966/24000s" name="MVI_0040 76" start="3266263/24000s" duration="249249/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3266263/24000s" duration="1001/24000s" value="take · processing damages the yeast — shows up in elasticity" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12227215/24000s" name="MVI_0040 77" start="3553550/24000s" duration="224224/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="3553550/24000s" duration="1001/24000s" value="take · of the gluten — shears it, dries the bread faster" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12451439/24000s" name="MVI_0040 78" start="4137133/24000s" duration="89089/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4137133/24000s" duration="1001/24000s" value="take · glutathione (the term)" completed="0" />
+                            <marker start="4137133/24000s" duration="1001/24000s" value="GFX: key term — Glutathione (GSH) — ⚠︎ escalate mechanism" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12540528/24000s" name="MVI_0040 79" start="4397393/24000s" duration="94094/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4397393/24000s" duration="1001/24000s" value="take · gets into the gluten network — shorter texture, sandwich bread" completed="0" />
+                            <marker start="4409405/24000s" duration="1001/24000s" value="GFX: gluten matrix — long strands, then strands cut short" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12634622/24000s" name="MVI_0040 80" start="4502498/24000s" duration="18018/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4502498/24000s" duration="1001/24000s" value="take · gets into the gluten network — shorter texture, sandwich bread (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12652640/24000s" name="MVI_0040 81" start="4536532/24000s" duration="148148/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4536532/24000s" duration="1001/24000s" value="take · gets into the gluten network — shorter texture, sandwich bread (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12800788/24000s" name="MVI_0040 82" start="4695691/24000s" duration="22022/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4695691/24000s" duration="1001/24000s" value="take · gets into the gluten network — shorter texture, sandwich bread (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12822810/24000s" name="MVI_0040 83" start="4736732/24000s" duration="119119/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4736732/24000s" duration="1001/24000s" value="take · gets into the gluten network — shorter texture, sandwich bread (5)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12941929/24000s" name="MVI_0040 84" start="4997993/24000s" duration="31031/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="4997993/24000s" duration="1001/24000s" value="take · fresh yeast is consistent — at home you might not notice" completed="0" />
+                            <marker start="5022017/24000s" duration="1001/24000s" value="BROLL: a cut loaf — stretchy crumb vs short crumb (shoot both; Storyblocks sandwich bread if needed)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="12972960/24000s" name="MVI_0040 85" start="5040035/24000s" duration="152152/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5040035/24000s" duration="1001/24000s" value="take · fresh yeast is consistent — at home you might not notice (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13125112/24000s" name="MVI_0040 86" start="5212207/24000s" duration="15015/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5212207/24000s" duration="1001/24000s" value="take · fresh yeast is consistent — at home you might not notice (3)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13140127/24000s" name="MVI_0040 87" start="5238233/24000s" duration="182182/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5238233/24000s" duration="1001/24000s" value="take · fresh yeast is consistent — at home you might not notice (4)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13322309/24000s" name="MVI_0040 88" start="5970965/24000s" duration="83083/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="5970965/24000s" duration="1001/24000s" value="take · it's about what's available" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13405392/24000s" name="MVI_0040 89" start="6108102/24000s" duration="284284/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="6108102/24000s" duration="1001/24000s" value="take · not worth driving two hours for a day longer" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13689676/24000s" name="MVI_0040 90" start="6636630/24000s" duration="175175/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r26" lane="1" offset="6643637/24000s" name="chapter-06_placeholder" start="0s" duration="56056/24000s" role="Graphics.Cutouts" />
+                            <marker start="6636630/24000s" duration="1001/24000s" value="take · how does it reproduce?" completed="0" />
+                            <marker start="6643637/24000s" duration="1001/24000s" value="GFX: chapter card — Budding" completed="0" />
+                            <chapter-marker start="6636630/24000s" duration="1001/24000s" value="Budding" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="13864851/24000s" name="MVI_0040 91" start="7877870/24000s" duration="157157/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="7877870/24000s" duration="1001/24000s" value="take · mother cell buds a daughter — mitosis, two cells" completed="0" />
+                            <marker start="7877870/24000s" duration="1001/24000s" value="GFX: budding cycle — mother, bud, daughter, split (molecular kit, on 2s)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14022008/24000s" name="MVI_0040 92" start="8046038/24000s" duration="129129/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="8046038/24000s" duration="1001/24000s" value="take · mother cell buds a daughter — mitosis, two cells (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14151137/24000s" name="MVI_0040 93" start="8964956/24000s" duration="133133/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0800 1.0800" />
+                            <marker start="8964956/24000s" duration="1001/24000s" value="take · grows where there are nutrients — sugars and starches" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14284270/24000s" name="MVI_0040 94" start="9113104/24000s" duration="142142/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0800 1.0800" />
+                            <marker start="9113104/24000s" duration="1001/24000s" value="take · grows where there are nutrients — sugars and starches (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14426412/24000s" name="MVI_0040 95" start="9299290/24000s" duration="299299/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r27" lane="1" offset="9306297/24000s" name="chapter-07_placeholder" start="0s" duration="62062/24000s" role="Graphics.Cutouts" />
+                            <marker start="9299290/24000s" duration="1001/24000s" value="take · amylases break starch into sugars" completed="0" />
+                            <marker start="9306297/24000s" duration="1001/24000s" value="GFX: chapter card — What it eats" completed="0" />
+                            <marker start="9347338/24000s" duration="1001/24000s" value="GFX: pathway — starch → amylases → sugars (⚠︎ D-review before building)" completed="0" />
+                            <chapter-marker start="9299290/24000s" duration="1001/24000s" value="What it eats" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14725711/24000s" name="MVI_0040 96" start="9816807/24000s" duration="193193/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="9816807/24000s" duration="1001/24000s" value="take · sucrose with invertase" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14918904/24000s" name="MVI_0040 97" start="10663653/24000s" duration="40040/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="10663653/24000s" duration="1001/24000s" value="take · simple sugars, zymase → CO₂ and alcohol" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14958944/24000s" name="MVI_0040 98" start="10718708/24000s" duration="32032/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="10718708/24000s" duration="1001/24000s" value="take · simple sugars, zymase → CO₂ and alcohol (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="14990976/24000s" name="MVI_0040 99" start="10764754/24000s" duration="115115/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="10764754/24000s" duration="1001/24000s" value="take · simple sugars, zymase → CO₂ and alcohol (3)" completed="0" />
+                            <marker start="10788778/24000s" duration="1001/24000s" value="GFX: pathway — zymase → CO₂ + ethanol" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="15106091/24000s" name="MVI_0040 100" start="11193182/24000s" duration="162162/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="11193182/24000s" duration="1001/24000s" value="take · the byproducts we want — alcohol, or the rise we bake off" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="15268253/24000s" name="MVI_0040 101" start="11366355/24000s" duration="164164/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="11366355/24000s" duration="1001/24000s" value="take · the byproducts we want — alcohol, or the rise we bake off (2)" completed="0" />
+                            <marker start="11396385/24000s" duration="1001/24000s" value="BROLL: dough rising / oven spring — Storyblocks if needed" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="15432417/24000s" name="MVI_0040 102" start="11813802/24000s" duration="294294/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r28" lane="1" offset="11820809/24000s" name="chapter-08_placeholder" start="0s" duration="56056/24000s" role="Graphics.Cutouts" />
+                            <marker start="11813802/24000s" duration="1001/24000s" value="take · the right environment — between 50 degrees dormant and 140 killed off" completed="0" />
+                            <marker start="11820809/24000s" duration="1001/24000s" value="GFX: chapter card — Temperature" completed="0" />
+                            <marker start="12042030/24000s" duration="1001/24000s" value="GFX: temperature gauge — 50 °F dormant · 93–102 °F sweet spot · 140 °F dead (⚠︎ E1)" completed="0" />
+                            <chapter-marker start="11813802/24000s" duration="1001/24000s" value="Temperature" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="15726711/24000s" name="MVI_0040 103" start="12122110/24000s" duration="197197/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="12122110/24000s" duration="1001/24000s" value="take · the right environment — between 50 degrees dormant and 140 killed off (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="15923908/24000s" name="MVI_0040 104" start="12434422/24000s" duration="122122/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="12434422/24000s" duration="1001/24000s" value="take · the sweet spot — 93 to 100-and-a-couple — where we proof" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="16046030/24000s" name="MVI_0040 105" start="12574562/24000s" duration="393393/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="12574562/24000s" duration="1001/24000s" value="take · the sweet spot — 93 to 100-and-a-couple — where we proof (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="16439423/24000s" name="MVI_0040 106" start="13224211/24000s" duration="163163/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r29" lane="1" offset="13231218/24000s" name="chapter-09_placeholder" start="0s" duration="62062/24000s" role="Graphics.Cutouts" />
+                            <marker start="13224211/24000s" duration="1001/24000s" value="take · salt, fat, spices get in the way — slows proving" completed="0" />
+                            <marker start="13231218/24000s" duration="1001/24000s" value="GFX: chapter card — Faster and slower" completed="0" />
+                            <chapter-marker start="13224211/24000s" duration="1001/24000s" value="Faster and slower" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="16602586/24000s" name="MVI_0040 107" start="13412399/24000s" duration="264264/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13412399/24000s" duration="1001/24000s" value="take · salt, fat, spices get in the way — slows proving (2)" completed="0" />
+                            <marker start="13441428/24000s" duration="1001/24000s" value="BROLL: fat, salt, spice going into a bowl (shoot) — or Storyblocks" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="16866850/24000s" name="MVI_0040 108" start="13994981/24000s" duration="86086/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="13994981/24000s" duration="1001/24000s" value="take · sugar speeds it up" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="16952936/24000s" name="MVI_0040 109" start="15002988/24000s" duration="187187/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="15002988/24000s" duration="1001/24000s" value="take · active dry says add sugar — you don't have to, let it sit longer" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17140123/24000s" name="MVI_0040 110" start="15201186/24000s" duration="114114/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="15201186/24000s" duration="1001/24000s" value="take · active dry says add sugar — you don't have to, let it sit longer (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17254237/24000s" name="MVI_0040 111" start="15556541/24000s" duration="361361/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r30" lane="2" offset="15556541/24000s" name="insert — the tall glass of pre-ferment, bubbling" start="336336/24000s" duration="216216/24000s" role="Video" />
+                            <marker start="15556541/24000s" duration="1001/24000s" value="take · yeast just wants flour and water — the pre-ferment, bubbling" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17615598/24000s" name="MVI_0040 112" start="16197181/24000s" duration="91091/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="16197181/24000s" duration="1001/24000s" value="take · adding sugar speeds it up, but then — sweeter dough" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17706689/24000s" name="MVI_0040 113" start="16370354/24000s" duration="175175/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0000 1.0000">
+                                <param name="scale">
+                                    <keyframeAnimation>
+                                        <keyframe time="16370354/24000s" value="1.0000 1.0000" interp="linear" />
+                                        <keyframe time="16545529/24000s" value="1.0500 1.0500" interp="linear" />
+                                    </keyframeAnimation>
+                                </param>
+                            </adjust-transform>
+                            <marker start="16370354/24000s" duration="1001/24000s" value="take · if that's not what you want, you don't need to add sugar" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17881864/24000s" name="MVI_0040 114" start="16800784/24000s" duration="89089/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r31" lane="2" offset="16800784/24000s" name="insert — pre-ferment surface, bubbles close" start="480480/24000s" duration="89089/24000s" role="Video" />
+                            <marker start="16800784/24000s" duration="1001/24000s" value="take · a pre-ferment is a version of a sourdough — easier to add later" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="17970953/24000s" name="MVI_0040 115" start="16907891/24000s" duration="272272/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <video ref="r31" lane="2" offset="16907891/24000s" name="insert — pre-ferment surface, bubbles close" start="569569/24000s" duration="79079/24000s" role="Video" />
+                            <asset-clip ref="r33" lane="-2" offset="16984968/24000s" name="Audiio_SK_Commercial_TwoBigReasons30 (outro)" start="0s" duration="771771/24000s" format="r1" audioRole="Music">
+                                <adjust-volume amount="-26.0dB" />
+                            </asset-clip>
+                            <marker start="16907891/24000s" duration="1001/24000s" value="take · a pre-ferment is a version of a sourdough — easier to add later (2)" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="18243225/24000s" name="MVI_0040 116" start="17184167/24000s" duration="97097/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="17184167/24000s" duration="1001/24000s" value="take · it also, as the yeast breaks down the flour," completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r3" offset="18340322/24000s" name="MVI_0040 117" start="17334317/24000s" duration="114114/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <marker start="17334317/24000s" duration="1001/24000s" value="take · creates a more complex flavor" completed="0" />
+                        </asset-clip>
+                        <asset-clip ref="r6" offset="18454436/24000s" name="MVI_0038 118" start="17036019/24000s" duration="365365/24000s" format="r1" tcFormat="NDF" audioRole="Dialogue">
+                            <adjust-transform scale="1.0000 1.0000">
+                                <param name="scale">
+                                    <keyframeAnimation>
+                                        <keyframe time="17036019/24000s" value="1.0000 1.0000" interp="linear" />
+                                        <keyframe time="17401384/24000s" value="1.0400 1.0400" interp="linear" />
+                                    </keyframeAnimation>
+                                </param>
+                            </adjust-transform>
+                            <marker start="17036019/24000s" duration="1001/24000s" value="take · close — the same little guy, factory cakes to store packets" completed="0" />
+                            <marker start="17372355/24000s" duration="1001/24000s" value="GFX: end card — one takeaway, one next action (⚠︎ C6: no next action recorded)" completed="0" />
+                            <chapter-marker start="17036019/24000s" duration="1001/24000s" value="The same little bug" />
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

@@ -1,0 +1,52 @@
+#!/bin/sh
+# run — the one correct way to invoke anything in this pipeline.
+#
+# `python` is often not on PATH at all, and `python3` on macOS is Xcode's 3.9, not this
+# project's venv. Both produce failures that look like bugs in the pipeline: an ImportError
+# forty frames into numpy, or a syntax error from a version too old to parse the code. This
+# wrapper removes the choice, so there is one invocation and it cannot be got wrong.
+#
+#   ./run roundtrip.py ~/Desktop/"smoke 9:16.fcpxmld"
+#   ./run run_pipeline.py --dry-run
+#   ./run tools/segment_sheet.py sheets/session01_a.jpg --keys yeast_cell
+#   ./run -m pytest                      # anything after the script name is passed through
+#
+# Paths are quoted throughout because Finder produces spaces and colons in filenames, and
+# "smoke 9:16.fcpxmld" is a real export name from this project.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+python="$here/.venv/bin/python"
+
+if [ ! -x "$python" ]; then
+    echo "! no venv at $python" >&2
+    echo "  Create it:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
+    exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: ./run <script.py|-m module> [args…]" >&2
+    echo "  scripts/ is on the path, so ./run roundtrip.py works as well as scripts/roundtrip.py" >&2
+    exit 2
+fi
+
+first=$1
+
+# `-m pytest` and friends pass straight through.
+if [ "$first" = "-m" ] || [ "$first" = "-c" ]; then
+    exec "$python" "$@"
+fi
+
+# Accept a bare script name, a scripts/-relative name, or a full path — all the forms someone
+# will reasonably type, since remembering which directory a tool lives in is not the job.
+shift
+for candidate in "$first" "$here/$first" "$here/scripts/$first" "$here/scripts/tools/$first"; do
+    if [ -f "$candidate" ]; then
+        exec "$python" "$candidate" "$@"
+    fi
+done
+
+echo "! no such script: $first" >&2
+echo "  Looked in ., scripts/ and scripts/tools/." >&2
+exit 1

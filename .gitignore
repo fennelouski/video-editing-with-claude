@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Pipeline output — regenerable from footage + script, and large.
+build/
+
+# Binary asset libraries. These are her scans, photographs, and recordings:
+# too large for git and not reconstructible from source anyway. The directory
+# structure is kept via .gitkeep so a fresh clone still passes preflight.
+#
+# The .gitkeep files inside these trees were force-added once, so the directory
+# structure survives a fresh clone. Tracked files stay tracked regardless of the
+# rules below; a new .gitkeep needs `git add -f`.
+footage/**
+# Camera cards dropped in at the repo root, one folder per shoot. Same rule as
+# footage/ — 9 GB of MOVs is not a thing git should be asked to hold.
+Intro 001/**
+assets/cutouts/**
+assets/textures/**
+assets/foley/**
+assets/music/**
+assets/luts/**
+assets/logos/**
+
+# Fonts: the built woff2 is small and worth tracking, but the 1200 dpi source
+# scans it is built from are not.
+assets/fonts/scans/
+
+# Intermediate frames and voiceover for the handoff video; the .py rebuilds them.
+handoff/.build/

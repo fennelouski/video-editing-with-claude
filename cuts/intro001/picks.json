@@ -1,0 +1,460 @@
+{
+  "project": "intro001",
+  "picks": [
+    {
+      "source": "Intro 001/MVI_0016.MOV",
+      "start": 28.88,
+      "end": 31.57,
+      "note": "hook \u2014 yeast bubbling in action (take 4)",
+      "text": "This is yeast bubbling in action.",
+      "gain_db": 19.7,
+      "video": {
+        "source": "footage/broll/starter-jar-rise_prepped.mov",
+        "start": 0.0,
+        "note": "starter jar rising \u2014 3.37x, deflickered"
+      }
+    },
+    {
+      "source": "Intro 001/MVI_0016.MOV",
+      "start": 66.36,
+      "end": 69.28,
+      "note": "hook \u2014 way too excited about yeast (take 3)",
+      "text": "This is me, way too excited about yeast.",
+      "gain_db": 19.7,
+      "video": {
+        "source": "Intro 001/MVI_0016.MOV",
+        "start": 34.3,
+        "note": "Katie waving, between takes"
+      }
+    },
+    {
+      "source": "Intro 001/MVI_0016.MOV",
+      "start": 92.56,
+      "end": 96.72,
+      "note": "name + promise (take 5)",
+      "text": "Katie, I'm a food scientist, and this is my deep dive into yeast.",
+      "gain_db": 19.7
+    },
+    {
+      "source": "Intro 001/MVI_0016.MOV",
+      "start": 112.28,
+      "end": 116.3,
+      "note": "as humans, thousands of years",
+      "text": "As humans, we started using yeast thousands of years ago.",
+      "gain_db": 19.7
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 40.199,
+      "end": 48.163,
+      "note": "records are murky",
+      "text": "The records for when yeast first showed up is kind of murky from what I could find in my research."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 50.985,
+      "end": 54.206,
+      "note": "about 3,000 years ago / 1,000 BC",
+      "text": "about 3,000 years ago, about 1,000 BC."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 67.138,
+      "end": 69.219,
+      "note": "Egypt, buried with pharaohs",
+      "text": "we see some in Egypt buried with pharaohs."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 78.389,
+      "end": 85.291,
+      "note": "jars, yeast on the side, DNA",
+      "text": "They have jars, yeast on the side from what the DNA test can solve."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 85.531,
+      "end": 100.377,
+      "note": "Asia into Europe, no way to know which was first",
+      "text": "We also have yeast showing up in the archaeological records from Asia into Europe, all over the place. We don't have exact ways of knowing which one was first, where they were, if we got all of the records, but we know it's all over the place."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 101.923,
+      "end": 108.305,
+      "note": "DNA is mixed in with everything else",
+      "text": "It's hard to pull out the DNA because it's also mixed in with a bunch of other things from my understanding."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 120.823,
+      "end": 147.876,
+      "note": "passed brewer to baker, off grapes, in the air",
+      "text": "Then we have this understanding of yeast. It's being passed between brewers and bakers. It's being collected from the air. It's being collected from outside of grapes and introduced into wine. It's moving around. It's passed from person to person, baker to brewer, brewer to baker. It's in meat. It's in wine. It's in beer. It's in our sourdough starters. It's just all around."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 153.023,
+      "end": 168.058,
+      "note": "successful batch passed on, dud batch dropped",
+      "text": "what they're doing is they're passing it from successful batch passed on to someone else's and they make a successful batch and if it's a dud batch they don't pass it on because who wants to do anything with a dud batch"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 170.394,
+      "end": 186.189,
+      "note": "that is selective breeding",
+      "text": "And so what we're getting is selective breeding of good yeast, yeast that ferments, that makes the bread bubble, makes the alcohol happen, is being passed around. And that is what we've used for years and years and years."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 186.57,
+      "end": 212.929,
+      "note": "spontaneous generation \u2192 Pasteur's gooseneck flask",
+      "text": "and it was just thought it was spontaneous generation that's what it was until we get to louis pasteur louis pasteur comes in and he does his gooseneck bottle experiment and proves that it's not spontaneous generation that is making food come alive it is bacteria it's fungi it's a bunch of microscopic little things in our food and that's it that's all we know for a while with about yeast"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 228.354,
+      "end": 248.251,
+      "note": "Meyen, 1838 \u2192 Saccharomyces cerevisiae",
+      "text": "And then we get Franz Julius Ferdinand Mayen. in 1838. He comes in and he discovers what we know for most of our yeast today, Saccharomyces cerevisiae. And that is the yeast that we see in our active dry yeast. It's what we find in our fresh yeast, our instant yeast, and most of our sourdoughs."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 251.329,
+      "end": 274.994,
+      "note": "the jars: mead, instant, active dry, fresh, pre-ferment",
+      "text": "I have marketing for yeast for mead. It's Saccharomyces cerevisiae. I have instant dry yeast. It's Saccharomyces cerevisiae. I have active dry yeast with a little sugar in it. Guess what? Saccharomyces cerevisiae. Fresh yeast. Saccharomyces cerevisiae. I even have what could be the start of a sourdough starter. Here, it's a pre-ferment. It is yeast, Saccharomyces cerevisiae mixed with flour and water."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 279.698,
+      "end": 285.663,
+      "note": "~90% of the yeast we use is this one bug",
+      "text": "It is like 90% of all the yeast that we use is this one bug."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 286.063,
+      "end": 295.892,
+      "note": "sourdough changes batch to batch, mother to mother",
+      "text": "And in sourdoughs, we have, it's in most of the sourdoughs, but sourdough is where we see it change from batch to batch, mother to mother."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 300.992,
+      "end": 310.176,
+      "note": "other yeasts + bacteria are what make sourdough different",
+      "text": "there might be some other yeast inside of those batches and they have other bacteria and that's what makes sourdough just a little bit different than your everyday yeast, flour, pre-ferment like I have here."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 310.396,
+      "end": 325.543,
+      "note": "what yeast is \u2014 fungus, single cell, eukaryotic",
+      "text": "Okay, so what is yeast in and of itself? Yeast in and of itself is a, it's a small little bug, it's a fungi, it's single cell organism, it's eukaryotic,"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 331.646,
+      "end": 351.045,
+      "note": "budding \u2014 mother, daughter, mitosis",
+      "text": "It reproduces itself by budding where a mother... cell will start to grow a little bud off of it for a daughter cell and the daughter cell once it gets big enough mitosis happens and it splits and then it and then it continues to grow and those split and those split"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 352.506,
+      "end": 374.027,
+      "note": "same guy, home bakery to the vineyards",
+      "text": "and that is how Saccharomyces cerevisiae splits and grows and reproduces all over we use it everywhere from our home bakeries to the brewers down the road to the vineyards in California and France, everywhere, Saccharomyces cerevisiae, same guy, again and again and again."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 398.445,
+      "end": 411.833,
+      "note": "it thrives where it is fed \u2014 starches and sugars",
+      "text": "So it will bud and reproduce in an environment that it thrives in. It likes it to be nutritionally dense for it. That's where it likes having starches and sugars to break down and give the energy that it needs to continue to grow."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 412.394,
+      "end": 420.539,
+      "note": "54 \u00b0F to just over 100 \u00b0F",
+      "text": "It likes its temperature between 54 degrees Fahrenheit and just over 100 degrees Fahrenheit."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 420.92,
+      "end": 422.681,
+      "note": "underneath 54 degrees \u2014",
+      "text": "Underneath 54 degrees,"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 428.773,
+      "end": 441.664,
+      "note": "\u2014 it hibernates until it warms back up",
+      "text": "it goes back into a little shell of itself and hibernates and it just tucks away and takes a nap until it warms back up and is a good environment for it to grow and thrive and that's how it survives not being able to move from environment to environment."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 443.265,
+      "end": 456.23,
+      "note": "over 100 \u00b0F, and 140 \u00b0F kills it",
+      "text": "Over 100 degrees it can still grow until it gets to about 140 degrees Fahrenheit and that's when baking happens and it kills it off in the oven"
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 458.632,
+      "end": 470.019,
+      "note": "oven spring, and no live yeast in baked bread",
+      "text": "You might get oven spring from the yeast still growing and other things happening but then it stops and you're not eating fresh yeast when you eat bread because you've killed it off."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 620.476,
+      "end": 653.652,
+      "note": "CHEMISTRY \u2014 starch \u2192 amylase \u2192 sucrose \u2192 invertase",
+      "text": "Okay, so you have your starch and it breaks down with alpha amylase and beta amylase. And we'll get into that in another video. And then that breaks down to sucrose. And sucrose... exists around the yeast and the yeast itself provides invertase. And invertase is an enzyme. If it ends in \"-ase\", it's an enzyme. And so the invertase goes in to sucrose and breaks it down into glucose and fructose."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 670.039,
+      "end": 677.102,
+      "note": "CHEMISTRY \u2014 zymase \u2192 CO\u2082 + alcohol",
+      "text": "You get zymase and it breaks it down into your CO2 and your alcohol. That's your carbon dioxide and your alcohol."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 697.919,
+      "end": 707.525,
+      "note": "both burn off when you bake it",
+      "text": "And then when you bake the bread, the alcohol and the CO2 kind of burn off and leave the bread. So they're not behind left in the bread after you've cooked it."
+    },
+    {
+      "source": "Intro 001/MVI_0019.MOV",
+      "start": 713.27,
+      "end": 719.013,
+      "note": "the CO\u2082 is why champagne is bubbly",
+      "text": "And you also have your CO2. That's where you get your bubbly wines like your champagne."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 39.24,
+      "end": 42.9,
+      "note": "fat, salt and spice in the dough \u2014",
+      "text": "In your dough, you have fats, salts, spices."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 49.8,
+      "end": 62.54,
+      "note": "\u2014 get between the yeast and its food",
+      "text": "in the way between the yeast and the sugar and the starches that it wants to eat. And so it slows it down. It takes longer. It's harder for the yeast to reach its food source. It can get there. It just takes more time."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 62.54,
+      "end": 81.228,
+      "note": "so factor in more proofing time",
+      "text": "So when you're cooking with added fat, salt, spices to a a dough you just need to factor in that it's going to take more time for it to proof for it to get to what it needs because it needs starches sugars it needs water that's all it needs"
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 87.85,
+      "end": 92.998,
+      "note": "a pre-ferment is flour, water, yeast",
+      "text": "A pre-ferment is flour, water, yeast. That's all is needed."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 92.998,
+      "end": 106.722,
+      "note": "you do not need sugar to activate it",
+      "text": "I know some yeast says it needs sugar to activate active dry yeast. They recommend that. Really, if you give it time, you don't need the sugar in it. You don't have to add the sugar to your dough unless that is a, you want a sweeter dough."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 107.142,
+      "end": 124.251,
+      "note": "sugar buys speed and costs you a sweeter bread",
+      "text": "So it just, how much time do you want? If you need to bake dough and you want it to rise a little bit faster, you can add sugar to it. It's just going to be a sweeter bread, but it will rise a little faster, get going a little faster, shorten your proofing time."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 136.763,
+      "end": 148.829,
+      "note": "if it is all one organism, why so many products?",
+      "text": "Saccharomyces cerevisiae, I said it's all the same thing, but why? Why do we have so many different forms when it's all the same guy? Well, he likes to go dormant. He might die."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 149.029,
+      "end": 150.83,
+      "note": "it needs access to food",
+      "text": "He needs access to food sources."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 158.532,
+      "end": 163.353,
+      "note": "it comes down to how often you need it",
+      "text": "it comes down to how frequently does the person using it need to have access to the yeast."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 163.413,
+      "end": 183.558,
+      "note": "a working baker uses it daily \u2192 fresh yeast",
+      "text": "A baker is using yeast day in and day out. They can have fresh yeast on hand because they might not want to wait for a dry yeast to come building back up into active yeast that is moving and flowing. Having fresh yeast will shorten their cook time, their baking time, their proof time, and it makes it easier."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 184.038,
+      "end": 217.929,
+      "note": "an hour from a grocery store \u2192 active dry / instant",
+      "text": "If you have a baker in Kansas that lives on a farm that takes an hour to get to their local grocery store, having fresh yeast... is not practical because they need something that can stay on hand, that lasts longer. That's where you get your active dry and your instant yeast needs. It's a casual baker, a person that doesn't want something that is gonna go and die within a couple weeks, a week. They need something that lasts longer because of the effort it takes to get to the grocery store."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 217.929,
+      "end": 219.37,
+      "note": "and those shops \u2014",
+      "text": "Also, those grocery stores"
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 221.4,
+      "end": 226.683,
+      "note": "\u2014 probably do not sell much yeast",
+      "text": "probably don't sell a lot of yeast because they might not have as frequent customers."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 232.266,
+      "end": 250.036,
+      "note": "stock that dies on the shelf is not viable",
+      "text": "And so having fresh yeast on hand and having it die on hand again and again might not be financially viable. So they have the dry yeast on hand so that way when the customer comes in, it's available, it's not dead, it's... It's what those people need."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 250.417,
+      "end": 272.854,
+      "note": "brewer's yeast \u2014 marketing, convenience, the customer",
+      "text": "But if you have yeast on hand and you have someone that's wanting to learn how to brew, they're searching, how do I find yeast? And they get brewer's yeast. Yes, I'm brewing. Let me buy brewer's yeast. It's marketing sometimes. Sometimes it's convenience. Sometimes it's who the customer is. But if you know what you're looking for, you can buy what you can find and work with it."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 272.978,
+      "end": 292.038,
+      "note": "if you want the best loaf, instant vs active dry differs",
+      "text": "If you're really wanting to deep dive into making the best, most perfect bread, the most premium bread, you might care what type of yeast, because there is a little bit of a difference with instant and active dry."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 309.557,
+      "end": 321.266,
+      "note": "CHEMISTRY \u2014 drying damages it; it releases glutathione",
+      "text": "And so the yeast might become damaged from sitting and being dried out and when it comes up and back to life, it can release something called glutathione."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 329.092,
+      "end": 334.977,
+      "note": "CHEMISTRY \u2014 glutathione attacks the gluten matrix",
+      "text": "And what that can do is it can get into the gluten matrix and attack it a little bit."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 335.137,
+      "end": 351.625,
+      "note": "so the bread is not as stretchy",
+      "text": "So you have your your instant dry yeast, what you might find is one of the, it's available, it's findable, but one of the offsets might be that the bread is not as stretchy."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 358.326,
+      "end": 366.748,
+      "note": "and it dries out faster",
+      "text": "The bread might dry out a little faster because the starch has a harder time holding onto water with the GSH involved."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 367.171,
+      "end": 373.633,
+      "note": "day to day, does it matter? probably not",
+      "text": "And so day to day, does it really matter? Probably not with the bread that you want to make."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 379.796,
+      "end": 396.862,
+      "note": "but if it does, try switching to fresh",
+      "text": "But if it really matters, if you're finding that your bread is drying out, it's not as stretchy, it's not as elastic as you want the bite to be, try seeing if you can find fresh yeast and switching to that. That might help fix the problem that you run into."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 398.51,
+      "end": 416.718,
+      "note": "otherwise use what you can get",
+      "text": "But if you're happy with your bread, it doesn't matter if you have access to fresh yeast. Active dry works great. If you have fresh yeast available but you can't find for some reason the active dry or instant yeast, go ahead and use that. Use what's available."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 416.878,
+      "end": 423.32,
+      "note": "it is all the same \u2014 look at sourdough",
+      "text": "It's all the same. It's what we've done for hundreds of years. I mean, look at our ancestors who made sourdough."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 449.94,
+      "end": 464.062,
+      "note": "sourdough was what was available out west",
+      "text": "Sourdough was what was available. They didn't have to ship back, ship yeast from back east to the hard to reach people. And so that's why some people, sourdough is even better than active dry yeast for them."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 464.062,
+      "end": 485.41,
+      "note": "you can start a sourdough from active dry",
+      "text": "And if you're struggling because you want a fresh yeast, and all you can find is active dry, try just making sourdough from your active dry. Get it going, get it started, let the yeast multiply, be happy for a few days, and then you have a little pre-ferment already made and go from there."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 486.275,
+      "end": 507.294,
+      "note": "close \u2014 it feels like a mystery, it is one bug",
+      "text": "It can be played with. Yeast is not something that has to be a hard and fast rule. It feels like a mystery, but really all it is is the same little Saccharomyces cerevisiae bug again and again and again and again. He's happy. All the little bug wants is to go and eat sugars and fart."
+    },
+    {
+      "source": "Intro 001/MVI_0021.MOV",
+      "start": 514.869,
+      "end": 520.993,
+      "note": "close \u2014 CO\u2082 and ethanol, a happy life",
+      "text": "produce carbon dioxide and ethanol. It just wants to live a happy life and it's not all that complicated."
+    }
+  ],
+  "music": [
+    {
+      "source": "assets/music/Audiio_AsTallAsPine_ATAP_TwinLakes.wav",
+      "role": "bed",
+      "at": 0.0,
+      "until": 32.0,
+      "fade_in": 1.5,
+      "fade_out": 10.0,
+      "under_db": 16.0,
+      "note": "As Tall As Pine \u2014 Twin Lakes. Plays once under the hook, fades out across 22-32 s."
+    },
+    {
+      "source": "assets/music/Audiio_SK_Commercial_TwoBigReasons30.wav",
+      "role": "outro",
+      "at": 711.096,
+      "fade_in": 2.0,
+      "fade_out": 2.0,
+      "under_db": 16.0,
+      "note": "Two Big Reasons. Ends on the last frame."
+    }
+  ]
+}

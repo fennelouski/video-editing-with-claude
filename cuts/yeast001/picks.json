@@ -1,0 +1,1140 @@
+{
+ "project": "yeast001",
+ "music": [
+  {
+   "source": "assets/music/Audiio_AsTallAsPine_ATAP_TwinLakes.wav",
+   "role": "bed",
+   "at": 0.0,
+   "until": 30.0,
+   "fade_in": 1.5,
+   "fade_out": 9.0,
+   "under_db": 16.0,
+   "note": "Twin Lakes under the cold open only; out by the end of the first chapter's first line"
+  },
+  {
+   "source": "assets/music/Audiio_SK_Commercial_TwoBigReasons30.wav",
+   "role": "outro",
+   "fade_in": 2.0,
+   "fade_out": 2.0,
+   "under_db": 16.0,
+   "note": "Two Big Reasons. Ends on the last frame — `at` is computed below",
+   "at": 752.00125
+  }
+ ],
+ "grade": {
+  "lut": "assets/luts/yeast001-grade.cube",
+  "face_lift": {
+   "centre": [
+    960,
+    330
+   ],
+   "radius": [
+    430,
+    330
+   ],
+   "amount": 0.7
+  }
+ },
+ "picks": [
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 13.430083333333334,
+   "end": 15.640625,
+   "note": "hook VO — yeast bubbling in action",
+   "text": "This is yeast bubbling in action.",
+   "video": {
+    "source": "footage/broll/Best Yeast Broll.MOV",
+    "start": 4.0,
+    "note": "starter glass, bubbles breaking at the surface"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 19.5195,
+   "end": 22.439083333333333,
+   "note": "hook VO — way too excited about yeast",
+   "text": "And this is me way too excited about yeast.",
+   "video": {
+    "source": "footage/broll/Katie Dancing.MOV",
+    "start": 56.8,
+    "note": "Katie dancing, both arms up"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 668.793125,
+   "end": 674.0900833333334,
+   "note": "hook claim — you don't need sugar, you need time",
+   "text": "You don't actually need sugar to make your yeast grow. You just need time.",
+   "push_to": 1.05
+  },
+  {
+   "source": "footage/a-cam/MVI_0036.MOV",
+   "start": 35.20183333333333,
+   "end": 38.663625,
+   "note": "name + promise (take 4)",
+   "text": "Hi, I'm Katie. I'm a food scientist, and this is my deep dive into yeast.",
+   "cues": [
+    {
+     "at": 2.6,
+     "text": "GFX: title card — 'Yeast' (§6.1, first graphic <30 s)",
+     "layer": "build/graphics/yeast001/title_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 19.019,
+   "end": 32.240541666666665,
+   "note": "yeast is really old — Egypt, Asia, Europe",
+   "text": "Yeast is really old. We've had it around for at least a few thousand years. We've found it in archaeological records in Egypt. We have found it in archaeological records in parts of Asia and in Europe.",
+   "chapter": "Yeast is old",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Yeast is old",
+     "layer": "build/graphics/yeast001/chapter-01_placeholder.mov"
+    },
+    {
+     "at": 5.0,
+     "text": "GFX: timeline card — Egypt · Asia · Europe (vague on purpose)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 32.907875,
+   "end": 35.95258333333334,
+   "note": "it's around, it grows on grapes",
+   "text": "It's around. It's in our environment. It grows on grapes.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "BROLL: wild yeast bloom on dark grapes (macro) — Storyblocks if needed"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 211.79491666666667,
+   "end": 219.17729166666666,
+   "note": "yeast in the air, on the grapes — not inoculated",
+   "text": "We know that the yeast is in the air around all these ancient people, and so it is just falling into their food, or it's on the grapes that they're smashing up to make wine. It is being pulled in from the environment. It's not being inoculated. It's not being pushed into the food by the bakers themselves until they figure out kind of what's going on, that you need a little bit of something to make something else."
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 219.63608333333335,
+   "end": 221.88833333333332,
+   "note": "yeast in the air, on the grapes — not inoculated (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 222.347125,
+   "end": 227.101875,
+   "note": "yeast in the air, on the grapes — not inoculated (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 228.18629166666668,
+   "end": 234.69279166666666,
+   "note": "yeast in the air, on the grapes — not inoculated (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 235.610375,
+   "end": 236.69479166666667,
+   "note": "yeast in the air, on the grapes — not inoculated (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 66.02429166666667,
+   "end": 67.81775,
+   "note": "brewers → friends making doughs",
+   "text": "You get the brewers that are taking grapes and grains and turning it into wine and beer and mead. And they're producing these fermenting bubbly batches of goodness that they like, and they are taking it and they're passing it on to their friends that are making doughs.",
+   "cues": [
+    {
+     "at": 0.5,
+     "text": "GFX: the exchange — brewer's jar passed to the baker (§6.4)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 68.40166666666667,
+   "end": 74.61620833333333,
+   "note": "brewers → friends making doughs (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 75.15841666666667,
+   "end": 86.29454166666666,
+   "note": "brewers → friends making doughs (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 99.474375,
+   "end": 101.101,
+   "note": "bakers get bubbly batches — passed back and forth",
+   "text": "those bakers are getting bubbly batches that are making dough that rises and are different than flat breads and it's being passed back and forth back and forth."
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 101.726625,
+   "end": 108.733625,
+   "note": "bakers get bubbly batches — passed back and forth (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 254.50425,
+   "end": 257.54895833333336,
+   "note": "selective breeding (the term)",
+   "text": "With the passing back and forth, you get selective breeding going on.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: key term — Selective breeding (§6.3)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 213.00445833333333,
+   "end": 219.67779166666668,
+   "note": "they may not know what they're breeding — dud batch",
+   "text": "They may not know what they're breeding, but they're being selective about it. If it's a dud batch, they're not passing it on to their friend."
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 224.80791666666667,
+   "end": 228.56166666666667,
+   "note": "successful batch passed on — genes selected",
+   "text": "If they have a successful batch, they're passing it on to their friend, and the genes of the yeast are being selected for the ones that ferment and make alcohol and raise bread and do lots of things that these ancient people wanted.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: dud batch ✗ pushed out, good batch ✓ passed on (§6.6)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 229.103875,
+   "end": 233.7335,
+   "note": "successful batch passed on — genes selected (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 234.234,
+   "end": 241.616375,
+   "note": "successful batch passed on — genes selected (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 311.0190416666667,
+   "end": 311.60295833333333,
+   "note": "until Louis Pasteur — gooseneck, microbes",
+   "text": "It wasn't until we meet Louis Pasteur that we have an inkling of what's making one successful batch work and what's being passed on between these bakers and brewers. He has a gooseneck experiment and disproves spontaneous generation and says there are microbes, little bugs that we can't see all around the world.",
+   "chapter": "Louis Pasteur",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Louis Pasteur",
+     "layer": "build/graphics/yeast001/chapter-02_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 312.1034583333333,
+   "end": 322.86420833333335,
+   "note": "until Louis Pasteur — gooseneck, microbes (2)",
+   "cues": [
+    {
+     "at": 1.616,
+     "text": "GFX: Pasteur portrait (Wikipedia, public domain) — see cuts/yeast001/wikipedia/",
+     "picture": "cuts/yeast001/wikipedia/pasteur-portrait.jpg",
+     "seconds": 7.0,
+     "layer": "build/graphics/yeast001/picture-pasteur-portrait.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 325.36670833333335,
+   "end": 328.6616666666667,
+   "note": "until Louis Pasteur — gooseneck, microbes (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 329.53754166666664,
+   "end": 337.2535833333333,
+   "note": "until Louis Pasteur — gooseneck, microbes (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 30.488791666666668,
+   "end": 39.080708333333334,
+   "note": "aside — glass bulb, stretches a neck",
+   "text": "If you don't know about the Louis Pasteur experiment, what he does is he takes a glass bulb and stretches out a neck on it.",
+   "cues": [
+    {
+     "at": 4.0,
+     "text": "GFX: swan-neck flask (Wellcome photo, CC BY 4.0) — to be redrawn as a cutout",
+     "picture": "cuts/yeast001/wikipedia/pasteur-flask-wellcome.jpg",
+     "seconds": 10.0,
+     "layer": "build/graphics/yeast001/picture-pasteur-flask-wellcome.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 41.12441666666667,
+   "end": 53.76204166666667,
+   "note": "open here, gooseneck shape — heats it to kill what's inside",
+   "text": "that is open over here, but it has a gooseneck shape. And he heats it up to kill off any bacteria that's on the inside with some food that he has cooked, that he has put inside of this gooseneck bottle."
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 104.729625,
+   "end": 107.39895833333334,
+   "note": "if spontaneous generation were true, the food breaks down",
+   "text": "And so if there's any truth to spontaneous generation, the food will just break down. There will be no problem with it doing what food has always done."
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 108.02458333333334,
+   "end": 114.44766666666666,
+   "note": "if spontaneous generation were true, the food breaks down (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 115.15670833333333,
+   "end": 120.57879166666666,
+   "note": "germ theory — germs get stuck in the downspout",
+   "text": "But if the food breaks down because of germ, germ theory, what he was thinking of is germs can't get in through the gooseneck bottle. It falls down. It gets stuck in the downspout right here."
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 121.28783333333334,
+   "end": 128.71191666666667,
+   "note": "germ theory — germs get stuck in the downspout (2)",
+   "cues": [
+    {
+     "at": 3.578,
+     "text": "GFX: flask — dust settling in the bend (rust mark)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 129.17070833333332,
+   "end": 130.58879166666668,
+   "note": "germ theory — germs get stuck in the downspout (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 134.84304166666666,
+   "end": 139.764625,
+   "note": "nothing happens to the food — and that's what happens",
+   "text": "so nothing will happen to the food. It won't break down. It won't do anything. And that's what happens."
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 146.81333333333333,
+   "end": 150.6505,
+   "note": "Pasteur proves there is no spontaneous generation",
+   "text": "And so Louis Pasteur proves that there is no spontaneous generation, that there is something in the air, bacteria, yeast, living organisms that are getting into our food and making changes."
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 151.31783333333334,
+   "end": 159.70120833333334,
+   "note": "Pasteur proves there is no spontaneous generation (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 414.6225416666667,
+   "end": 431.0973333333333,
+   "note": "we meet Saccharomyces cerevisiae",
+   "text": "meet our Saccharomyces cerevisiae. And this is the most common form of yeast that we use today. There are other yeasts that are used in sourdoughs, but for the most part, when you get to industrial bakers and you get to at-home bakers and you get to brewers, they're all using the same little bug, Saccharomyces cerevisiae.",
+   "chapter": "One bug",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — One bug",
+     "layer": "build/graphics/yeast001/chapter-03_placeholder.mov"
+    },
+    {
+     "at": 1.0,
+     "text": "GFX: name card — Saccharomyces cerevisiae (the recurring card)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 431.5978333333333,
+   "end": 440.77366666666666,
+   "note": "we meet Saccharomyces cerevisiae (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 441.566125,
+   "end": 448.48970833333334,
+   "note": "a fungus, single cell, thrives in fertile environments",
+   "scale": 1.08,
+   "text": "Saccharomyces cerevisiae is a yeast which is a member of the fungi family. It's a single cell organism that lives and thrives and grows in fertile environments.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: S. cerevisiae micrograph (Wikipedia, CC BY 3.0) — see cuts/yeast001/wikipedia/",
+     "picture": "cuts/yeast001/wikipedia/yeast-sem.jpg",
+     "seconds": 8.0,
+     "layer": "build/graphics/yeast001/picture-yeast-sem.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 449.15704166666666,
+   "end": 453.1193333333333,
+   "note": "a fungus, single cell, thrives in fertile environments (2)",
+   "scale": 1.08
+  },
+  {
+   "source": "footage/a-cam/MVI_0042.MOV",
+   "start": 1.4180833333333334,
+   "end": 12.679333333333334,
+   "note": "aside — sourdough uses yeast too, plus lactic bacteria",
+   "text": "Now, an aside about sourdough. Sourdough is also using yeast. Most sourdoughs are using Saccharomyces cerevisiae, but you'll find in other sourdoughs that there are lots of other different types of yeast involved. It's also using a bacteria that produces lactic acid."
+  },
+  {
+   "source": "footage/a-cam/MVI_0042.MOV",
+   "start": 13.304958333333333,
+   "end": 21.396375,
+   "note": "aside — sourdough uses yeast too, plus lactic bacteria (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0042.MOV",
+   "start": 25.5255,
+   "end": 33.908875,
+   "note": "setting sourdough aside — S. cerevisiae is repeatable",
+   "text": "And so I'm setting sourdough to the side so we could specifically talk about yeast, but sourdough is using yeast. It is using other forms of yeast that could do the same thing as Saccharomyces cerevisiae, but Saccharomyces cerevisiae is specifically known for producing repeatable results that do what we want it to do, which is why we use it so much."
+  },
+  {
+   "source": "footage/a-cam/MVI_0042.MOV",
+   "start": 34.367666666666665,
+   "end": 48.88216666666667,
+   "note": "setting sourdough aside — S. cerevisiae is repeatable (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 548.9650833333334,
+   "end": 550.174625,
+   "note": "from a mother ferment to measured yeast on hand",
+   "text": "And with the discovery of Saccharomyces cerevisiae, we move from always needing to have a sourdough-based model where we have a... mother dough, mother ferment, maintaining our yeast that we pull from to make our doughs, to being able to have on hand just the yeast and using that and introducing it into our dough at measured amounts that we want."
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 552.3434583333334,
+   "end": 563.7715416666666,
+   "note": "from a mother ferment to measured yeast on hand (2)",
+   "cues": [
+    {
+     "at": 7.79,
+     "text": "GFX: comparison — a mother ferment (jar) vs measured yeast (packet) (§6.6)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 564.2720416666667,
+   "end": 570.2363333333333,
+   "note": "from a mother ferment to measured yeast on hand (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 570.945375,
+   "end": 572.947375,
+   "note": "from a mother ferment to measured yeast on hand (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 573.82325,
+   "end": 580.4965833333333,
+   "note": "from a mother ferment to measured yeast on hand (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 581.2890416666667,
+   "end": 585.4181666666667,
+   "note": "our way of baking and brewing changes",
+   "text": "And our way of baking and our way of brewing changes"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 595.595,
+   "end": 605.3130416666667,
+   "note": "because we can be intentional — measure the organism",
+   "text": "because we can be a little bit more intentional with how we are baking and how we are brewing with being able to measure out the organism that we're introducing into our batches."
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 649.649,
+   "end": 665.665,
+   "note": "used all over — big brewers to at-home enthusiasts",
+   "text": "Saccharomyces cerevisiae is used all over the industries from alcohol industries to our baking industries, from the big brewers, the big wine makers, the big bakers to the at-home enthusiasts.",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 3.0,
+    "duration": 6.0,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "cues": [
+    {
+     "at": 6.0,
+     "text": "BROLL: a big bakery / brewery floor — Storyblocks, only if nothing real turns up"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 22.313958333333332,
+   "end": 29.446083333333334,
+   "note": "off camera I have examples of yeast you might find",
+   "text": "here off camera I have a couple examples of yeast that you might find when you're out and about looking to buy yeast.",
+   "chapter": "What's on the shelf",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — What's on the shelf",
+     "layer": "build/graphics/yeast001/chapter-04_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 35.11841666666667,
+   "end": 42.29225,
+   "note": "active dry, pre-seeded with sugar — you don't need it",
+   "text": "I have some active dry yeast that they actually pre-seeded with sugar. You don't actually need the sugar in there,",
+   "video": {
+    "source": "footage/broll/MVI_0027.MOV",
+    "start": 6.0,
+    "note": "insert — jar of dry yeast"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 59.225833333333334,
+   "end": 61.227833333333336,
+   "note": "instant yeast right here",
+   "text": "I have instant yeast right here.",
+   "video": {
+    "source": "footage/broll/MVI_0028.MOV",
+    "start": 1.5,
+    "note": "insert — shallow jar, fine granules"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 62.72933333333334,
+   "end": 72.32225,
+   "note": "instant — smaller, wakes faster",
+   "text": "It's a little bit smaller and so it takes a little bit less for the water to get in and get the yeast going and active and ready to be added into a dough.",
+   "video": {
+    "source": "footage/broll/MVI_0028.MOV",
+    "start": 3.4,
+    "duration": 5.0,
+    "note": "insert — shallow jar, continued"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 72.82275,
+   "end": 76.36795833333333,
+   "note": "fresh yeast — fragrant, straight into a dough, short shelf life",
+   "text": "I also have a fresh yeast right here. It's ready to go. It's very fragrant. It can just be added straight into a dough. It does have a shorter shelf life.",
+   "video": {
+    "source": "footage/broll/MVI_0031.MOV",
+    "start": 1.0,
+    "duration": 3.545,
+    "note": "insert — fresh yeast cube in the glass"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 77.16041666666666,
+   "end": 80.37195833333334,
+   "note": "fresh yeast — fragrant, straight into a dough, short shelf life (2)",
+   "video": {
+    "source": "footage/broll/MVI_0031.MOV",
+    "start": 4.545,
+    "duration": 3.212,
+    "note": "insert — fresh yeast cube in the glass"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 81.41466666666666,
+   "end": 90.09,
+   "note": "fresh yeast — fragrant, straight into a dough, short shelf life (3)",
+   "video": {
+    "source": "footage/broll/MVI_0031.MOV",
+    "start": 7.757,
+    "duration": 1.243,
+    "note": "insert — fresh yeast cube in the glass"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 107.85775,
+   "end": 117.45066666666666,
+   "note": "eats through its food and goes dormant — dried yeast lasts",
+   "text": "It's more likely to eat through the food source that it has built in with it when it is sold. And so it doesn't last as long on the shelf as say the active dry and the instant, which the producers of the active dry and instant have dried it out and made the yeast cells dormant and less likely to die off."
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 118.243125,
+   "end": 122.33054166666666,
+   "note": "eats through its food and goes dormant — dried yeast lasts (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 122.78933333333333,
+   "end": 126.6265,
+   "note": "eats through its food and goes dormant — dried yeast lasts (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 127.127,
+   "end": 133.758625,
+   "note": "eats through its food and goes dormant — dried yeast lasts (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 134.134,
+   "end": 140.30683333333334,
+   "note": "mead yeast packet — it's just S. cerevisiae, all the same bug",
+   "text": "i even have this yeast packet right here that is marketed as for mead and when you look at it and it's in ingredients it is just Saccharomyces cerevisiae all of these things that i just showed you are the same all of these are the same little bug the same microbe the same yeast fungi they're all Saccharomyces cerevisiae",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 2.0,
+    "duration": 6.173,
+    "note": "insert — mead yeast packet with the jars"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 141.09929166666666,
+   "end": 144.18570833333334,
+   "note": "mead yeast packet — it's just S. cerevisiae, all the same bug (2)",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 8.173,
+    "duration": 3.086,
+    "note": "insert — mead yeast packet with the jars"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 145.06158333333335,
+   "end": 145.97916666666666,
+   "note": "mead yeast packet — it's just S. cerevisiae, all the same bug (3)",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 11.259,
+    "duration": 0.741,
+    "note": "insert — mead yeast packet with the jars"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 146.47966666666667,
+   "end": 152.81933333333333,
+   "note": "mead yeast packet — it's just S. cerevisiae, all the same bug (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 154.19570833333333,
+   "end": 162.162,
+   "note": "mead yeast packet — it's just S. cerevisiae, all the same bug (5)",
+   "cues": [
+    {
+     "at": 2.483,
+     "text": "GFX: name card returns — Saccharomyces cerevisiae"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 168.45995833333333,
+   "end": 187.47895833333334,
+   "note": "a different way to reach the brewer — same thing in the baking aisle",
+   "text": "it's a different way of trying to get it into the hands of those who are looking for it because when you're a brewer you might be looking for brewers yeast because you know that's what i'm doing that's what i'm looking for but if you went to the store and bought baking yeast it would be the same thing but it might not click that that is what you're looking for."
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 187.60408333333334,
+   "end": 198.94875,
+   "note": "someone with a marketing degree — it's all the same S. cerevisiae",
+   "text": "And so someone with a marketing degree, with a business degree is saying, hey, let me sell to you. I know what you need. It's this. But it's really all just the same Saccharomyces cerevisiae.",
+   "push_to": 1.06
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 31.614916666666666,
+   "end": 35.910875,
+   "note": "why so many names, so many formats?",
+   "text": "Why do we have so many different names for it? Why do we have so many different formats for it?",
+   "chapter": "Access and need",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Access and need",
+     "layer": "build/graphics/yeast001/chapter-05_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 45.29525,
+   "end": 46.671625,
+   "note": "the answer is access and need",
+   "text": "The answer is access and need.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: key term — Access and need"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 46.88016666666667,
+   "end": 79.079,
+   "note": "industrial bakers vs the farm in Kansas",
+   "text": "You have industrial bakers who don't necessarily want to take the time to reactivate something from being dormant that want to just use it and move on and get going with their timelines. and you have the at-home baker in the middle of a farm in Kansas that needs something every once in a while and doesn't want to have to drive two hours back and forth to a grocery store every couple days to get fresh yeast. They need something on hand that they can keep that won't die off on them as frequently.",
+   "cues": [
+    {
+     "at": 12.0,
+     "text": "GFX: the two bakers — bakery / farmhouse an hour from a shop (§6.6)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 79.5795,
+   "end": 80.5805,
+   "note": "industrial bakers vs the farm in Kansas (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 89.75633333333333,
+   "end": 93.92716666666666,
+   "note": "fresh, dry — active dry and instant",
+   "text": "So you have fresh yeast and dry yeast and you have active dry and instant."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 122.78933333333333,
+   "end": 133.09129166666668,
+   "note": "why doesn't the large baker use instant?",
+   "text": "why doesn't the large baker use the instant yeast it doesn't need to be reactivated it doesn't take as long to be reactivated and it's always on hand"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 136.09429166666666,
+   "end": 146.47966666666667,
+   "note": "processing damages the yeast — shows up in elasticity",
+   "text": "But in the processing of the active dry yeast and the instant yeast, the yeast gets a little damaged and it can show up in the elasticity"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 148.06458333333333,
+   "end": 157.40725,
+   "note": "of the gluten — shears it, dries the bread faster",
+   "text": "of the gluten development. It can shear it a little bit and it might help dry, it helps dry out the bread a little bit faster."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 172.38054166666666,
+   "end": 176.09258333333332,
+   "note": "glutathione (the term)",
+   "text": "because of this chemical release called glutathione",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: key term — Glutathione (GSH) — ⚠︎ escalate mechanism"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 183.22470833333333,
+   "end": 187.14529166666668,
+   "note": "gets into the gluten network — shorter texture, sandwich bread",
+   "text": "glutathione will get into the gluten network and have it break a little bit easier and it will help the starch release the water a little faster so you have a more of a shorter texture that you might get more of in a sandwich bread and have it dry out faster",
+   "cues": [
+    {
+     "at": 0.5,
+     "text": "GFX: gluten matrix — long strands, then strands cut short"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 187.60408333333334,
+   "end": 188.35483333333335,
+   "note": "gets into the gluten network — shorter texture, sandwich bread (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 189.02216666666666,
+   "end": 195.195,
+   "note": "gets into the gluten network — shorter texture, sandwich bread (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 195.65379166666668,
+   "end": 196.571375,
+   "note": "gets into the gluten network — shorter texture, sandwich bread (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 197.36383333333333,
+   "end": 202.327125,
+   "note": "gets into the gluten network — shorter texture, sandwich bread (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 208.24970833333333,
+   "end": 209.54266666666666,
+   "note": "fresh yeast is consistent — at home you might not notice",
+   "text": "so having a fresh yeast allows these bakers to have a product that does what they want it to do. It's consistent. It doesn't dry out. And to be honest, an at-home baker might not care. You might not notice. They consume the bread within a couple days because they're only making one loaf at a time.",
+   "cues": [
+    {
+     "at": 1.0,
+     "text": "BROLL: a cut loaf — stretchy crumb vs short crumb (shoot both; Storyblocks sandwich bread if needed)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 210.00145833333335,
+   "end": 216.341125,
+   "note": "fresh yeast is consistent — at home you might not notice (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 217.17529166666668,
+   "end": 217.80091666666667,
+   "note": "fresh yeast is consistent — at home you might not notice (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 218.25970833333332,
+   "end": 225.850625,
+   "note": "fresh yeast is consistent — at home you might not notice (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 248.79020833333334,
+   "end": 252.252,
+   "note": "it's about what's available",
+   "text": "so it's about what's available and what you can use and what you can find"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 254.50425,
+   "end": 266.3494166666667,
+   "note": "not worth driving two hours for a day longer",
+   "text": "and what other things are going on in your life for what matters because it might not be worth driving a couple hours to a grocery store to get something to have a bread that's a little bit stretchier that lasts a day longer."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 276.52625,
+   "end": 283.8252083333333,
+   "note": "how does it reproduce?",
+   "text": "if we have so many of the same little Saccharomyces cerevisiae, how do we reproduce it? What's going on?",
+   "chapter": "Budding",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Budding",
+     "layer": "build/graphics/yeast001/chapter-06_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 328.2445833333333,
+   "end": 334.7927916666667,
+   "note": "mother cell buds a daughter — mitosis, two cells",
+   "text": "So you have a mother cell that grows and buds on itself a daughter cell. And when that daughter cell is big and identical to the mother cell, it uses mitosis and splits into two cells.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: budding cycle — mother, bud, daughter, split (molecular kit, on 2s)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 335.2515833333333,
+   "end": 340.63195833333333,
+   "note": "mother cell buds a daughter — mitosis, two cells (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 373.5398333333333,
+   "end": 379.08704166666666,
+   "note": "grows where there are nutrients — sugars and starches",
+   "scale": 1.08,
+   "text": "yeast will continue to grow and reproduce itself when it's in an environment that has lots of nutrients for it. And those nutrients are sugars and starches. It breaks down starch into sugar."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 379.7126666666667,
+   "end": 385.63525,
+   "note": "grows where there are nutrients — sugars and starches (2)",
+   "scale": 1.08
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 387.47041666666667,
+   "end": 399.94120833333335,
+   "note": "amylases break starch into sugars",
+   "text": "So starch itself will break, flour itself uses an alpha amylase and a beta amylase to break those starches down into sugars that the yeast can digest.",
+   "chapter": "What it eats",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — What it eats",
+     "layer": "build/graphics/yeast001/chapter-07_placeholder.mov"
+    },
+    {
+     "at": 2.0,
+     "text": "GFX: pathway — starch → amylases → sugars (⚠︎ D-review before building)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 409.033625,
+   "end": 417.0833333333333,
+   "note": "sucrose with invertase",
+   "text": "the yeast will start digesting sucrose with invertase and break that down and use that energy for itself"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 444.318875,
+   "end": 445.98720833333334,
+   "note": "simple sugars, zymase → CO₂ and alcohol",
+   "text": "the yeast will use simple sugars and break it down with the enzyme zymase into CO2 and alcohols."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 446.61283333333336,
+   "end": 447.9475,
+   "note": "simple sugars, zymase → CO₂ and alcohol (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 448.53141666666664,
+   "end": 453.327875,
+   "note": "simple sugars, zymase → CO₂ and alcohol (3)",
+   "cues": [
+    {
+     "at": 0.997,
+     "text": "GFX: pathway — zymase → CO₂ + ethanol"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 466.38258333333334,
+   "end": 473.13933333333335,
+   "note": "the byproducts we want — alcohol, or the rise we bake off",
+   "text": "and the CO2 and the alcohol are the byproducts that we're looking for as humans, either in alcohol production or in helping our bread rise with the CO2, giving the gas that we will eventually bake off."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 473.598125,
+   "end": 480.43829166666666,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (2)",
+   "cues": [
+    {
+     "at": 1.243,
+     "text": "BROLL: dough rising / oven spring — Storyblocks if needed"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 492.24175,
+   "end": 504.504,
+   "note": "the right environment — between 50 degrees dormant and 140 killed off",
+   "text": "yeast is looking for a right environment for it to thrive and to grow and that environment has lots of sugars and starches and is in a temperature between 50 degrees where it kind of shuts down and goes dormant and 140 degrees when it's completely killed off",
+   "chapter": "Temperature",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Temperature",
+     "layer": "build/graphics/yeast001/chapter-08_placeholder.mov"
+    },
+    {
+     "at": 9.5,
+     "text": "GFX: temperature gauge — 50 °F dormant · 93–102 °F sweet spot · 140 °F dead (⚠︎ E1)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 505.0879166666667,
+   "end": 513.3044583333333,
+   "note": "the right environment — between 50 degrees dormant and 140 killed off (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 518.1009166666666,
+   "end": 523.1893333333334,
+   "note": "the sweet spot — 93 to 100-and-a-couple — where we proof",
+   "text": "There's a nice sweet spot right in the middle, about 93 degrees Fahrenheit and 100 plus a couple degrees Fahrenheit. And in that sweet temperature spot, it will grow and thrive. And that is the temperature we generally want our bread to be sitting at to kind of reproduce and proof at the rate that we want it."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 523.9400833333333,
+   "end": 540.3314583333333,
+   "note": "the sweet spot — 93 to 100-and-a-couple — where we proof (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 551.0087916666666,
+   "end": 557.80725,
+   "note": "salt, fat, spices get in the way — slows proving",
+   "text": "so when we add salt and fat and other spices to our bread doughs, what we're doing is we're putting items in the way of the yeast and its food and so it's slowing down the process in which the yeast can digest the sugars that it wants for growing and that will then slow our proving time.",
+   "chapter": "Faster and slower",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Faster and slower",
+     "layer": "build/graphics/yeast001/chapter-09_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 558.8499583333333,
+   "end": 569.8609583333333,
+   "note": "salt, fat, spices get in the way — slows proving (2)",
+   "cues": [
+    {
+     "at": 1.202,
+     "text": "BROLL: fat, salt, spice going into a bowl (shoot) — or Storyblocks"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 583.1242083333333,
+   "end": 586.711125,
+   "note": "sugar speeds it up",
+   "text": "the availability of sugar will speed up the proofing time."
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 625.1245,
+   "end": 632.9239583333333,
+   "note": "active dry says add sugar — you don't have to, let it sit longer",
+   "text": "this is why in active dry yeast they recommend that you add a little bit of sugar to kind of start the yeast up and going and getting it bubbling you don't have to actually do that you can just let it sit a little longer"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 633.38275,
+   "end": 638.1375,
+   "note": "active dry says add sugar — you don't have to, let it sit longer (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 648.1892083333333,
+   "end": 663.2459166666666,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling",
+   "text": "yeast itself just really wants flour and water and you can do that sometimes by getting a pre-ferment. This is what I have going right here and it's already starting to bubble up and it's just flour and water and yeast and the yeast is in a happy spot.",
+   "video": {
+    "source": "footage/broll/MVI_0023.MOV",
+    "start": 14.0,
+    "duration": 9.0,
+    "note": "insert — the tall glass of pre-ferment, bubbling"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 674.8825416666666,
+   "end": 678.678,
+   "note": "adding sugar speeds it up, but then — sweeter dough",
+   "text": "Adding sugar does speed it up, but then you end up with a sweeter dough,"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 682.0980833333333,
+   "end": 689.3970416666667,
+   "note": "if that's not what you want, you don't need to add sugar",
+   "text": "and if that is not the final product that you want, you do not actually need to add sugar to your dough to get the yeast to grow.",
+   "push_to": 1.05
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 700.0326666666666,
+   "end": 703.7447083333333,
+   "note": "a pre-ferment is a version of a sourdough — easier to add later",
+   "text": "the other byproduct of starting with maybe a pre-ferment, a pre-ferment is basically a different version of a sourdough. It lets the yeast get going and multiply and kind of creates an environment that's easier to add to your dough later.",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 20.0,
+    "duration": 3.712,
+    "note": "insert — pre-ferment surface, bubbles close"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 704.4954583333333,
+   "end": 715.840125,
+   "note": "a pre-ferment is a version of a sourdough — easier to add later (2)",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 23.712,
+    "duration": 3.288,
+    "note": "insert — pre-ferment surface, bubbles close"
+   }
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 716.0069583333334,
+   "end": 720.0526666666667,
+   "note": "it also, as the yeast breaks down the flour,",
+   "text": "It also, as the yeast breaks down the flour,"
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 722.2632083333333,
+   "end": 727.0179583333334,
+   "note": "creates a more complex flavor",
+   "text": "it creates a more complex flavor that might be what you want in your end product."
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 709.834125,
+   "end": 725.0576666666667,
+   "note": "close — the same little guy, factory cakes to store packets",
+   "text": "Saccharomyces cerevisiae is the same little guy that is being used all over the food industry from the big yeast cakes that you have in the factories to the little packets that we buy at the store for at-home baking.",
+   "chapter": "The same little bug",
+   "push_to": 1.04,
+   "cues": [
+    {
+     "at": 14.0,
+     "text": "GFX: end card — one takeaway, one next action (⚠︎ C6: no next action recorded)"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1936 @@
+{
+ "project": "yeast001s",
+ "music": [
+  {
+   "source": "assets/music/Audiio_AsTallAsPine_ATAP_TwinLakes.wav",
+   "role": "bed",
+   "at": 0.0,
+   "until": 30.0,
+   "fade_in": 1.5,
+   "fade_out": 9.0,
+   "under_db": 16.0,
+   "note": "Twin Lakes under the cold open only"
+  },
+  {
+   "source": "assets/music/Audiio_SK_Commercial_TwoBigReasons30.wav",
+   "role": "outro",
+   "fade_in": 2.0,
+   "fade_out": 2.0,
+   "under_db": 16.0,
+   "note": "Two Big Reasons. Ends on the last frame",
+   "at": 379.754375
+  }
+ ],
+ "grade": {
+  "lut": "assets/luts/yeast001-grade.cube",
+  "face_lift": {
+   "centre": [
+    960,
+    330
+   ],
+   "radius": [
+    430,
+    330
+   ],
+   "amount": 0.7
+  }
+ },
+ "picks": [
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 13.430083333333334,
+   "end": 14.180833333333334,
+   "note": "hook VO — yeast bubbling in action",
+   "text": "This is yeast bubbling in action.",
+   "video": {
+    "source": "footage/broll/Best Yeast Broll.MOV",
+    "start": 4.0,
+    "note": "starter glass, bubbles breaking at the surface",
+    "duration": 0.751
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 14.305958333333333,
+   "end": 14.431083333333333,
+   "note": "hook VO — yeast bubbling in action (2)",
+   "video": {
+    "source": "footage/broll/Best Yeast Broll.MOV",
+    "start": 4.751,
+    "note": "starter glass, bubbles breaking at the surface",
+    "duration": 0.125
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 14.556208333333334,
+   "end": 15.640625,
+   "note": "hook VO — yeast bubbling in action (3)",
+   "video": {
+    "source": "footage/broll/Best Yeast Broll.MOV",
+    "start": 4.876,
+    "note": "starter glass, bubbles breaking at the surface",
+    "duration": 1.084
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 19.5195,
+   "end": 20.27025,
+   "note": "hook VO — way too excited about yeast",
+   "text": "And this is me way too excited about yeast.",
+   "video": {
+    "source": "footage/broll/Katie Dancing.MOV",
+    "start": 56.8,
+    "note": "Katie dancing",
+    "duration": 0.751
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 20.437083333333334,
+   "end": 20.603916666666667,
+   "note": "hook VO — way too excited about yeast (2)",
+   "video": {
+    "source": "footage/broll/Katie Dancing.MOV",
+    "start": 57.551,
+    "note": "Katie dancing",
+    "duration": 0.167
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0043.MOV",
+   "start": 20.854166666666668,
+   "end": 22.439083333333333,
+   "note": "hook VO — way too excited about yeast (3)",
+   "video": {
+    "source": "footage/broll/Katie Dancing.MOV",
+    "start": 57.718,
+    "note": "Katie dancing",
+    "duration": 1.585
+   },
+   "gain_db": -0.6
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 668.793125,
+   "end": 674.0900833333334,
+   "note": "hook claim — you don't need sugar, you need time",
+   "text": "You don't actually need sugar to make your yeast grow. You just need time.",
+   "push_to": 1.05,
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0036.MOV",
+   "start": 35.20183333333333,
+   "end": 38.663625,
+   "note": "name + promise",
+   "text": "Hi, I'm Katie. I'm a food scientist, and this is my deep dive into yeast.",
+   "cues": [
+    {
+     "at": 2.6,
+     "text": "GFX: title card — 'Yeast'",
+     "layer": "build/graphics/yeast001s/title_placeholder.mov"
+    }
+   ],
+   "gain_db": 2.2
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 19.019,
+   "end": 23.27325,
+   "note": "yeast is really old — Egypt, Asia, Europe",
+   "text": "Yeast is really old. We've had it around for at least a few thousand years. We've found it in archaeological records in Egypt. We have found it in archaeological records in parts of Asia and in Europe.",
+   "chapter": "Yeast is old",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Yeast is old",
+     "layer": "build/graphics/yeast001s/chapter-01_placeholder.mov"
+    }
+   ],
+   "gain_db": 4.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 23.606916666666667,
+   "end": 25.608916666666666,
+   "note": "yeast is really old — Egypt, Asia, Europe (2)",
+   "cues": [
+    {
+     "at": 0.746,
+     "text": "GFX: timeline card — Egypt · Asia · Europe (vague on purpose)"
+    }
+   ],
+   "gain_db": 4.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 26.026,
+   "end": 26.151125,
+   "note": "yeast is really old — Egypt, Asia, Europe (3)",
+   "gain_db": 4.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 26.317958333333333,
+   "end": 28.403375,
+   "note": "yeast is really old — Egypt, Asia, Europe (4)",
+   "gain_db": 4.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 28.737041666666666,
+   "end": 32.240541666666665,
+   "note": "yeast is really old — Egypt, Asia, Europe (5)",
+   "gain_db": 4.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 122.997875,
+   "end": 125.54208333333334,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer",
+   "text": "It's being passed between brewers and bakers. It's being collected from the air. It's being collected from outside of grapes and introduced into wine. It's moving around. It's passed from person to person, baker to brewer, brewer to baker. It's in meat. It's in wine. It's in beer. It's in our sourdough starters. It's just all around.",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 125.83404166666666,
+   "end": 127.21041666666666,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (2)",
+   "cues": [
+    {
+     "at": 0.956,
+     "text": "BROLL: wild yeast bloom on dark grapes (macro)"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 127.41895833333334,
+   "end": 127.58579166666667,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (3)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 127.752625,
+   "end": 127.96116666666667,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (4)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 128.253125,
+   "end": 128.37825,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (5)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 128.46166666666667,
+   "end": 130.38025,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (6)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 131.131,
+   "end": 132.6325,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (7)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 132.92445833333332,
+   "end": 134.34254166666668,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (8)",
+   "cues": [
+    {
+     "at": 1.159,
+     "text": "GFX: the exchange — jar passed baker ↔ brewer (§6.4)"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 134.96816666666666,
+   "end": 139.84804166666666,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (9)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 141.05758333333333,
+   "end": 142.55908333333332,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (10)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 142.89275,
+   "end": 143.05958333333334,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (11)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 143.18470833333333,
+   "end": 145.43695833333334,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (12)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 146.146,
+   "end": 146.22941666666668,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (13)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 146.35454166666668,
+   "end": 147.68920833333334,
+   "note": "J9 — passed between brewers and bakers; mead, wine, beer (14)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0037.MOV",
+   "start": 213.00445833333333,
+   "end": 219.67779166666668,
+   "note": "they may not know what they're breeding — dud batch",
+   "text": "They may not know what they're breeding, but they're being selective about it. If it's a dud batch, they're not passing it on to their friend.",
+   "cues": [
+    {
+     "at": 3.0,
+     "text": "GFX: dud batch ✗ pushed out (§6.6)"
+    }
+   ],
+   "gain_db": 4.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 170.50366666666667,
+   "end": 173.21470833333333,
+   "note": "J9 — selective breeding of good yeast, years and years",
+   "text": "And so what we're getting is selective breeding of good yeast, yeast that ferments, that makes the bread bubble, makes the alcohol happen, is being passed around. And that is what we've used for years and years and years.",
+   "cues": [
+    {
+     "at": 1.2,
+     "text": "GFX: key term — Selective breeding (§6.3)"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 173.46495833333333,
+   "end": 173.59008333333333,
+   "note": "J9 — selective breeding of good yeast, years and years (2)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 174.21570833333334,
+   "end": 174.88304166666666,
+   "note": "J9 — selective breeding of good yeast, years and years (3)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 175.46695833333334,
+   "end": 175.96745833333333,
+   "note": "J9 — selective breeding of good yeast, years and years (4)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 176.63479166666667,
+   "end": 177.552375,
+   "note": "J9 — selective breeding of good yeast, years and years (5)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 177.92775,
+   "end": 178.09458333333333,
+   "note": "J9 — selective breeding of good yeast, years and years (6)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 178.21970833333333,
+   "end": 180.26341666666667,
+   "note": "J9 — selective breeding of good yeast, years and years (7)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 180.6805,
+   "end": 181.26441666666668,
+   "note": "J9 — selective breeding of good yeast, years and years (8)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 182.056875,
+   "end": 183.89204166666667,
+   "note": "J9 — selective breeding of good yeast, years and years (9)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 184.14229166666667,
+   "end": 184.309125,
+   "note": "J9 — selective breeding of good yeast, years and years (10)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 184.43425,
+   "end": 186.01916666666668,
+   "note": "J9 — selective breeding of good yeast, years and years (11)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 311.0190416666667,
+   "end": 311.4778333333333,
+   "note": "until Louis Pasteur — what's being passed on",
+   "text": "It wasn't until we meet Louis Pasteur that we have an inkling of what's making one successful batch work and what's being passed on between these bakers and brewers.",
+   "chapter": "Louis Pasteur",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Louis Pasteur",
+     "layer": "build/graphics/yeast001s/chapter-02_placeholder.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 312.6039583333333,
+   "end": 316.98333333333335,
+   "note": "until Louis Pasteur — what's being passed on (2)",
+   "cues": [
+    {
+     "at": 1.741,
+     "text": "GFX: Pasteur portrait (Nadar, public domain) — footage reframes",
+     "picture": "cuts/yeast001/wikipedia/pasteur-portrait.jpg",
+     "seconds": 7.0,
+     "reframe": true,
+     "layer": "build/graphics/yeast001s/picture-pasteur-portrait.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 317.48383333333334,
+   "end": 317.65066666666667,
+   "note": "until Louis Pasteur — what's being passed on (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 317.7757916666667,
+   "end": 318.2762916666667,
+   "note": "until Louis Pasteur — what's being passed on (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 318.86020833333333,
+   "end": 320.9873333333333,
+   "note": "until Louis Pasteur — what's being passed on (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 321.23758333333336,
+   "end": 322.86420833333335,
+   "note": "until Louis Pasteur — what's being passed on (6)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 327.16016666666667,
+   "end": 328.53654166666666,
+   "note": "has a gooseneck experiment — disproves spontaneous generation",
+   "text": "has a gooseneck experiment and disproves spontaneous generation and says there are microbes, little bugs that we can't see all around the world."
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 329.74608333333333,
+   "end": 332.5405416666667,
+   "note": "has a gooseneck experiment — disproves spontaneous generation (2)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 332.8325,
+   "end": 333.4164166666667,
+   "note": "has a gooseneck experiment — disproves spontaneous generation (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 333.6666666666667,
+   "end": 335.75208333333336,
+   "note": "has a gooseneck experiment — disproves spontaneous generation (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 336.1691666666667,
+   "end": 336.336,
+   "note": "has a gooseneck experiment — disproves spontaneous generation (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 336.3777083333333,
+   "end": 337.2535833333333,
+   "note": "has a gooseneck experiment — disproves spontaneous generation (6)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 30.488791666666668,
+   "end": 35.11841666666667,
+   "note": "aside — glass bulb, stretches a neck",
+   "text": "If you don't know about the Louis Pasteur experiment, what he does is he takes a glass bulb and stretches out a neck on it.",
+   "cues": [
+    {
+     "at": 3.0,
+     "text": "GFX: swan-neck flask (Wellcome, CC BY 4.0) — footage reframes; redraw as a cutout",
+     "picture": "cuts/yeast001/wikipedia/pasteur-flask-wellcome.jpg",
+     "seconds": 12.0,
+     "reframe": true,
+     "layer": "build/graphics/yeast001s/picture-pasteur-flask-wellcome.mov"
+    }
+   ],
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 35.618916666666664,
+   "end": 36.161125,
+   "note": "aside — glass bulb, stretches a neck (2)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 36.61991666666667,
+   "end": 36.745041666666665,
+   "note": "aside — glass bulb, stretches a neck (3)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 36.911875,
+   "end": 39.080708333333334,
+   "note": "aside — glass bulb, stretches a neck (4)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 41.12441666666667,
+   "end": 41.5415,
+   "note": "open here, gooseneck shape — heats it to kill what's inside",
+   "text": "that is open over here, but it has a gooseneck shape. And he heats it up to kill off any bacteria that's on the inside with some food that he has cooked, that he has put inside of this gooseneck bottle.",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 41.79175,
+   "end": 41.95858333333333,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (2)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 42.00029166666667,
+   "end": 44.21083333333333,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (3)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 44.627916666666664,
+   "end": 44.79475,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (4)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 44.878166666666665,
+   "end": 48.506791666666665,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (5)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 48.88216666666667,
+   "end": 49.924875,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (6)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 50.30025,
+   "end": 52.677625,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (7)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 52.96958333333333,
+   "end": 53.13641666666667,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (8)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 53.261541666666666,
+   "end": 53.76204166666667,
+   "note": "open here, gooseneck shape — heats it to kill what's inside (9)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 104.729625,
+   "end": 106.14770833333333,
+   "note": "if spontaneous generation were true, the food breaks down",
+   "text": "And so if there's any truth to spontaneous generation, the food will just break down. There will be no problem with it doing what food has always done.",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 106.52308333333333,
+   "end": 107.31554166666666,
+   "note": "if spontaneous generation were true, the food breaks down (2)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 108.19141666666667,
+   "end": 111.06929166666667,
+   "note": "if spontaneous generation were true, the food breaks down (3)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 111.236125,
+   "end": 111.40295833333333,
+   "note": "if spontaneous generation were true, the food breaks down (4)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 111.56979166666666,
+   "end": 114.44766666666666,
+   "note": "if spontaneous generation were true, the food breaks down (5)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 115.15670833333333,
+   "end": 116.241125,
+   "note": "germ theory — germs get stuck in the downspout",
+   "text": "But if the food breaks down because of germ, germ theory, what he was thinking of is germs can't get in through the gooseneck bottle. It falls down. It gets stuck in the downspout right here.",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 116.53308333333334,
+   "end": 119.91145833333333,
+   "note": "germ theory — germs get stuck in the downspout (2)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 120.16170833333334,
+   "end": 120.28683333333333,
+   "note": "germ theory — germs get stuck in the downspout (3)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 121.70491666666666,
+   "end": 122.95616666666666,
+   "note": "germ theory — germs get stuck in the downspout (4)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 123.498375,
+   "end": 123.66520833333334,
+   "note": "germ theory — germs get stuck in the downspout (5)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 123.70691666666667,
+   "end": 127.04358333333333,
+   "note": "germ theory — germs get stuck in the downspout (6)",
+   "cues": [
+    {
+     "at": 2.994,
+     "text": "GFX: flask — dust settling in the bend (rust mark)"
+    }
+   ],
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 129.37925,
+   "end": 129.54608333333334,
+   "note": "germ theory — germs get stuck in the downspout (7)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 129.67120833333334,
+   "end": 130.58879166666668,
+   "note": "germ theory — germs get stuck in the downspout (8)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 134.84304166666666,
+   "end": 139.764625,
+   "note": "nothing happens to the food — and that's what happens",
+   "text": "so nothing will happen to the food. It won't break down. It won't do anything. And that's what happens.",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 146.81333333333333,
+   "end": 150.40025,
+   "note": "Pasteur proves there is no spontaneous generation",
+   "text": "And so Louis Pasteur proves that there is no spontaneous generation, that there is something in the air, bacteria, yeast, living organisms that are getting into our food and making changes.",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0041.MOV",
+   "start": 151.40125,
+   "end": 159.70120833333334,
+   "note": "Pasteur proves there is no spontaneous generation (2)",
+   "gain_db": -0.1
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 414.6225416666667,
+   "end": 417.417,
+   "note": "we meet Saccharomyces cerevisiae",
+   "text": "meet our Saccharomyces cerevisiae. And this is the most common form of yeast that we use today. There are other yeasts that are used in sourdoughs, but for the most part, when you get to industrial bakers and you get to at-home bakers and you get to brewers, they're all using the same little bug, Saccharomyces cerevisiae.",
+   "chapter": "One bug",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — One bug",
+     "layer": "build/graphics/yeast001s/chapter-03_placeholder.mov"
+    },
+    {
+     "at": 1.0,
+     "text": "GFX: name card — Saccharomyces cerevisiae (the recurring card)"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 417.66725,
+   "end": 422.17175,
+   "note": "we meet Saccharomyces cerevisiae (2)",
+   "cues": [
+    {
+     "at": 3.206,
+     "text": "GFX: S. cerevisiae micrograph (CC BY 3.0) — footage reframes",
+     "picture": "cuts/yeast001/wikipedia/yeast-sem.jpg",
+     "seconds": 8.0,
+     "reframe": true,
+     "layer": "build/graphics/yeast001s/picture-yeast-sem.mov"
+    }
+   ]
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 422.422,
+   "end": 423.17275,
+   "note": "we meet Saccharomyces cerevisiae (3)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 423.9235,
+   "end": 426.551125,
+   "note": "we meet Saccharomyces cerevisiae (4)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 427.00991666666664,
+   "end": 430.805375,
+   "note": "we meet Saccharomyces cerevisiae (5)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 431.76466666666664,
+   "end": 432.7239583333333,
+   "note": "we meet Saccharomyces cerevisiae (6)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 432.84908333333334,
+   "end": 432.9742083333333,
+   "note": "we meet Saccharomyces cerevisiae (7)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 433.18275,
+   "end": 436.1440416666667,
+   "note": "we meet Saccharomyces cerevisiae (8)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 436.7696666666667,
+   "end": 438.98020833333334,
+   "note": "we meet Saccharomyces cerevisiae (9)"
+  },
+  {
+   "source": "footage/a-cam/MVI_0038.MOV",
+   "start": 439.2721666666667,
+   "end": 440.77366666666666,
+   "note": "we meet Saccharomyces cerevisiae (10)"
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 279.82120833333335,
+   "end": 280.655375,
+   "note": "J9 — 90% of all the yeast we use is this one bug",
+   "text": "It is like 90% of all the yeast that we use is this one bug.",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 280.73879166666666,
+   "end": 280.905625,
+   "note": "J9 — 90% of all the yeast we use is this one bug (2)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 281.23929166666665,
+   "end": 283.49154166666665,
+   "note": "J9 — 90% of all the yeast we use is this one bug (3)",
+   "cues": [
+    {
+     "at": 0.299,
+     "text": "GFX: stat — 90 % (⚠︎ needs a source, §6.8)"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 283.658375,
+   "end": 283.8252083333333,
+   "note": "J9 — 90% of all the yeast we use is this one bug (4)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 283.908625,
+   "end": 285.49354166666666,
+   "note": "J9 — 90% of all the yeast we use is this one bug (5)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 358.10775,
+   "end": 359.69266666666664,
+   "note": "J9 — everywhere, same guy, again and again",
+   "text": "all over we use it everywhere from our home bakeries to the brewers down the road to the vineyards in California and France, everywhere, Saccharomyces cerevisiae, same guy, again and again and again.",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 3.0,
+    "duration": 1.585,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 360.06804166666666,
+   "end": 361.90320833333334,
+   "note": "J9 — everywhere, same guy, again and again (2)",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 4.585,
+    "duration": 1.835,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 362.4037083333333,
+   "end": 362.57054166666666,
+   "note": "J9 — everywhere, same guy, again and again (3)",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 6.42,
+    "duration": 0.167,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 362.6956666666667,
+   "end": 363.32129166666664,
+   "note": "J9 — everywhere, same guy, again and again (4)",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 6.587,
+    "duration": 0.626,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 363.8217916666667,
+   "end": 363.94691666666665,
+   "note": "J9 — everywhere, same guy, again and again (5)",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 7.213,
+    "duration": 0.125,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 364.0303333333333,
+   "end": 364.78108333333336,
+   "note": "J9 — everywhere, same guy, again and again (6)",
+   "video": {
+    "source": "footage/broll/MVI_0026.MOV",
+    "start": 7.338,
+    "duration": 0.662,
+    "note": "insert — the jars of dry yeast, wide"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 366.40770833333335,
+   "end": 367.28358333333335,
+   "note": "J9 — everywhere, same guy, again and again (7)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 367.53383333333335,
+   "end": 367.7006666666667,
+   "note": "J9 — everywhere, same guy, again and again (8)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 367.95091666666667,
+   "end": 369.744375,
+   "note": "J9 — everywhere, same guy, again and again (9)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 370.2031666666667,
+   "end": 372.2051666666667,
+   "note": "J9 — everywhere, same guy, again and again (10)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 372.53883333333334,
+   "end": 373.8317916666667,
+   "note": "J9 — everywhere, same guy, again and again (11)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 251.45954166666667,
+   "end": 251.876625,
+   "note": "J9 — mead yeast: S. cerevisiae",
+   "text": "I have marketing for yeast for mead. It's Saccharomyces cerevisiae.",
+   "chapter": "What's on the shelf",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 2.0,
+    "note": "insert — mead packet",
+    "duration": 0.417
+   },
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — What's on the shelf",
+     "layer": "build/graphics/yeast001s/chapter-04_placeholder.mov"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 252.46054166666667,
+   "end": 253.50325,
+   "note": "J9 — mead yeast: S. cerevisiae (2)",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 2.417,
+    "note": "insert — mead packet",
+    "duration": 1.043
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 253.96204166666666,
+   "end": 256.50625,
+   "note": "J9 — mead yeast: S. cerevisiae (3)",
+   "video": {
+    "source": "footage/broll/MVI_0029.MOV",
+    "start": 3.46,
+    "note": "insert — mead packet",
+    "duration": 2.544
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 256.50625,
+   "end": 259.46754166666665,
+   "note": "J9 — instant dry: S. cerevisiae",
+   "text": "I have instant dry yeast. It's Saccharomyces cerevisiae.",
+   "video": {
+    "source": "footage/broll/MVI_0028.MOV",
+    "start": 1.5,
+    "note": "insert — fine granules"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 259.46754166666665,
+   "end": 259.71779166666664,
+   "note": "J9 — active dry with sugar — guess what",
+   "text": "I have active dry yeast with a little sugar in it. Guess what? Saccharomyces cerevisiae.",
+   "video": {
+    "source": "footage/broll/MVI_0027.MOV",
+    "start": 6.0,
+    "note": "insert — jar of dry yeast",
+    "duration": 0.25
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 260.00975,
+   "end": 260.1765833333333,
+   "note": "J9 — active dry with sugar — guess what (2)",
+   "video": {
+    "source": "footage/broll/MVI_0027.MOV",
+    "start": 6.25,
+    "note": "insert — jar of dry yeast",
+    "duration": 0.167
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 260.2182916666667,
+   "end": 263.93033333333335,
+   "note": "J9 — active dry with sugar — guess what (3)",
+   "video": {
+    "source": "footage/broll/MVI_0027.MOV",
+    "start": 6.417,
+    "note": "insert — jar of dry yeast",
+    "duration": 3.712
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 264.0554583333333,
+   "end": 265.890625,
+   "note": "J9 — fresh yeast: S. cerevisiae",
+   "text": "Fresh yeast. Saccharomyces cerevisiae.",
+   "video": {
+    "source": "footage/broll/MVI_0031.MOV",
+    "start": 1.0,
+    "note": "insert — fresh cube"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 265.93233333333336,
+   "end": 266.43283333333335,
+   "note": "J9 — even a pre-ferment is S. cerevisiae, flour and water",
+   "text": "I even have what could be the start of a sourdough starter. Here, it's a pre-ferment. It is yeast, Saccharomyces cerevisiae mixed with flour and water.",
+   "video": {
+    "source": "footage/broll/MVI_0023.MOV",
+    "start": 14.0,
+    "duration": 0.5,
+    "note": "insert — the tall glass, bubbling"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 266.68308333333334,
+   "end": 270.1865833333333,
+   "note": "J9 — even a pre-ferment is S. cerevisiae, flour and water (2)",
+   "video": {
+    "source": "footage/broll/MVI_0023.MOV",
+    "start": 14.5,
+    "duration": 3.503,
+    "note": "insert — the tall glass, bubbling"
+   },
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 270.97904166666666,
+   "end": 274.81620833333335,
+   "note": "J9 — even a pre-ferment is S. cerevisiae, flour and water (3)",
+   "video": {
+    "source": "footage/broll/MVI_0023.MOV",
+    "start": 18.004,
+    "duration": 0.996,
+    "note": "insert — the tall glass, bubbling"
+   },
+   "cues": [
+    {
+     "at": 1.496,
+     "text": "GFX: name card returns — Saccharomyces cerevisiae"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0045.MOV",
+   "start": 187.60408333333334,
+   "end": 198.94875,
+   "note": "someone with a marketing degree — it's all the same",
+   "text": "And so someone with a marketing degree, with a business degree is saying, hey, let me sell to you. I know what you need. It's this. But it's really all just the same Saccharomyces cerevisiae.",
+   "push_to": 1.06,
+   "gain_db": 2.3
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 31.614916666666666,
+   "end": 35.910875,
+   "note": "why so many names, so many formats?",
+   "text": "Why do we have so many different names for it? Why do we have so many different formats for it?",
+   "chapter": "Access and need",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Access and need",
+     "layer": "build/graphics/yeast001s/chapter-05_placeholder.mov"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 45.29525,
+   "end": 46.671625,
+   "note": "the answer is access and need",
+   "text": "The answer is access and need.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "GFX: key term — Access and need"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 59.434375,
+   "end": 63.188125,
+   "note": "the farm in Kansas — needs something that won't die off",
+   "text": "you have the at-home baker in the middle of a farm in Kansas that needs something every once in a while and doesn't want to have to drive two hours back and forth to a grocery store every couple days to get fresh yeast. They need something on hand that they can keep that won't die off on them as frequently.",
+   "cues": [
+    {
+     "at": 1.0,
+     "text": "GFX: the two bakers — bakery / farmhouse an hour from a shop (§6.6)"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 63.438375,
+   "end": 63.5635,
+   "note": "the farm in Kansas — needs something that won't die off (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 63.730333333333334,
+   "end": 64.31425,
+   "note": "the farm in Kansas — needs something that won't die off (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 64.89816666666667,
+   "end": 71.52979166666667,
+   "note": "the farm in Kansas — needs something that won't die off (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 71.78004166666666,
+   "end": 76.78504166666667,
+   "note": "the farm in Kansas — needs something that won't die off (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 77.077,
+   "end": 78.078,
+   "note": "the farm in Kansas — needs something that won't die off (6)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 78.32825,
+   "end": 78.49508333333333,
+   "note": "the farm in Kansas — needs something that won't die off (7)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 78.5785,
+   "end": 78.91216666666666,
+   "note": "the farm in Kansas — needs something that won't die off (8)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 79.74633333333334,
+   "end": 80.5805,
+   "note": "the farm in Kansas — needs something that won't die off (9)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 89.75633333333333,
+   "end": 90.25683333333333,
+   "note": "fresh, dry — active dry and instant",
+   "text": "So you have fresh yeast and dry yeast and you have active dry and instant.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 90.50708333333333,
+   "end": 92.00858333333333,
+   "note": "fresh, dry — active dry and instant (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 92.30054166666666,
+   "end": 93.92716666666666,
+   "note": "fresh, dry — active dry and instant (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 136.09429166666666,
+   "end": 141.39125,
+   "note": "in the processing, the yeast gets a little damaged",
+   "text": "But in the processing of the active dry yeast and the instant yeast, the yeast gets a little damaged",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 153.94545833333333,
+   "end": 154.07058333333333,
+   "note": "it helps dry out the bread a little faster",
+   "text": "it helps dry out the bread a little bit faster.",
+   "cues": [
+    {
+     "at": 0.0,
+     "text": "BROLL: a cut loaf — stretchy crumb vs short crumb"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 154.44595833333332,
+   "end": 157.40725,
+   "note": "it helps dry out the bread a little faster (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 217.342125,
+   "end": 217.592375,
+   "note": "an at-home baker might not care — one loaf at a time",
+   "text": "And to be honest, an at-home baker might not care. You might not notice. They consume the bread within a couple days because they're only making one loaf at a time.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 218.30141666666665,
+   "end": 221.221,
+   "note": "an at-home baker might not care — one loaf at a time (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 221.42954166666667,
+   "end": 221.55466666666666,
+   "note": "an at-home baker might not care — one loaf at a time (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 221.80491666666666,
+   "end": 225.850625,
+   "note": "an at-home baker might not care — one loaf at a time (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 257.882625,
+   "end": 259.92633333333333,
+   "note": "not worth driving two hours for a day longer",
+   "text": "because it might not be worth driving a couple hours to a grocery store to get something to have a bread that's a little bit stretchier that lasts a day longer.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 260.26,
+   "end": 262.01175,
+   "note": "not worth driving two hours for a day longer (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 262.42883333333333,
+   "end": 266.3494166666667,
+   "note": "not worth driving two hours for a day longer (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 328.2445833333333,
+   "end": 329.704375,
+   "note": "mother cell buds a daughter — mitosis, two cells",
+   "text": "So you have a mother cell that grows and buds on itself a daughter cell. And when that daughter cell is big and identical to the mother cell, it uses mitosis and splits into two cells.",
+   "chapter": "Budding",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Budding",
+     "layer": "build/graphics/yeast001s/chapter-06_placeholder.mov"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 330.07975,
+   "end": 334.709375,
+   "note": "mother cell buds a daughter — mitosis, two cells (2)",
+   "cues": [
+    {
+     "at": 0.04,
+     "text": "GFX: budding cycle — mother, bud, daughter, split (on 2s)"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 335.460125,
+   "end": 337.462125,
+   "note": "mother cell buds a daughter — mitosis, two cells (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 337.7540833333333,
+   "end": 337.92091666666664,
+   "note": "mother cell buds a daughter — mitosis, two cells (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 338.0043333333333,
+   "end": 340.63195833333333,
+   "note": "mother cell buds a daughter — mitosis, two cells (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 373.5398333333333,
+   "end": 379.04533333333336,
+   "note": "grows where there are nutrients — sugars and starches",
+   "text": "yeast will continue to grow and reproduce itself when it's in an environment that has lots of nutrients for it. And those nutrients are sugars and starches. It breaks down starch into sugar.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 379.754375,
+   "end": 380.08804166666664,
+   "note": "grows where there are nutrients — sugars and starches (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 380.5468333333333,
+   "end": 380.67195833333335,
+   "note": "grows where there are nutrients — sugars and starches (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 380.71366666666665,
+   "end": 381.7146666666667,
+   "note": "grows where there are nutrients — sugars and starches (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 381.9232083333333,
+   "end": 385.63525,
+   "note": "grows where there are nutrients — sugars and starches (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 444.318875,
+   "end": 445.9037916666667,
+   "note": "simple sugars, zymase → CO₂ and alcohol",
+   "text": "the yeast will use simple sugars and break it down with the enzyme zymase into CO2 and alcohols.",
+   "chapter": "What it eats",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — What it eats",
+     "layer": "build/graphics/yeast001s/chapter-07_placeholder.mov"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 446.65454166666666,
+   "end": 447.9057916666667,
+   "note": "simple sugars, zymase → CO₂ and alcohol (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 448.573125,
+   "end": 451.7429583333333,
+   "note": "simple sugars, zymase → CO₂ and alcohol (3)",
+   "cues": [
+    {
+     "at": 0.664,
+     "text": "GFX: pathway — sugar → zymase → CO₂ + ethanol (⚠︎ E2)"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 452.076625,
+   "end": 452.2434583333333,
+   "note": "simple sugars, zymase → CO₂ and alcohol (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 452.36858333333333,
+   "end": 453.327875,
+   "note": "simple sugars, zymase → CO₂ and alcohol (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 466.38258333333334,
+   "end": 470.47,
+   "note": "the byproducts we want — alcohol, or the rise we bake off",
+   "text": "and the CO2 and the alcohol are the byproducts that we're looking for as humans, either in alcohol production or in helping our bread rise with the CO2, giving the gas that we will eventually bake off.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 470.8036666666667,
+   "end": 472.93079166666666,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 473.848375,
+   "end": 474.30716666666666,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 475.099625,
+   "end": 475.22475,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 475.3081666666667,
+   "end": 476.100625,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 476.55941666666666,
+   "end": 480.43829166666666,
+   "note": "the byproducts we want — alcohol, or the rise we bake off (6)",
+   "cues": [
+    {
+     "at": 0.409,
+     "text": "BROLL: dough rising / oven spring"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 713.3793333333333,
+   "end": 716.5491666666667,
+   "note": "J9 — that's where you get your bubbly wines, like champagne",
+   "text": "And you also have your CO2. That's where you get your bubbly wines like your champagne.",
+   "cues": [
+    {
+     "at": 2.0,
+     "text": "BROLL: champagne — Storyblocks"
+    }
+   ],
+   "gain_db": -2.4
+  },
+  {
+   "source": "Intro 001/MVI_0019.MOV",
+   "start": 716.8828333333333,
+   "end": 718.843125,
+   "note": "J9 — that's where you get your bubbly wines, like champagne (2)",
+   "gain_db": -2.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 492.24175,
+   "end": 493.78495833333335,
+   "note": "the right environment — a temperature between…",
+   "text": "yeast is looking for a right environment for it to thrive and to grow and that environment has lots of sugars and starches and is in a temperature between 50",
+   "chapter": "Temperature",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Temperature",
+     "layer": "build/graphics/yeast001s/chapter-08_placeholder.mov"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 494.45229166666667,
+   "end": 496.78795833333334,
+   "note": "the right environment — a temperature between… (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 497.03820833333333,
+   "end": 498.24775,
+   "note": "the right environment — a temperature between… (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 498.4145833333333,
+   "end": 498.58141666666666,
+   "note": "the right environment — a temperature between… (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 498.7065416666667,
+   "end": 504.42058333333335,
+   "note": "the right environment — a temperature between… (5)",
+   "cues": [
+    {
+     "at": 3.245,
+     "text": "GFX: gauge — 50 °F · 93–102 °F · 140 °F (⚠︎ E1)"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 505.129625,
+   "end": 512.3451666666666,
+   "note": "…50 degrees dormant and 140 killed off",
+   "text": "degrees where it kind of shuts down and goes dormant and 140 degrees when it's completely killed off",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 512.7205416666667,
+   "end": 512.8456666666667,
+   "note": "…50 degrees dormant and 140 killed off (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 513.0542083333333,
+   "end": 513.3044583333333,
+   "note": "…50 degrees dormant and 140 killed off (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 518.1009166666666,
+   "end": 523.1059166666666,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive",
+   "text": "There's a nice sweet spot right in the middle, about 93 degrees Fahrenheit and 100 plus a couple degrees Fahrenheit. And in that sweet temperature spot, it will grow and thrive.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 523.9817916666667,
+   "end": 524.398875,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 524.649125,
+   "end": 526.4425833333333,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 526.8596666666666,
+   "end": 527.0265,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (4)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 527.0682083333334,
+   "end": 528.5697083333333,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (5)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 528.77825,
+   "end": 528.9450833333333,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (6)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 529.0285,
+   "end": 529.403875,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (7)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 529.77925,
+   "end": 530.905375,
+   "note": "the sweet spot — 93 to 100-and-a-couple — grow and thrive (8)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 551.0087916666666,
+   "end": 557.6404166666666,
+   "note": "salt, fat, spices get in the way — slows proving",
+   "text": "so when we add salt and fat and other spices to our bread doughs, what we're doing is we're putting items in the way of the yeast and its food and so it's slowing down the process in which the yeast can digest the sugars that it wants for growing and that will then slow our proving time.",
+   "chapter": "Faster and slower",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — Faster and slower",
+     "layer": "build/graphics/yeast001s/chapter-09_placeholder.mov"
+    },
+    {
+     "at": 6.0,
+     "text": "BROLL: fat, salt, spice into a bowl"
+    }
+   ],
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 558.8916666666667,
+   "end": 558.9750833333334,
+   "note": "salt, fat, spices get in the way — slows proving (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 559.1002083333333,
+   "end": 569.8609583333333,
+   "note": "salt, fat, spices get in the way — slows proving (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 583.1242083333333,
+   "end": 584.5005833333333,
+   "note": "sugar speeds it up",
+   "text": "the availability of sugar will speed up the proofing time.",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 584.8759583333333,
+   "end": 585.0010833333333,
+   "note": "sugar speeds it up (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 585.0845,
+   "end": 586.711125,
+   "note": "sugar speeds it up (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 625.1245,
+   "end": 632.757125,
+   "note": "active dry says add sugar — you don't have to, let it sit",
+   "text": "this is why in active dry yeast they recommend that you add a little bit of sugar to kind of start the yeast up and going and getting it bubbling you don't have to actually do that you can just let it sit a little longer",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 633.4244583333333,
+   "end": 633.507875,
+   "note": "active dry says add sugar — you don't have to, let it sit (2)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 633.5495833333333,
+   "end": 638.1375,
+   "note": "active dry says add sugar — you don't have to, let it sit (3)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 648.1892083333333,
+   "end": 651.025375,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling",
+   "text": "yeast itself just really wants flour and water and you can do that sometimes by getting a pre-ferment. This is what I have going right here and it's already starting to bubble up and it's just flour and water and yeast and the yeast is in a happy spot.",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 20.0,
+    "duration": 2.836,
+    "note": "insert — pre-ferment surface, bubbles close"
+   },
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 651.1087916666667,
+   "end": 651.275625,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (2)",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 22.836,
+    "duration": 0.167,
+    "note": "insert — pre-ferment surface, bubbles close"
+   },
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 651.4841666666666,
+   "end": 651.776125,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (3)",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 23.003,
+    "duration": 0.292,
+    "note": "insert — pre-ferment surface, bubbles close"
+   },
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 652.2349166666667,
+   "end": 655.780125,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (4)",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 23.295,
+    "duration": 3.545,
+    "note": "insert — pre-ferment surface, bubbles close"
+   },
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 656.1137916666667,
+   "end": 656.280625,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (5)",
+   "video": {
+    "source": "footage/broll/MVI_0025.MOV",
+    "start": 26.84,
+    "duration": 0.16,
+    "note": "insert — pre-ferment surface, bubbles close"
+   },
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 656.3223333333333,
+   "end": 656.5725833333333,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (6)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 656.8228333333333,
+   "end": 656.9479583333333,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (7)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 657.031375,
+   "end": 657.7404166666666,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (8)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 657.9906666666667,
+   "end": 658.1157916666667,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (9)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 658.3243333333334,
+   "end": 663.2459166666666,
+   "note": "yeast just wants flour and water — the pre-ferment, bubbling (10)",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 674.8825416666666,
+   "end": 678.678,
+   "note": "adding sugar speeds it up, but — sweeter dough",
+   "text": "Adding sugar does speed it up, but then you end up with a sweeter dough,",
+   "gain_db": 3.4
+  },
+  {
+   "source": "footage/a-cam/MVI_0040.MOV",
+   "start": 682.0980833333333,
+   "end": 689.3970416666667,
+   "note": "if that's not what you want, you don't need sugar",
+   "text": "and if that is not the final product that you want, you do not actually need to add sugar to your dough to get the yeast to grow.",
+   "push_to": 1.05,
+   "gain_db": 3.4
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 415.87379166666665,
+   "end": 417.62554166666666,
+   "note": "J9 — use what's available, it's all the same",
+   "text": "Use what's available. It's all the same.",
+   "chapter": "The same little bug",
+   "cues": [
+    {
+     "at": 0.3,
+     "text": "GFX: chapter card — The same little bug",
+     "layer": "build/graphics/yeast001s/chapter-10_placeholder.mov"
+    }
+   ],
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 486.4025833333333,
+   "end": 487.487,
+   "note": "J9 — not a hard and fast rule; the same little bug again and again",
+   "text": "It can be played with. Yeast is not something that has to be a hard and fast rule. It feels like a mystery, but really all it is is the same little Saccharomyces cerevisiae bug again and again and again and again.",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 487.8206666666667,
+   "end": 487.94579166666665,
+   "note": "J9 — not a hard and fast rule; the same little bug again and again (2)",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 488.0292083333333,
+   "end": 499.123625,
+   "note": "J9 — not a hard and fast rule; the same little bug again and again (3)",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 500.79195833333335,
+   "end": 504.8376666666667,
+   "note": "J9 — all the little bug wants is to eat sugars and fart (⚠︎ channel voice)",
+   "text": "All the little bug wants is to go and eat sugars and fart.",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 505.33816666666667,
+   "end": 505.505,
+   "note": "J9 — all the little bug wants is to eat sugars and fart (⚠︎ channel voice) (2)",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 506.0055,
+   "end": 507.131625,
+   "note": "J9 — all the little bug wants is to eat sugars and fart (⚠︎ channel voice) (3)",
+   "gain_db": -0.3
+  },
+  {
+   "source": "Intro 001/MVI_0021.MOV",
+   "start": 514.889375,
+   "end": 520.8119583333333,
+   "note": "J9 — produce CO₂ and ethanol; a happy life; not that complicated",
+   "text": "produce carbon dioxide and ethanol. It just wants to live a happy life and it's not all that complicated.",
+   "push_to": 1.04,
+   "cues": [
+    {
+     "at": 5.0,
+     "text": "GFX: end card — one next action (⚠︎ D1: none recorded)"
+    }
+   ],
+   "gain_db": -0.3
+  }
+ ]
+}
