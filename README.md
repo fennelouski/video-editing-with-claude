@@ -10,6 +10,9 @@ The governing documents are:
 - **`style_guide.md`** — the correction log. Every time a render gets sent back, it's logged
   here, and the pipeline reads it before generating anything. Same mistake, never twice.
 
+The native macOS app is in **`Clauto Editor/`**. See its [requirements and verification checklist](Clauto%20Editor/docs/IMPLEMENTATION.md)
+for the current implementation, remaining milestones and local build entrypoint.
+
 ## Two rules that shape everything
 
 **1. The pipeline never generates footage or imagery.**

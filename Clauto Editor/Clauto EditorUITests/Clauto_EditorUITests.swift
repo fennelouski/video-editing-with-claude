@@ -1,43 +1,37 @@
-//
-//  Clauto_EditorUITests.swift
-//  Clauto EditorUITests
-//
-//  Created by Nathan on 10/13/26.
-//
-
 import XCTest
 
 final class Clauto_EditorUITests: XCTestCase {
-
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
+    @MainActor
+    func testCreateProjectPersistsBriefWithoutAccounts() async throws {
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-ui-\(UUID())")
+        let suite = "clauto-ui-\(UUID())"
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let app = XCUIApplication()
-        app.launch()
-
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
-    }
-
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+        app.launchEnvironment["CLAUTO_PROJECTS_ROOT"] = root.path
+        app.launchEnvironment["CLAUTO_DEFAULTS_SUITE"] = suite
+        defer {
+            app.terminate()
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
         }
+        app.launch()
+        XCTAssertTrue(app.buttons["New Project"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["New Project"].firstMatch.click()
+        let name = app.textFields["projectName"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.click(); name.typeText("Synthetic pizza")
+        app.buttons["createProject"].click()
+        let about = app.textViews["briefAbout"]
+        XCTAssertTrue(about.waitForExistence(timeout: 5))
+        about.click(); about.typeText("Synthetic footage only.")
+        let saved = NSPredicate { _, _ in
+            guard let project = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).first,
+                  let text = try? String(contentsOf: project.appendingPathComponent("brief.md"), encoding: .utf8) else { return false }
+            return text.contains("Synthetic footage only.")
+        }
+        let expectation = expectation(for: saved, evaluatedWith: nil)
+        await fulfillment(of: [expectation], timeout: 5)
+        XCTAssertFalse(app.buttons["Send"].isEnabled)
     }
 }
