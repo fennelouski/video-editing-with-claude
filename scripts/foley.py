@@ -109,7 +109,7 @@ def hits_for_plan(plan: dict, library: "Library", tmap=None,
         if category not in library.categories:
             problems.append(
                 f"{cue['id']}: no {category!r} sounds in "
-                f"{C.FOLEY.relative_to(C.ROOT)}/ — recorded categories are "
+                f"{C.path_label(C.FOLEY)}/ — recorded categories are "
                 f"{', '.join(sorted(library.categories)) or 'none'}"
             )
             continue
@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         "hits": [{"cue": h.cue_id, "at": h.at, "category": h.category,
                   "sound": str(h.sound)} for h in hits],
     }, indent=2))
-    print(f"\n  {len(hits)} hit(s) → {out.relative_to(C.ROOT)}")
+    print(f"\n  {len(hits)} hit(s) → {C.path_label(out)}")
     return 0 if not problems else 1
 
 

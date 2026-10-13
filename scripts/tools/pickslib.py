@@ -24,7 +24,7 @@ from pathlib import Path
 import config as C
 
 ROOT = C.ROOT
-AUDIO = ROOT / "build/transcripts/_audio"
+AUDIO = C.TRANSCRIPTS / "_audio"
 
 PAD_IN, PAD_OUT = 0.08, 0.12
 MIN_GAP = C.BREATH_FLOOR_MS / 1000
@@ -36,7 +36,7 @@ SILENCE_DB = -35
 def words_of(clip: str) -> list[dict]:
     """`clip` may carry a folder ("Intro 001/MVI_0019"); the transcript is named by the stem."""
     stem = Path(clip).name
-    return json.loads((ROOT / "build/transcripts" / f"{stem}.words.json").read_text())["words"]
+    return json.loads((C.TRANSCRIPTS / f"{stem}.words.json").read_text())["words"]
 
 
 def silences(clip: str, s: float, e: float, min_len: float, db: int = SILENCE_DB
@@ -225,5 +225,5 @@ def write(out: Path, project: str, picks: list[dict], music: list[dict], **extra
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"project": project, "music": music, **extra, "picks": picks},
                               indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"  ✓ {out.relative_to(ROOT)}  {len(picks)} picks, {int(total // 60)}:{int(total % 60):02d}")
+    print(f"  ✓ {C.path_label(out)}  {len(picks)} picks, {int(total // 60)}:{int(total % 60):02d}")
     return total

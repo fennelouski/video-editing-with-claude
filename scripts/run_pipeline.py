@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
+from contextlib import redirect_stdout
 import shutil
 import sys
 import time
@@ -87,18 +89,18 @@ def preflight(verbose: bool = True) -> list[str]:
 
     # Case-folded, because all three Canon bodies write `.MOV` and a lower-case glob matched
     # none of them: preflight reported an empty footage/ while sitting on a gigabyte of it.
-    if not any(p.suffix.lower() in (".mp4", ".mov") for p in C.FOOTAGE.rglob("*")):
+    if not any(p.suffix.lower() in (".mp4", ".mov", ".mkv", ".m4v", ".avi") for p in C.FOOTAGE.rglob("*")):
         problems.append(f"no footage in {C.FOOTAGE}  →  drop a clip in {C.FOOTAGE / "a-cam"}, or run ./run setup.py to point at your footage")
 
     grain = list(C.TEXTURES.glob("paper-grain*"))
     if not grain:
         problems.append(
-            f"no paper-grain texture in {C.TEXTURES.relative_to(C.ROOT)}/  →  "
+            f"no paper-grain texture in {C.path_label(C.TEXTURES)}/  →  "
             "flat-scan a blank sheet; §4.3 forbids generated noise")
 
     fonts = list(C.FONTS.glob("*.woff2")) + list(C.FONTS.glob("*.ttf")) + list(C.FONTS.glob("*.otf"))
     if not fonts:
-        problems.append(f"no fonts in {C.FONTS.relative_to(C.ROOT)}/  →  add her marker font + Work Sans")
+        problems.append(f"no fonts in {C.path_label(C.FONTS)}/  →  add her marker font + Work Sans")
 
     if verbose:
         print("Preflight")
@@ -114,12 +116,12 @@ def run_stage(stage: Stage, extra: list[str], dry_run: bool) -> int:
     print("─" * 70)
     print(f"STAGE {stage.number} — {stage.title}")
     print("─" * 70)
-    mod = importlib.import_module(stage.module)
     argv = list(extra)
     if dry_run:
         argv.append("--dry-run")
     started = time.time()
     try:
+        mod = importlib.import_module(stage.module)
         code = mod.main(argv)
     except SystemExit as exc:
         code = int(exc.code or 0)
@@ -176,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip", type=int, nargs="*", default=[], help="skip these stages")
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
     ap.add_argument("--project", default="video001", help="project name, used for filenames")
-    ap.add_argument("--model", default="large-v3", help="whisper model")
+    ap.add_argument("--model", default=C.WHISPER_MODEL, help="whisper model")
     ap.add_argument("--preview", action="store_true",
                     help="stage 2: also render a flattened preview mp4")
     ap.add_argument("--aggressive", action="store_true", help="stage 2: also cut isolated fillers")
@@ -184,13 +186,50 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-captions", action="store_true")
     ap.add_argument("--force", action="store_true", help="redo work that already exists")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--json", action="store_true", help="machine-readable preflight (requires --dry-run)")
+    ap.add_argument("--progress", choices=("json",), help="emit stage events on stdout; details go to stderr")
     ap.add_argument("--skip-preflight", action="store_true")
     args = ap.parse_args(argv)
 
+    if args.json and not args.dry_run:
+        ap.error("--json requires --dry-run")
+    if args.json:
+        problems = preflight(verbose=False)
+        print(json.dumps({"schema_version": 1, "engine_version": C.ENGINE_VERSION,
+                          "ready": not problems, "problems": problems,
+                          "paths": {key: str(getattr(C, attr)) for key, attr in
+                                    (("footage", "FOOTAGE"), ("assets", "ASSETS"), ("build", "BUILD"),
+                                     ("cuts", "CUTS"), ("script", "SCRIPT_DIR"), ("templates", "TEMPLATES"))},
+                          "whisper_model": C.WHISPER_MODEL}))
+        return 1 if problems else 0
+    if args.progress:
+        with redirect_stdout(sys.stderr):
+            problems = [] if args.skip_preflight else preflight()
+        if problems and not args.dry_run:
+            print(json.dumps({"stage": 0, "state": "fail", "detail": "Resolve the setup check before running."}), flush=True)
+            return 1
+        selected = [s for s in STAGES if (s.number == args.only if args.only else
+                    args.start <= s.number <= args.stop and s.number not in args.skip)]
+        if not selected:
+            ap.error("no stages selected")
+        if not args.dry_run:
+            for d in C.ALL_BUILD_DIRS:
+                d.mkdir(parents=True, exist_ok=True)
+        for stage in selected:
+            print(json.dumps({"stage": stage.number, "state": "start", "detail": stage.title}), flush=True)
+            with redirect_stdout(sys.stderr):
+                code = run_stage(stage, stage_args(stage, args), args.dry_run)
+            print(json.dumps({"stage": stage.number, "state": "done" if not code else "fail",
+                              "detail": stage.gate_message if code else stage.title}), flush=True)
+            if code and stage.blocking:
+                return code
+        return 0
+
     print(BANNER)
 
-    for d in C.ALL_BUILD_DIRS:
-        d.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        for d in C.ALL_BUILD_DIRS:
+            d.mkdir(parents=True, exist_ok=True)
 
     problems: list[str] = []
     if not args.skip_preflight:
@@ -234,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         fcpxml = sorted(C.EXPORTS.glob("*.fcpxml"))
         if fcpxml:
             print("\n  OVER TO FINAL CUT")
-            print(f"    1. File ▸ Import ▸ XML…   {fcpxml[-1].relative_to(C.ROOT)}")
+            print(f"    1. File ▸ Import ▸ XML…   {C.path_label(fcpxml[-1])}")
             print("    2. Import the .itt as captions on the timeline")
             print("    3. Grade, place b-roll at the markers, refine")
             print("    4. Export into build/exports/, then:  "
@@ -248,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     if problems:
         print(f"\n({len(problems)} preflight item(s) still outstanding)")
 
-    return 0
+    return 1 if args.dry_run and (problems or any(results.values())) else 0
 
 
 if __name__ == "__main__":

@@ -94,7 +94,7 @@ def resolve_ref(ref: str) -> Resolution:
     directory, exts = KIND_DIRS[kind]
     res = Resolution(ref, kind, key, "missing")
     if not directory.is_dir():
-        res.notes.append(f"{directory.relative_to(C.ROOT)}/ does not exist")
+        res.notes.append(f"{C.path_label(directory)}/ does not exist")
         return res
 
     # Variants share a stem prefix: yeast_cell-budding_v01_a.png, ..._b.png
@@ -105,7 +105,7 @@ def resolve_ref(ref: str) -> Resolution:
     if not hits:
         return res
 
-    res.files = [str(p.relative_to(C.ROOT)) for p in hits]
+    res.files = [str(C.path_label(p)) for p in hits]
     res.variants = len(hits)
     res.status = "ok"
 
@@ -196,7 +196,7 @@ def write_build_sheet(project: str, results: list[Resolution], path: Path) -> Pa
                 for n in r.notes:
                     lines.append(f"      - {n}")
             lines.append("")
-            lines.append(f"  Save to: `{KIND_DIRS[kind][0].relative_to(C.ROOT)}/"
+            lines.append(f"  Save to: `{C.path_label(KIND_DIRS[kind][0])}/"
                          f"<key>_v01_a.png` (then `_b`, `_c`, …)")
             lines.append("")
 
@@ -300,12 +300,12 @@ def main(argv: list[str] | None = None) -> int:
     ))
     sheet = write_build_sheet(project, results, C.PLAN_DIR / f"{project}.build-sheet.md")
 
-    print(f"\n  → {out_json.relative_to(C.ROOT)}")
-    print(f"  → {sheet.relative_to(C.ROOT)}")
+    print(f"\n  → {C.path_label(out_json)}")
+    print(f"  → {C.path_label(sheet)}")
 
     if missing:
         print(f"\n! {len(missing)} asset(s) missing. The pipeline does not generate them.")
-        print(f"  Work through {sheet.relative_to(C.ROOT)}, then re-run Stage 4.")
+        print(f"  Work through {C.path_label(sheet)}, then re-run Stage 4.")
         return 0 if args.allow_missing else 3
 
     print("\nStage 4 complete — all assets resolved")

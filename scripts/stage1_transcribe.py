@@ -56,7 +56,7 @@ def extract_audio(src: Path, dst: Path) -> Path:
 
 def transcribe(
     audio: Path,
-    model: str = "large-v3",
+    model: str = C.WHISPER_MODEL,
     language: str = "en",
     device: str = "auto",
     diarize: bool = False,
@@ -161,14 +161,21 @@ def process_clip(
     force: bool,
 ) -> Path | None:
     out_path = C.TRANSCRIPTS / f"{clip.stem}.words.json"
+    if out_path.exists():
+        prior = json.loads(out_path.read_text()).get("source")
+        prior_path = Path(prior) if prior else None
+        if prior_path is None or (C.ROOT / prior_path).resolve() != clip.resolve():
+            raise RuntimeError(
+                f"{out_path} belongs to another source with the same filename; "
+                "use a separate build folder for each card/project"
+            )
     if out_path.exists() and not force:
         print(f"  = {clip.name} already transcribed (--force to redo)")
         return out_path
 
     print(f"→ {clip.name}")
     work_wav = C.TRANSCRIPTS / "_audio" / f"{clip.stem}.16k.wav"
-    if clip.suffix.lower() in VIDEO_EXTS or not work_wav.exists():
-        extract_audio(clip, work_wav)
+    extract_audio(clip, work_wav)
 
     result = transcribe(work_wav, model=model, language=language, device=device, diarize=diarize)
     words = flatten_words(result)
@@ -179,7 +186,7 @@ def process_clip(
 
     payload = {
         "clip": clip.name,
-        "source": str(clip.relative_to(C.ROOT)) if clip.is_relative_to(C.ROOT) else str(clip),
+        "source": C.path_label(clip),
         "language": result.get("language", language),
         "model": model,
         "fps": C.FPS,
@@ -189,7 +196,7 @@ def process_clip(
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2))
-    print(f"  ✓ {len(words)} words → {out_path.relative_to(C.ROOT)}")
+    print(f"  ✓ {len(words)} words → {C.path_label(out_path)}")
     return out_path
 
 
@@ -211,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     cli.preflight(('whisperx',))
     ap = argparse.ArgumentParser(description="Stage 1 — WhisperX word-level transcription")
     ap.add_argument("clips", nargs="*", help="specific files; default = scan footage/")
-    ap.add_argument("--model", default="large-v3")
+    ap.add_argument("--model", default=C.WHISPER_MODEL)
+    ap.add_argument("--download-model", choices=("small", "medium", "large-v3"), help="prefetch speech and English alignment models without reading footage")
     ap.add_argument("--language", default="en")
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     ap.add_argument("--diarize", action="store_true", help="label speakers (needs HF token)")
@@ -223,10 +231,17 @@ def main(argv: list[str] | None = None) -> int:
         print("! ffmpeg not found on PATH", file=sys.stderr)
         return 2
 
+    if args.download_model:
+        import whisperx
+        whisperx.load_model(args.download_model, "cpu", compute_type="int8", language=args.language)
+        whisperx.load_align_model(language_code=args.language, device="cpu")
+        print(f"Speech and alignment models ready: {args.download_model}")
+        return 0
+
     clips = find_clips([cli.resolve_or_exit(p, expect=(".mov", ".mp4", ".m4v", ".avi", ".mts", ".mxf"), label='clip')
                         for p in args.clips])
     if not clips:
-        print(f"! no footage found under {C.FOOTAGE.relative_to(C.ROOT)}/")
+        print(f"! no footage found under {C.path_label(C.FOOTAGE)}/")
         print("  drop a clip into footage/a-cam/ and run again")
         return 1
 

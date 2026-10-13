@@ -478,7 +478,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"left unfilled — too short to be worth another repeat")
     fx, problems = to_fcpxml(project, picks, C.ROUGHCUT / f"{project}.roughcut.fcpxml",
                              music=beds)
-    print(f"  ✓ {fx.relative_to(C.ROOT)}")
+    print(f"  ✓ {C.path_label(fx)}")
     for p in problems[:5]:
         print(f"    ! {p}")
 
@@ -488,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
         lines, heard_problems = listen_back(picks, C.ROUGHCUT)
         heard = C.ROUGHCUT / f"{project}.heard.txt"
         heard.write_text("\n".join(x["text"] for x in lines) + "\n", encoding="utf-8")
-        print(f"  what it actually says ({heard.relative_to(C.ROOT)}):")
+        print(f"  what it actually says ({C.path_label(heard)}):")
         for line in lines:
             print(f"    {line['text']}")
         if heard_problems:
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         out = render_preview(picks, C.ROUGHCUT / f"{project}.preview.mp4", cues,
                              grade=spec.get("grade"))
         m = S2.measure(out)
-        print(f"  ✓ {out.relative_to(C.ROOT)} (preview only) — "
+        print(f"  ✓ {C.path_label(out)} (preview only) — "
               f"{m['lufs']:+.1f} LUFS, peak {m['peak']:+.1f} dBFS")
         print("    her voice is unprocessed here: the §8 dialogue chain belongs to the finish. "
               "The bed is placed against that raw voice, so it will need re-measuring once the "

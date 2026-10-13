@@ -42,3 +42,9 @@ paths.json
 xcuserdata/
 *.xcuserstate
 DerivedData/
+dist/
+.artifacts/
+storage.json
+canon-ingest.json
+.build/
+.swiftpm/

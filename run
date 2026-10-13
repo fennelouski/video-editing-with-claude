@@ -25,8 +25,21 @@ if [ ! -x "$python" ]; then
     exit 1
 fi
 
+# Per-machine NAS guard runs before setup or any stage makes output folders.
+if [ -f "$here/storage.json" ]; then
+    case "${1:-}" in
+        -m|canon_ingest.py|scripts/canon_ingest.py) ;;
+        *) "$python" "$here/scripts/check_storage.py"
+           export HF_HOME="/Volumes/Videos/Food Videos/Katie YouTube/Models/huggingface"
+           export TORCH_HOME="/Volumes/Videos/Food Videos/Katie YouTube/Models/torch"
+           export HF_HUB_DISABLE_TELEMETRY=1
+           export PYANNOTE_METRICS_ENABLED=0
+           ;;
+    esac
+fi
+
 # First run: ask where footage, assets, build output and cuts live (writes paths.json).
-if [ ! -f "$here/paths.json" ] && [ -t 0 ] && [ "${1:-}" != "setup.py" ]; then
+if [ -z "${CLAUTO_PATHS:-}" ] && [ ! -f "$here/paths.json" ] && [ -t 0 ] && [ "${1:-}" != "setup.py" ]; then
     "$python" "$here/scripts/setup.py"
 fi
 

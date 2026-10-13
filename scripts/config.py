@@ -8,6 +8,7 @@ Changing a value here changes it for every stage. Never hard-code these in a sta
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 # --------------------------------------------------------------------------------------
@@ -20,15 +21,24 @@ ROOT = Path(__file__).resolve().parent.parent
 #   1. paths.json at the repo root (written by `./run setup.py`; see SETUP.md)
 #   2. a folder of that name in a parent directory (the repo sits inside the video folder)
 #   3. inside the repo
-_PATH_KEYS = ("footage", "assets", "build", "cuts")
+_PATH_KEYS = ("footage", "assets", "build", "cuts", "script", "templates")
+PATHS_FILE = Path(os.environ.get("CLAUTO_PATHS", str(ROOT / "paths.json"))).expanduser().resolve()
+if "CLAUTO_PATHS" in os.environ and not PATHS_FILE.is_file():
+    raise ValueError(f"project paths file unavailable: {PATHS_FILE}; reopen the project drive")
+_PATH_SETTINGS = json.loads(PATHS_FILE.read_text()) if PATHS_FILE.is_file() else {}
+if "CLAUTO_PATHS" in os.environ:
+    missing = [key for key in ("footage", "assets", "build", "cuts") if not _PATH_SETTINGS.get(key)]
+    if missing:
+        raise ValueError(f"project paths missing {', '.join(missing)}; reopen setup for this project")
+ENGINE_VERSION = (ROOT / "ENGINE_VERSION").read_text().strip()
+WHISPER_MODEL = os.environ.get("CLAUTO_WHISPER_MODEL", _PATH_SETTINGS.get("whisper_model", "large-v3"))
 
 
 def _find_path(key: str) -> Path:
-    cfg = ROOT / "paths.json"
-    if cfg.is_file():
-        chosen = json.loads(cfg.read_text()).get(key)
-        if chosen:
-            return Path(chosen).expanduser()
+    chosen = _PATH_SETTINGS.get(key)
+    if chosen:
+        path = Path(chosen).expanduser()
+        return path if path.is_absolute() else PATHS_FILE.parent / path
     for parent in list(ROOT.parents)[:3]:
         if (parent / key).is_dir():
             return parent / key
@@ -47,8 +57,8 @@ FOLEY = ASSETS / "foley"
 MUSIC = ASSETS / "music"
 LUTS = ASSETS / "luts"
 
-SCRIPT_DIR = ROOT / "script"
-TEMPLATES = ROOT / "templates"
+SCRIPT_DIR = _find_path("script") if _PATH_SETTINGS.get("script") else (CUTS / "script" if CUTS != ROOT / "cuts" else ROOT / "script")
+TEMPLATES = _find_path("templates")
 
 TRANSCRIPTS = BUILD / "transcripts"
 ROUGHCUT = BUILD / "roughcut"
@@ -62,6 +72,15 @@ TASTE_PRINCIPLES = ROOT / "taste_principles.md"
 STYLE_GUIDE = ROOT / "style_guide.md"
 
 ALL_BUILD_DIRS = [TRANSCRIPTS, ROUGHCUT, PLAN_DIR, FRAMES, GRAPHICS, REVIEW, EXPORTS]
+
+
+def path_label(path: Path) -> str:
+    """Keep repo paths readable and external media references usable as absolute paths."""
+    path = Path(path).expanduser()
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 # --------------------------------------------------------------------------------------

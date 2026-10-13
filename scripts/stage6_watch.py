@@ -498,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
     if len(report.fails) > 12:
         print(f"    … and {len(report.fails) - 12} more")
 
-    print(f"\n  → {md.relative_to(C.ROOT)}")
+    print(f"\n  → {C.path_label(md)}")
     if not args.no_log:
         n = append_to_style_guide(report)
         if n:

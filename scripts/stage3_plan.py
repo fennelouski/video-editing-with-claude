@@ -461,7 +461,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         indent=2,
     ))
-    print(f"\nStage 3 complete → {out.relative_to(C.ROOT)}")
+    print(f"\nStage 3 complete → {C.path_label(out)}")
     return 0
 
 

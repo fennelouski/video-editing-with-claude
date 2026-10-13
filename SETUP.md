@@ -23,3 +23,11 @@ Answers are saved to `paths.json` (per-machine, gitignored), so each computer ca
 **For Claude:** read `paths.json` (or `scripts/config.py`, which resolves it) before looking for any video, audio or asset file. Never copy footage into the repo.
 
 Check it: `./run run_pipeline.py --dry-run` prints the folders it found.
+
+Native app integration is additive: set `CLAUTO_PATHS` to a project's `paths.json`.
+Relative entries resolve beside that manifest. `script` and `templates` are optional
+folder keys; `whisper_model` or `CLAUTO_WHISPER_MODEL` selects the speech model.
+`./run setup.py --footage PATH --assets PATH --build PATH --cuts PATH --paths FILE`
+configures folders without prompts. `./run run_pipeline.py --dry-run --json` reports
+readiness without creating output folders or running stages; `--progress json`
+emits stage events on stdout and human details on stderr.

@@ -1055,7 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
         lines = cut_script(words, edl)
         script = C.ROUGHCUT / f"{stem}.script.txt"
         script.write_text("\n".join(x["text"] for x in lines) + "\n", encoding="utf-8")
-        print(f"\n  reads as ({len(lines)} lines, {script.relative_to(C.ROOT)}):")
+        print(f"\n  reads as ({len(lines)} lines, {C.path_label(script)}):")
         for x in lines:
             print(f"    {x['text']}")
         # Provisional: this reads the *input* transcript, so it inherits that transcript's
@@ -1103,7 +1103,7 @@ def main(argv: list[str] | None = None) -> int:
                 verify_path = C.ROUGHCUT / f"{stem}.heard.txt"
                 verify_path.write_text("\n".join(x["text"] for x in heard) + "\n",
                                        encoding="utf-8")
-                print(f"  what it actually says ({verify_path.relative_to(C.ROOT)}):")
+                print(f"  what it actually says ({C.path_label(verify_path)}):")
                 for line in heard:
                     print(f"    {line['text']}")
                 if heard_problems:
@@ -1125,7 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             fx, joins = to_fcpxml(src, edl, C.ROUGHCUT / f"{stem}.roughcut.fcpxml", args.project)
-            print(f"  ✓ {fx.relative_to(C.ROOT)}  ({len(edl.keeps)} clips, {joins} joins marked)")
+            print(f"  ✓ {C.path_label(fx)}  ({len(edl.keeps)} clips, {joins} joins marked)")
             print("    File ▸ Import ▸ XML… in Final Cut")
         except Exception as exc:  # noqa: BLE001
             print(f"  ! FCPXML failed: {exc}", file=sys.stderr)
@@ -1135,7 +1135,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 _, lufs, peak = render_preview(src, edl, out, music=args.music,
                                                loudness=args.loudness)
-                print(f"  ✓ {out.relative_to(C.ROOT)} (preview only)")
+                print(f"  ✓ {C.path_label(out)} (preview only)")
                 if abs(lufs - args.loudness) > C.LUFS_TOLERANCE:
                     print(f"  ! preview is {lufs:.1f} LUFS, wanted {args.loudness:.1f} "
                           f"±{C.LUFS_TOLERANCE:.1f}")

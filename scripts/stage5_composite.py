@@ -165,7 +165,7 @@ def load_texture(name: str, size: tuple[int, int]) -> "Image.Image":
     hits = find_variants(f"texture:{name}")
     if not hits:
         raise FileNotFoundError(
-            f"texture '{name}' not found in {C.TEXTURES.relative_to(C.ROOT)}/ — "
+            f"texture '{name}' not found in {C.path_label(C.TEXTURES)}/ — "
             f"taste_principles §4.3 forbids substituting a flat fill or generated noise"
         )
     return Image.open(hits[0]).convert("RGB").resize(size, Image.LANCZOS)
@@ -353,7 +353,7 @@ def render_cue(cue: dict, aspect: str, out_dir: Path, clock: SC.StepClock,
 
         composite.save(seq_dir / f"{frame:05d}.png")
 
-    print(f"    ✓ {cue['id']}: {total + 1} frames ({len(cached)} unique steps) → {seq_dir.relative_to(C.ROOT)}")
+    print(f"    ✓ {cue['id']}: {total + 1} frames ({len(cached)} unique steps) → {C.path_label(seq_dir)}")
     return seq_dir
 
 
@@ -641,7 +641,7 @@ def main(argv: list[str] | None = None) -> int:
                 C.EXPORTS / f"{project}.captions.itt",
                 tmap=FX.TimelineMap(edl_data["keeps"]),
             )
-            print(f"  captions → {itt.relative_to(C.ROOT)}  "
+            print(f"  captions → {C.path_label(itt)}  "
                   f"({dropped} word(s) dropped with the cut footage)")
 
     out = C.EXPORTS / f"{project}.fcpxml"
@@ -651,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"! {exc}", file=sys.stderr)
         return 1
 
-    print(f"\nStage 5 complete → {out.relative_to(C.ROOT)}")
+    print(f"\nStage 5 complete → {C.path_label(out)}")
     print("  In Final Cut: File ▸ Import ▸ XML…")
     print("  Then import the .itt as captions, and grade with assets/luts/.")
     return 0

@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         for i, p in enumerate(x for x in spec["picks"] if x.get("chapter"))]
     for key, text, size in jobs:
         out = render(text, size, out_dir / f"{key}_placeholder.mov", clock)
-        print(f"  ✓ {out.relative_to(C.ROOT)}  “{text}”  {size}px")
+        print(f"  ✓ {C.path_label(out)}  “{text}”  {size}px")
     # Photographs named by a cue (`"picture": "path.jpg"`) — real images, placed on the clock.
     # Not placeholders: nothing about them is waiting on a scan. Their hold is the cue's own
     # `seconds`, since a picture's hold is set by the line it illustrates, not by a word count.
@@ -161,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
             out = render(src.stem, h1, out_dir / f"picture-{src.stem}.mov", clock,
                          picture=src, hold_seconds=float(cue.get("seconds", 6.0)),
                          mat=bool(cue.get("reframe")))
-            print(f"  ✓ {out.relative_to(C.ROOT)}  ({src.name}"
+            print(f"  ✓ {C.path_label(out)}  ({src.name}"
                   f"{', mat' if cue.get('reframe') else ''})")
     print("  every one of these is a flat fill under the type — a stand-in for the scanned "
           "surface §6.1 asks for, not the card. Replace when paper-grain.png exists.")

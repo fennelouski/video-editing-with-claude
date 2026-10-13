@@ -41,7 +41,8 @@ def test_an_insert_may_cover_only_the_head_of_a_pick(tmp_path, video):
     assert int(num) / int(den) == pytest.approx(C.snap_seconds(1.5), abs=1e-6)
 
 
-def test_static_punch_in_needs_ten_seconds_either_side(tmp_path, video):
+def test_static_punch_in_needs_ten_seconds_either_side(tmp_path, video, monkeypatch):
+    monkeypatch.setattr(C, "ROUGHCUT", tmp_path / "roughcut")
     # Frame-snapped picks; the middle one is punched in and the last one is too short.
     short = [{"start": 0.0, "end": 3.0, "note": "a", "scale": 1.08},
              {"start": 3.0, "end": 5.0, "note": "b"}]
