@@ -54,6 +54,22 @@ def test_unavailable_nas_never_creates_a_local_fallback(setup, monkeypatch):
     assert not Path(cfg["destination"]).exists()
 
 
+def test_failed_source_open_closes_partial_destination_descriptor(setup,monkeypatch):
+    card,cfg=setup;source=card/'missing.MOV';captured=[];real_open=I.os.open
+    def tracked_open(path,*args,**kwargs):
+        descriptor=real_open(path,*args,**kwargs)
+        if str(path).startswith('.partial-'):captured.append(descriptor)
+        return descriptor
+    monkeypatch.setattr(I.os,'open',tracked_open)
+    target=I.Target(cfg)
+    try:
+        with pytest.raises(FileNotFoundError):
+            I.copy_verified(source,target,Path('Originals/missing.MOV'),{'size':1,'mtime_ns':0,'sha256':'0'*64})
+    finally:target.close()
+    assert captured
+    with pytest.raises(OSError):os.fstat(captured[-1])
+
+
 def test_wrong_share_or_local_mount_rejected(setup, monkeypatch):
     card, cfg = setup
     for source, kind in [("//wrong/Videos", "smbfs"), (cfg["mount_source"], "apfs")]:

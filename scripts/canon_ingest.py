@@ -7,7 +7,7 @@ descriptors, so an absent/replaced /Volumes mount cannot become a local fallback
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import ctypes
 import errno
 from dataclasses import dataclass
@@ -90,9 +90,10 @@ def digest(stream) -> str:
     return h.hexdigest()
 
 
-def fingerprint(path: Path) -> tuple[int, int, str]:
-    fd = os.open(path, os.O_RDONLY | NOFOLLOW)
+def fingerprint(path: Path, source_descriptor: int | None = None) -> tuple[int, int, str]:
+    fd = os.dup(source_descriptor) if source_descriptor is not None else os.open(path, os.O_RDONLY | NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
+        stream.seek(0)
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode):
             raise IngestError(f"Not a regular camera file: {path}")
@@ -287,7 +288,7 @@ def publish(directory: int, temporary: str, name: str):
 
 
 def copy_verified(source: Path, target: Target, relative: Path, item: dict,
-                  after_chunk=None) -> str:
+                  after_chunk=None, source_descriptor: int | None = None) -> str:
     with target.directory(relative.parent) as directory:
         expected = (item["size"], item["sha256"])
         current = existing_hash(directory, relative.name)
@@ -303,7 +304,11 @@ def copy_verified(source: Path, target: Target, relative: Path, item: dict,
                 raise IngestError(f"Filename collision/corrupt destination: {relative}; preserved both sources")
         temporary = ".partial-" + item["sha256"] + "-" + relative.name
         fd = os.open(temporary, os.O_RDWR | os.O_CREAT | NOFOLLOW, 0o600, dir_fd=directory)
-        with os.fdopen(fd, "r+b") as dest, os.fdopen(os.open(source, os.O_RDONLY | NOFOLLOW), "rb") as src:
+        with ExitStack() as stack:
+            dest = stack.enter_context(os.fdopen(fd, "r+b"))
+            source_fd = os.dup(source_descriptor) if source_descriptor is not None else os.open(source, os.O_RDONLY | NOFOLLOW)
+            src = stack.enter_context(os.fdopen(source_fd, "rb"))
+            src.seek(0)
             before = os.fstat(src.fileno())
             if (before.st_size, before.st_mtime_ns) != (item["size"], item["mtime_ns"]):
                 raise IngestError(f"Source changed before copying: {source}")
