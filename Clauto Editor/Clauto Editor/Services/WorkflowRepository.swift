@@ -41,7 +41,9 @@ struct CutVersion: Codable, Identifiable, Sendable {
     var artifacts: [String]
     var approvedPlanHash: String
     var sourceSchemaChecked: Bool? = nil
+    var savedSchemaChecked: Bool? = nil
     var briefHash: String? = nil
+    var approvedScript: String? = nil
     var folderName: String { String(format: "v%03d", number) }
     func briefChanged(_ project: Project) -> Bool {
         guard let briefHash else { return false }
@@ -295,13 +297,14 @@ actor WorkflowRepository {
         let folder = try safe(String(format: "cuts/v%03d", number), in: project.folder)
         try fm.createDirectory(at: folder, withIntermediateDirectories: false)
         var artifacts: [String] = []
+        var savedSchemaChecked = true
         do {
             for section in ["exports", "roughcut", "plan", "inputs"] {
                 let source = try safe(section, in: run.folder)
                 guard fm.fileExists(atPath: source.path) else { continue }
                 for case let file as URL in fm.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey])! {
                     guard (try file.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true,
-                          ["fcpxml", "itt", "mp4", "pdf", "txt", "md", "docx", "json"].contains(file.pathExtension) else { continue }
+                          ["fcpxml", "itt", "mp4", "pdf", "txt", "md", "docx", "json"].contains(file.pathExtension.lowercased()) else { continue }
                     let resolvedFile = file.resolvingSymlinksInPath()
                     let resolvedRun = run.folder.resolvingSymlinksInPath()
                     guard resolvedFile.path.hasPrefix(resolvedRun.path + "/") else { continue }
@@ -326,13 +329,15 @@ actor WorkflowRepository {
                                 src.stringValue = copied.absoluteString
                             } else { src.stringValue = resolved.absoluteString }
                         }
-                        let saved = xml.xmlData
+                        let (saved, checkedSchema) = try serializedTimeline(xml)
+                        savedSchemaChecked = savedSchemaChecked && checkedSchema
                         try saved.write(to: target, options: .atomic)
                         let record = relative.replacingOccurrences(of: ".fcpxml", with: ".snapshot.json")
                         let hashes: [String: Any] = [
                             "source_sha256": SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined(),
                             "saved_sha256": SHA256.hash(data: saved).map { String(format: "%02x", $0) }.joined(),
                             "transformation": "Made local media references permanent; source validation is retained separately.",
+                            "saved_schema": checkedSchema ? "Passed the installed Final Cut DTD" : "Unavailable",
                         ]
                         try JSONSerialization.data(withJSONObject: hashes, options: [.prettyPrinted, .sortedKeys]).write(to: safe(record, in: folder), options: .atomic)
                         artifacts.append(record)
@@ -342,16 +347,115 @@ actor WorkflowRepository {
             }
             guard artifacts.contains(where: { $0.hasSuffix(".heard.txt") }) else { throw WorkflowFailure.invalid("Read-back is missing. This cut remains unverified and the previous version stays current.") }
             let briefHash = SHA256.hash(data: try Data(contentsOf: safe("inputs/brief.md", in: run.folder))).map { String(format: "%02x", $0) }.joined()
-            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, briefHash: briefHash)
+            let planObject = try JSONSerialization.jsonObject(with: Data(try plan(run).text.utf8)) as? [String: Any]
+            guard let script = planObject?["script"] as? String, script == URL(fileURLWithPath: script).lastPathComponent,
+                  artifacts.contains("inputs/script/" + script) else { throw WorkflowFailure.invalid("The approved script is missing from the run snapshot.") }
+            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script)
             try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"), options: .atomic)
             try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
             return version
         } catch { try? fm.removeItem(at: folder); throw error }
     }
 
+    private func serializedTimeline(_ xml: XMLDocument) throws -> (Data, Bool) {
+        // Foundation infers standalone=yes and retains broken lexical DOCTYPE state
+        // with nodePreserveAll. Rebuild the declaration before writing permanent URLs.
+        xml.isStandalone = false
+        let declaration = XMLDTD(); declaration.name = "fcpxml"; xml.dtd = declaration
+        let saved = xml.xmlData
+        let parsed = try XMLDocument(data: saved, options: .nodeLoadExternalEntitiesNever)
+        guard parsed.rootElement()?.name == "fcpxml",
+              let version = parsed.rootElement()?.attribute(forName: "version")?.stringValue,
+              version.range(of: "^[0-9]+\\.[0-9]+$", options: .regularExpression) != nil else { throw ProjectFailure.invalidProject }
+        let schema = URL(fileURLWithPath: "/Applications/Final Cut Pro.app/Contents/Frameworks/Interchange.framework/Versions/A/Resources/FCPXMLv" + version.replacingOccurrences(of: ".", with: "_") + ".dtd")
+        guard fm.fileExists(atPath: schema.path) else { return (saved, false) }
+        let dtd = try XMLDTD(data: Data(contentsOf: schema), options: .nodeLoadExternalEntitiesNever)
+        dtd.name = "fcpxml"; parsed.dtd = dtd
+        do { try parsed.validate() }
+        catch { throw WorkflowFailure.invalid("The saved timeline failed Final Cut's schema check. The previous cut is still current. " + error.localizedDescription) }
+        return (saved, true)
+    }
+
     func messages(project: Project) throws -> [LocalMessage] {
         let file = try safe("notes/conversation.json", in: project.folder)
         return fm.fileExists(atPath: file.path) ? try decoder.decode([LocalMessage].self, from: Data(contentsOf: file)) : []
+    }
+
+    func handoffReport(_ requested: CutVersion, project: Project) throws -> HandoffReport {
+        guard let version = try versions(project: project).first(where: { $0.id == requested.id }) else { throw ProjectFailure.invalidProject }
+        let root = try safe("cuts/" + version.folderName, in: project.folder)
+        func text(_ suffix: String) throws -> String? {
+            guard let file = version.artifacts.first(where: { $0.hasSuffix(suffix) }) else { return nil }
+            return try String(contentsOf: safe(file, in: root), encoding: .utf8)
+        }
+        var sections: [HandoffReport.Section] = []
+        let script: String
+        if let recorded = version.approvedScript { script = recorded }
+        else {
+            guard let plan = try text(".plan.json"), let object = try JSONSerialization.jsonObject(with: Data(plan.utf8)) as? [String: Any],
+                  let name = object["script"] as? String, name == URL(fileURLWithPath: name).lastPathComponent else { throw ProjectFailure.invalidProject }
+            script = "inputs/script/" + name
+        }
+        guard script.hasPrefix("inputs/script/"), version.artifacts.contains(script) else { throw ProjectFailure.invalidProject }
+        let scriptURL = try safe(script, in: root)
+        if ["md", "txt"].contains(scriptURL.pathExtension.lowercased()) {
+            sections.append(.init(title: "Approved script", text: try String(contentsOf: scriptURL, encoding: .utf8)))
+        } else if scriptURL.pathExtension.lowercased() == "docx", fm.fileExists(atPath: scriptURL.path) {
+            sections.append(.init(title: "Approved script", text: "The original script is preserved with this version as a Word document. This PDF does not convert its comments."))
+        } else { throw ProjectFailure.invalidProject }
+        guard let readback = try text(".heard.txt") else { throw WorkflowFailure.invalid("Read-back is unavailable. Reconnect the version's drive and retry.") }
+        sections.append(.init(title: "Rendered audio read-back", text: readback))
+        if let edlFile = version.artifacts.first(where: { $0.hasSuffix(".edl.json") }) {
+            struct EDL: Decodable {
+                struct Span: Decodable { var start: Double; var end: Double; var reason: String? }
+                var source: String; var fps: Double; var keeps: [Span]; var drops: [Span]
+            }
+            let edl = try decoder.decode(EDL.self, from: Data(contentsOf: safe(edlFile, in: root)))
+            guard edl.fps.isFinite, edl.fps > 0 else { throw ProjectFailure.invalidProject }
+            guard let timelineFile = version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }) else { throw ProjectFailure.invalidProject }
+            let xml = try XMLDocument(contentsOf: safe(timelineFile, in: root), options: .nodeLoadExternalEntitiesNever)
+            let clips = try xml.nodes(forXPath: "//sequence/spine/asset-clip").compactMap { $0 as? XMLElement }
+            guard clips.count == edl.keeps.count else { throw WorkflowFailure.invalid("The saved timeline and cut points disagree. Rebuild the cut before exporting its shot list.") }
+            func seconds(_ value: String?) throws -> Double {
+                guard let value, value.hasSuffix("s") else { throw ProjectFailure.invalidProject }
+                let parts = value.dropLast().split(separator: "/")
+                if parts.count == 1, let n = Double(parts[0]), n.isFinite { return n }
+                if parts.count == 2, let n = Double(parts[0]), let d = Double(parts[1]), n.isFinite, d.isFinite, d > 0 { return n / d }
+                throw ProjectFailure.invalidProject
+            }
+            var timeline = 0.0
+            let rows = try edl.keeps.enumerated().map { index, span -> String in
+                let clip = clips[index]
+                let at = try seconds(clip.attribute(forName: "offset")?.stringValue)
+                let start = try seconds(clip.attribute(forName: "start")?.stringValue)
+                let duration = try seconds(clip.attribute(forName: "duration")?.stringValue)
+                func snapped(_ value: Double) -> Double { (value * edl.fps).rounded() / edl.fps }
+                guard span.start.isFinite, span.end.isFinite, span.start >= 0, span.end > span.start,
+                      abs(at - snapped(timeline)) < 0.000001, abs(start - snapped(span.start)) < 0.000001,
+                      abs(duration - snapped(span.end - span.start)) < 0.000001 else {
+                    throw WorkflowFailure.invalid("The saved timeline and cut points changed. Rebuild the cut before exporting its shot list.")
+                }
+                timeline += span.end - span.start
+                return String(format: "Shot %d | Timeline %.3fs | Source %.3f-%.3fs | Duration %.3fs", index + 1, at, start, start + duration, duration)
+                    + "\n" + (span.reason ?? "Retained source footage")
+            }
+            sections.append(.init(title: "Shot list", text: URL(fileURLWithPath: edl.source).lastPathComponent + String(format: " | %.6f fps\n\n", edl.fps) + rows.joined(separator: "\n\n")))
+            if !edl.drops.isEmpty {
+                sections.append(.init(title: "Removed spans and reasons", text: edl.drops.map { String(format: "%.3f-%.3fs | ", $0.start, $0.end) + ($0.reason ?? "No reason recorded") }.joined(separator: "\n")))
+            }
+        } else { throw WorkflowFailure.invalid("The shot list is unavailable for this version.") }
+        if let sheet = try text(".build-sheet.md") {
+            let plain = sheet.components(separatedBy: "\n").compactMap { line -> String? in
+                var line = line.trimmingCharacters(in: .whitespaces)
+                if line == "---" { return nil }
+                if line.hasPrefix("> ") { line = String(line.dropFirst(2)) }
+                if line.hasPrefix("#") { line = String(line.drop(while: { $0 == "#" })).trimmingCharacters(in: .whitespaces) }
+                return line.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+            }.joined(separator: "\n")
+            sections.append(.init(title: "Graphic and asset checklist", text: plain))
+        }
+        return HandoffReport(title: project.manifest.name + " - " + version.folderName,
+            subtitle: version.label + " | Engine " + version.engineVersion + " | This report uses the saved version's inputs and read-back.", sections: sections)
     }
     func queue(_ text: String, project: Project) throws -> [LocalMessage] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowFailure.invalid("Write a change request first.") }

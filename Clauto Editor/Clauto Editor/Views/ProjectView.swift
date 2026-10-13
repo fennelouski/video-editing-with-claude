@@ -242,12 +242,15 @@ private struct CutView: View {
             if let preview = version.artifacts.first(where: { $0.hasSuffix(".mp4") }) {
                 CutPreview(url: folder.appendingPathComponent(preview)).id(version.id).frame(height: 240)
             }
-            Text(version.sourceSchemaChecked == true ? "The engine timeline passed Final Cut's schema check. Review the import before editing." : "Final Cut's schema check was unavailable for this cut. Review the timeline import before editing.")
+            Text(version.savedSchemaChecked == true ? "The saved timeline passed Final Cut's schema check. Review the import before editing." : "Final Cut's schema check is unverified for this saved cut. Review the timeline import before editing.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(version.artifacts.filter { $0.hasSuffix(".fcpxml") }, id: \.self) { artifact in
                 Button("Open Timeline in Final Cut") { NSWorkspace.shared.open(folder.appendingPathComponent(artifact)) }
             }
             Button("Reveal Version") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+            Button("Export Script & Shot List PDF") {
+                Task { if let url = await store.exportHandoff(version) { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
+            }.disabled(store.exportingPDF)
             ForEach(version.artifacts.filter { $0.hasSuffix(".heard.txt") || $0.hasSuffix(".edl.json") }, id: \.self) { artifact in
                 DisclosureGroup(artifact.hasSuffix(".heard.txt") ? "Rendered audio read-back" : "Cut points and reasons") {
                     Text((try? String(contentsOf: folder.appendingPathComponent(artifact), encoding: .utf8)) ?? "File unavailable").font(.caption).textSelection(.enabled)
@@ -257,8 +260,23 @@ private struct CutView: View {
     }
 }
 
-private struct CutPreview: View {
-    @State private var player: AVPlayer
-    init(url: URL) { _player = State(initialValue: AVPlayer(url: url)) }
-    var body: some View { VideoPlayer(player: player).onDisappear { player.pause() } }
+@MainActor
+private struct CutPreview: NSViewRepresentable {
+    let url: URL
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .inline
+        view.player = AVPlayer(url: url)
+        return view
+    }
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if (view.player?.currentItem?.asset as? AVURLAsset)?.url != url {
+            view.player?.pause()
+            view.player = AVPlayer(url: url)
+        }
+    }
+    static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) {
+        view.player?.pause()
+        view.player = nil
+    }
 }

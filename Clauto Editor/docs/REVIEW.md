@@ -28,18 +28,35 @@ workflow increment; it is not a claim that the entire product is complete.
 - Saved timeline URI rewrites changed its bytes. Versions retain source validation
   separately and record both source/saved hashes; schema availability is visible.
 - Request persistence could clear a newer draft. The UI clears only submitted text.
+- PDF reports could select an older alphabetical script or substitute Word notes. Versions
+  now pin the approved script; legacy plans resolve that exact name; DOCX remains an
+  attached original with an explicit notice. Shot timings are checked against the saved
+  XML and use frame-snapped timeline/source values. Uppercase scripts survive snapshots.
+- Final acceptance caught Foundation's inferred standalone declaration conflicting with
+  the external DTD. Serialization now rebuilds a named DOCTYPE, reparses the saved bytes,
+  and validates against the installed Final Cut DTD before updating current. A forged
+  source receipt cannot bypass saved-schema validation; failed snapshots leave no partial
+  version and keep the previous cut current. Source/saved schema flags stay distinct.
+- Main-agent GUI testing found a runtime abort in the system SwiftUI AVKit bridge. A
+  narrow @MainActor AVPlayerView representable owns the player, guards URL replacement,
+  and pauses/releases it during dismantling. The reviewer checked source/SDK lifecycle;
+  the main agent subsequently verified synthetic playback to completion and tab return.
 
 ## Final independent result
 
-29/29 Swift core tests passed, including the actual engine strict asset-gate process,
-reopen, approval, cancellation and version regressions. 12/12 engine contracts passed
+35 routine Swift core tests passed; 2 explicit opt-ins skipped in the independent run.
+These include the actual engine strict asset-gate process, reopen, approval, cancellation,
+version, saved-schema rollback and PDF/provenance regressions. 12/12 engine contracts passed
 in the independent run; the main final contract run includes one additional explicit
 script-dispatch test. Whitespace checks and native build succeeded. No remaining
 blocking finding was found in the reviewed increment.
 
 ## Remaining acceptance limits
 
-GUI/VoiceOver checks, a full actual-model transcription-to-cut run, and Final Cut
-import of rewritten timelines remain unverified. Live Claude integration is absent.
+Main-agent actual-model synthetic transcription-to-cut acceptance passes, including both
+saved FCPXML engine/DTD checks and original-source preservation. Native GUI create/autosave,
+script approval, queued requests, open, playback and PDF export are verified. GUI drop/plan
+approval, full VoiceOver, and actual Final Cut import remain unverified. Live Claude
+integration is absent. Synthetic placeholder assets are not production house artwork.
 Final main-agent build/test counts and the wider requirements checklist live in
 [IMPLEMENTATION.md](IMPLEMENTATION.md).

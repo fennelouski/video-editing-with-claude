@@ -48,7 +48,7 @@ struct WorkflowTests {
     private func plan(_ run: EditRun) throws {
         let folder = run.folder.appendingPathComponent("plan")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try Data(#"{"cues":[],"issues":[],"unresolved":[]}"#.utf8).write(to: folder.appendingPathComponent("video.plan.json"))
+        try Data(#"{"script":"script.md","cues":[],"issues":[],"unresolved":[]}"#.utf8).write(to: folder.appendingPathComponent("video.plan.json"))
     }
 
     private func outputs(_ run: EditRun, project: Project, withReadback: Bool = true) throws {
@@ -58,10 +58,13 @@ struct WorkflowTests {
         try Data("synthetic-generated-layer".utf8).write(to: graphic)
         let source = URL(fileURLWithPath: project.manifest.files[0].originalPath)
         let xml = """
-        <?xml version="1.0"?><fcpxml version="1.13"><resources>
-        <asset id="r1"><media-rep kind="original-media" src="\(source.absoluteString)"/></asset>
-        <asset id="r2"><media-rep kind="original-media" src="\(graphic.absoluteString)"/></asset>
-        </resources></fcpxml>
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE fcpxml>
+        <fcpxml version="1.13"><resources>
+        <format id="r1" frameDuration="1001/24000s" width="1920" height="1080"/>
+        <asset id="r2" name="Original" start="0s" duration="24000/24000s" hasVideo="1" format="r1"><media-rep kind="original-media" src="\(source.absoluteString)"/></asset>
+        <asset id="r3" name="Generated layer" start="0s" duration="24000/24000s" hasVideo="1" format="r1"><media-rep kind="original-media" src="\(graphic.absoluteString)"/></asset>
+        </resources><library><event name="Synthetic"><project name="Fixture"><sequence format="r1" duration="24000/24000s" tcStart="0s" tcFormat="NDF"><spine><asset-clip ref="r2" offset="0s" start="0s" duration="24000/24000s"/></spine></sequence></project></event></library></fcpxml>
         """
         try xml.write(to: run.folder.appendingPathComponent("exports/video.fcpxml"), atomically: true, encoding: .utf8)
         let evidence: [String: Any] = ["timeline": "video.fcpxml", "sha256": SHA256.hash(data: Data(xml.utf8)).map { String(format: "%02x", $0) }.joined(), "problems": [], "schemaChecked": false]
@@ -120,6 +123,8 @@ struct WorkflowTests {
         #expect(first.briefChanged(changed))
         let xmlFile = folder.appendingPathComponent("exports/video.fcpxml")
         let originalXML = try Data(contentsOf: xmlFile)
+        #expect(!String(decoding: originalXML, as: UTF8.self).contains("standalone=\"yes\""))
+        #expect(String(decoding: originalXML, as: UTF8.self).contains("<!DOCTYPE fcpxml>"))
         let record = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("exports/video.snapshot.json"))) as? [String: String])
         #expect(record["saved_sha256"] == SHA256.hash(data: originalXML).map { String(format: "%02x", $0) }.joined())
         #expect(record["source_sha256"] != record["saved_sha256"])
@@ -146,6 +151,27 @@ struct WorkflowTests {
         await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(run, project: project) }
         #expect(try await disk.versions(project: project).isEmpty)
         #expect(try await disk.current(project: project) == nil)
+    }
+
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: "/Applications/Final Cut Pro.app/Contents/Frameworks/Interchange.framework/Versions/A/Resources/FCPXMLv1_13.dtd"),
+                   "Requires the locally installed Final Cut schema"))
+    func savedTimelineSchemaFailureLeavesPreviousCutCurrent() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Valid")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let previous = try await disk.snapshot(run, project: project)
+        #expect(previous.savedSchemaChecked == true)
+        let path = run.folder.appendingPathComponent("exports/video.fcpxml")
+        let malformed = try String(contentsOf: path, encoding: .utf8).replacingOccurrences(of: "<spine>", with: "<spine unsupported=\"yes\">")
+        try malformed.write(to: path, atomically: true, encoding: .utf8)
+        // A forged valid source receipt must not bypass validation of the saved bytes.
+        let evidence: [String: Any] = ["timeline": "video.fcpxml", "sha256": SHA256.hash(data: Data(malformed.utf8)).map { String(format: "%02x", $0) }.joined(), "problems": [], "schemaChecked": true]
+        try JSONSerialization.data(withJSONObject: evidence).write(to: run.folder.appendingPathComponent("exports/video.validation.json"))
+        await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(run, project: project) }
+        #expect(try await disk.current(project: project)?.id == previous.id)
+        #expect(try await disk.versions(project: project).count == 1)
     }
 
     @Test func planEditsInvalidateApprovalAndMessagesSurviveReopen() async throws {
@@ -330,5 +356,66 @@ struct WorkflowTests {
         let argument = try #require(command.arguments.firstIndex(of: "--script"))
         #expect(command.arguments[argument + 1].hasSuffix("/inputs/script/script.md"))
         #expect(try String(contentsOf: URL(fileURLWithPath: command.arguments[argument + 1]), encoding: .utf8) == "Hello. [[NOTE: fixture]]")
+    }
+
+    @Test func uppercaseApprovedScriptSurvivesVersionSnapshot() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.moveItem(at: project.folder.appendingPathComponent("script/script.md"), to: project.folder.appendingPathComponent("script/APPROVED.MD"))
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Uppercase")
+        try plan(run); try outputs(run, project: project)
+        try Data(#"{"script":"APPROVED.MD","cues":[],"issues":[],"unresolved":[]}"#.utf8).write(to: run.folder.appendingPathComponent("plan/video.plan.json"))
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let version = try await disk.snapshot(run, project: project)
+        #expect(version.approvedScript == "inputs/script/APPROVED.MD")
+        #expect(version.artifacts.contains("inputs/script/APPROVED.MD"))
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_SYNTHETIC_ACCEPTANCE_ROOT"] != nil,
+                   "Requires explicitly prepared synthetic inputs and cached speech models"))
+    func fullCachedSpeechToVersionAcceptance() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["CLAUTO_SYNTHETIC_ACCEPTANCE_ROOT"]))
+        struct Input: Decodable { var synthetic: Bool; var approved_script: String; var source: String; var asset_library: String }
+        let input = try JSONDecoder().decode(Input.self, from: Data(contentsOf: root.appendingPathComponent("fixture.json")))
+        #expect(input.synthetic)
+        guard input.synthetic else { return }
+        let engine = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let repo = ProjectRepository(), disk = WorkflowRepository()
+        var project = try await repo.create(name: "Synthetic acceptance only", root: root.appendingPathComponent("projects"), engine: engine, engineVersion: "0.1.0-dev")
+        project = try await repo.add([URL(fileURLWithPath: input.source)], to: project)
+        project = try await repo.useFolder(URL(fileURLWithPath: input.asset_library), key: "assets", project: project)
+        project = try await repo.useFolder(URL(fileURLWithPath: "/Volumes/Videos/Food Videos/Katie YouTube/Models"), key: "model_cache", project: project)
+        try await repo.approveScript(input.approved_script, project: project)
+        let sourceHash = SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: input.source)))
+        let service = PipelineService(runner: ProcessRunner(), disk: disk)
+        var run = try await disk.prepare(project: project, engine: engine, label: "Synthetic cached-model acceptance")
+        run = try await service.execute(run, project: project, engine: engine, start: 1, stop: 3, onEvent: { _ in })
+        #expect(run.state == .needsReview, Comment(rawValue: run.failure ?? ""))
+        guard run.state == .needsReview else { return }
+        let plan = try await disk.plan(run)
+        #expect(plan.issues.isEmpty)
+        guard plan.issues.isEmpty else { return }
+        run.approvedPlanHash = plan.hash // Only the developer-authored synthetic plan is approved in this test.
+        run = try await service.execute(run, project: project, engine: engine, start: 4, stop: 5, onEvent: { _ in })
+        #expect(run.state == .complete, Comment(rawValue: run.failure ?? ""))
+        guard run.state == .complete else { return }
+        let version = try await disk.snapshot(run, project: project)
+        #expect(version.artifacts.contains { $0.hasSuffix(".fcpxml") })
+        #expect(version.artifacts.contains { $0.hasSuffix(".heard.txt") })
+        #expect(version.artifacts.contains { $0.hasSuffix(".itt") })
+        #expect(try await disk.current(project: project)?.id == version.id)
+        #expect(SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: input.source))) == sourceHash)
+        let versionRoot = project.folder.appendingPathComponent("cuts/" + version.folderName)
+        let savedTimelines = version.artifacts.filter { $0.hasSuffix(".fcpxml") }.map { versionRoot.appendingPathComponent($0).path }
+        let validation = try await ProcessRunner().run(ProcessCommand(executable: engine.appendingPathComponent("run"),
+            arguments: ["-c", "import sys; sys.path.insert(0, 'scripts'); import fcpxml as F; from pathlib import Path; assert F.FCP_DTD.exists(); problems = {p: F.validate(Path(p)) for p in sys.argv[1:]}; print(problems); assert problems and all(not v for v in problems.values())"] + savedTimelines,
+            directory: engine, environment: ["CLAUTO_OFFLINE": "1"], timeout: .seconds(60)))
+        try #require(validation.succeeded, Comment(rawValue: validation.output + validation.error))
+        try #require(version.savedSchemaChecked == true)
+        let report: [String: Any] = ["synthetic_only": true, "project": project.folder.path,
+            "run": run.folder.path, "version": version.number, "schema_checked": version.sourceSchemaChecked ?? false,
+            "saved_schema_checked": version.savedSchemaChecked ?? false, "engine_saved_validation_passed": validation.exitCode == 0,
+            "artifacts": version.artifacts, "original_unchanged": true]
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: root.appendingPathComponent("acceptance-result.json"), options: .atomic)
     }
 }

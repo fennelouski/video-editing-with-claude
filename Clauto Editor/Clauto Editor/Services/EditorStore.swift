@@ -7,7 +7,8 @@ final class EditorStore {
     static let nasRoot = URL(fileURLWithPath: "/Volumes/Videos/Food Videos/Katie YouTube/Projects/Clauto Editor", isDirectory: true)
     var projects: [Project] = []
     var selectedID: UUID?
-    var notice: String?
+    var notice: String? { didSet { noticeTitle = "Needs attention" } }
+    var noticeTitle = "Needs attention"
     var setupChecks: [SetupCheck] = []
     var runDetails: [UUID: String] = [:]
     var checking = false
@@ -22,9 +23,11 @@ final class EditorStore {
     var missingPieces: [UUID: [MissingPiece]] = [:]
     var planReviews: [UUID: String] = [:]
     var runningProjectID: UUID?
+    var exportingPDF = false
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
     @ObservationIgnored private let workflow = WorkflowRepository()
+    @ObservationIgnored private let exporter = HandoffExportService()
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
@@ -48,13 +51,14 @@ final class EditorStore {
         }
     }
 
-    func create(_ name: String) async {
+    func create(_ name: String) async -> Bool {
         working = true; defer { working = false }
         do {
             let version = (try? String(contentsOf: engineRoot.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? "development"
             let project = try await repository.create(name: name, root: projectRoot, engine: engineRoot, engineVersion: version)
             update(project); selectedID = project.id; remember()
-        } catch { notice = error.localizedDescription }
+            return true
+        } catch { notice = error.localizedDescription; return false }
     }
 
     func open(_ folder: URL) async {
@@ -170,7 +174,10 @@ final class EditorStore {
 
     func approveScript(_ text: String) async {
         guard let project = selected, runningProjectID == nil else { return }
-        do { try await repository.approveScript(text, project: project); notice = "Approved script saved. New runs will use it." }
+        do {
+            try await repository.approveScript(text, project: project)
+            notice = "Approved script saved. New runs will use it."; noticeTitle = "Script saved"
+        }
         catch { notice = error.localizedDescription }
     }
 
@@ -232,6 +239,16 @@ final class EditorStore {
         guard let project = selected, runningProjectID == nil else { return }
         do { try await workflow.restore(version, project: project); currentCuts[project.id] = version }
         catch { notice = error.localizedDescription }
+    }
+
+    func exportHandoff(_ version: CutVersion) async -> URL? {
+        guard let project = selected, !exportingPDF else { return nil }
+        exportingPDF = true; defer { exportingPDF = false }
+        do {
+            let report = try await workflow.handoffReport(version, project: project)
+            return try await exporter.export(report, project: project, version: version)
+        }
+        catch { notice = error.localizedDescription; return nil }
     }
 
     func setFolders(projects: URL? = nil, engine: URL? = nil) {

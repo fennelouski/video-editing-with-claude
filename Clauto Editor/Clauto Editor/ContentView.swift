@@ -22,7 +22,7 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     Button("New Project", systemImage: "plus") { showNewProject = true }.keyboardShortcut("n")
-                    Button("Open Project…", systemImage: "folder") { Task { if let folder = await FileDialogs.folder() { await store.open(folder) } } }
+                    Button("Open Project…", systemImage: "folder") { Task { if let folder = await FileDialogs.folder(initial: store.projectRoot) { await store.open(folder) } } }
                     Button("Setup & Folders", systemImage: "gearshape") { showSetup = true }
                 }.buttonStyle(.bordered).padding().frame(maxWidth: .infinity)
             }
@@ -58,15 +58,14 @@ struct ContentView: View {
                     Spacer()
                     Button("Create Project") {
                         Task {
-                            await store.create(projectName)
-                            if store.selected != nil { showNewProject = false; projectName = "" }
+                            if await store.create(projectName) { showNewProject = false; projectName = "" }
                         }
                     }.buttonStyle(.borderedProminent).disabled(projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.working)
                     .keyboardShortcut(.defaultAction).accessibilityIdentifier("createProject")
                 }
             }.padding(28).frame(width: 520)
         }
-        .alert("Needs attention", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
+        .alert(store.noticeTitle, isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
             Button("OK") { store.notice = nil }
         } message: { Text(store.notice ?? "") }
     }
