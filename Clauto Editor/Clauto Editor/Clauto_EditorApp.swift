@@ -12,6 +12,8 @@ struct Clauto_EditorApp: App {
     @State private var store = EditorStore()
     @State private var updater = Updater()
 
+    init() { ClautoFonts.register() }
+
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
@@ -24,11 +26,20 @@ struct Clauto_EditorApp: App {
                     }
                 }
         }
+        .defaultSize(width: 1320, height: 860)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.check() }.disabled(!updater.enabled)
             }
         }
-        Settings { SetupView(store: store).frame(width: 640, height: 620) }
+        Settings {
+            VStack(spacing: 0) {
+                HStack { ClautoWindowControls(onRail: false); Spacer(); Text("Clauto workspace").font(ClautoDesign.type(13, weight: .semibold)) }
+                    .padding(.horizontal, 24).padding(.vertical, 14).background(ClautoDesign.paper)
+                ClautoRule()
+                SetupView(store: store)
+            }.frame(width: 680, height: 680).foregroundStyle(ClautoDesign.ink).preferredColorScheme(.light)
+        }.windowStyle(.hiddenTitleBar)
     }
 }

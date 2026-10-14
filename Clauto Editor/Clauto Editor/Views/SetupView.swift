@@ -4,44 +4,41 @@ struct SetupView: View {
     @Bindable var store: EditorStore
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Set up your workspace").font(.title.bold())
-                Text("Keep footage and editing files on your project drive. This build checks installed tools; automated installation and model downloads are still in development.")
-                    .foregroundStyle(.secondary)
-                GroupBox("Folders") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        folderRow("Projects", url: store.projectRoot) { store.setFolders(projects: $0) }
-                        folderRow("Editing engine", url: store.engineRoot) { store.setFolders(engine: $0) }
-                    }.padding(8)
+            VStack(alignment: .leading, spacing: 28) {
+                HStack(spacing: 12) { ClautoIcon(.settings, size: 27); Text("Your workspace").font(ClautoDesign.heading) }
+                Text("Keep footage and editing files on your project drive. This build checks installed tools; installation and model downloads remain in development.").foregroundStyle(ClautoDesign.quiet)
+                ClautoSection("Folders") {
+                    folderRow("Projects", url: store.projectRoot) { store.setFolders(projects: $0) }
+                    ClautoRule()
+                    folderRow("Editing engine", url: store.engineRoot) { store.setFolders(engine: $0) }
                 }
-                Picker("Default export resolution for new videos", selection: Binding(get: { store.defaultExportResolution }, set: { store.setDefaultExportResolution($0) })) {
-                    ForEach(ExportResolution.allCases) { value in Text(value.label).tag(value) }
-                }.accessibilityIdentifier("defaultExportResolution")
-                Text("Each video keeps its own resolution. Changing the default applies when you create a new project.").font(.caption).foregroundStyle(.secondary)
-                Button(store.checking ? "Checking…" : "Check Setup", systemImage: "checklist") { Task { await store.checkSetup() } }
-                    .buttonStyle(.borderedProminent).disabled(store.checking)
-                ForEach(store.setupChecks) { check in
+                ClautoChoice(title: "Default export size for new videos", selection: Binding(get: { store.defaultExportResolution }, set: { store.setDefaultExportResolution($0) }), options: ExportResolution.allCases.map { ($0, $0.label) }).accessibilityIdentifier("defaultExportResolution")
+                Text("Each video keeps its own size. This default applies when you create a new project.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                ClautoAction(store.checking ? "Checking workspace…" : "Check workspace", icon: .check, kind: .primary) { Task { await store.checkSetup() } }.disabled(store.checking)
+                if store.checking { ClautoActivity(label: "Checking installed tools and project folders…") }
+                ForEach(store.setupChecks.sorted { priority($0.state) < priority($1.state) }) { check in
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: icon(check.state)).foregroundStyle(check.state == .ready ? .green : .secondary)
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack { Text(check.title).bold(); Spacer(); Text(check.state.rawValue).font(.caption) }
-                            Text(check.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                        ClautoIcon(check.state == .ready ? .check : .settings, size: 21).foregroundStyle(check.state == .needsAttention ? ClautoDesign.ember : ClautoDesign.rail)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack { Text(check.title).font(ClautoDesign.type(14, weight: .semibold)); Spacer(); Text(check.state.rawValue).font(ClautoDesign.caption) }
+                            Text(check.detail).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
                         }
                     }.accessibilityElement(children: .combine)
+                    ClautoRule()
                 }
-                Text("House style: cut cardboard, marker on paper, Sage & Oat. All media stays local in this development build.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.padding(28)
-        }
+                Text("Your video house style remains Sage & Oat. All media stays local in this development build.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            }.padding(30)
+        }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
+            .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)
+    }
+    private func priority(_ state: SetupCheck.State) -> Int {
+        switch state { case .needsAttention: 0; case .notChecked: 1; case .ready: 2 }
     }
     private func folderRow(_ title: String, url: URL, set: @escaping (URL) -> Void) -> some View {
-        HStack {
-            VStack(alignment: .leading) { Text(title).bold(); Text(url.path).font(.caption).textSelection(.enabled) }
+        HStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) { Text(title).font(ClautoDesign.type(14, weight: .semibold)); Text(url.path).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled) }
             Spacer()
-            Button("Choose…") { Task { if let folder = await FileDialogs.folder() { set(folder) } } }.accessibilityLabel("Choose \(title) folder")
+            ClautoAction("Choose folder", icon: .folder) { Task { if let folder = await FileDialogs.folder() { set(folder) } } }.accessibilityLabel("Choose \(title) folder")
         }
-    }
-    private func icon(_ state: SetupCheck.State) -> String {
-        switch state { case .ready: "checkmark.circle.fill"; case .needsAttention: "exclamationmark.circle"; case .notChecked: "minus.circle" }
     }
 }

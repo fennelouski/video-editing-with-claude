@@ -1,0 +1,202 @@
+{
+  "activation_policy" : "prohibited",
+  "captures" : [
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "brief-wide",
+      "pixels" : [
+        1440,
+        900
+      ],
+      "points" : [
+        1440,
+        900
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "brief-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "files-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "cut-wide",
+      "pixels" : [
+        1320,
+        860
+      ],
+      "points" : [
+        1320,
+        860
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "cut-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "notice-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "saved-review-feedback",
+      "pixels" : [
+        900,
+        1000
+      ],
+      "points" : [
+        900,
+        1000
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "derivative-expanded",
+      "pixels" : [
+        900,
+        900
+      ],
+      "points" : [
+        900,
+        900
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "long-content-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "workspace",
+      "pixels" : [
+        680,
+        680
+      ],
+      "points" : [
+        680,
+        680
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "empty-minimum",
+      "pixels" : [
+        900,
+        640
+      ],
+      "points" : [
+        900,
+        640
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "checks" : {
+        "accessibility_actions" : "unavailable in this offscreen\/prohibited host; no actions asserted",
+        "choice_expansion" : "rendered from the control's initial state",
+        "native_text_binding" : true,
+        "native_text_font" : "WorkSans-Regular",
+        "native_undo_manager" : true,
+        "physical_hover_keyboard_voiceover" : "not run"
+      },
+      "name" : "controls",
+      "pixels" : [
+        940,
+        1000
+      ],
+      "points" : [
+        940,
+        1000
+      ]
+    },
+    {
+      "accessibility" : [
+
+      ],
+      "name" : "unavailable-preview",
+      "pixels" : [
+        680,
+        480
+      ],
+      "points" : [
+        680,
+        480
+      ]
+    }
+  ],
+  "fixture" : "synthetic only",
+  "font" : "WorkSans-Regular",
+  "limits" : [
+    "Offscreen captures do not verify physical hover, drag delivery, foreground keyboard traversal, VoiceOver speech, or AVPlayer hardware video layers."
+  ],
+  "valid_video_playback" : "not exercised; host denied synthetic video encoding",
+  "window_visibility" : "never ordered onscreen"
+}

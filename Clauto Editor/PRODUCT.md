@@ -1,0 +1,34 @@
+# Clauto native app
+
+Clauto is a local macOS front door to the editing engine in this repository. A person
+brings footage, describes the video, reviews a cut, and saves change requests. The
+mechanism is **brief + local media + conversation → a named, revisable cut**.
+
+The interface is for someone comfortable with Finder and drag and drop. It makes
+project state, missing files, review gates, and saved versions understandable without
+requiring a command line. Final Cut remains the finishing editor; Clauto does not add
+a timeline editor.
+
+The implemented app owns project selection and creation, the brief, file intake and
+roles, local pipeline progress, graphic-plan approval, saved cuts, time-bound feedback,
+and separate derivative exports. Existing model and service callbacks remain the
+source of truth. Requests are saved locally; live Claude turns are disabled in this
+development build. Workspace setup checks installed tools and folders. Automatic
+installation and model downloads remain future work. Debug builds do not start
+Sparkle update checks.
+
+Original media is referenced or copied according to the user's choice and is never
+modified. Scientific claims and graphic plans require human review. A failed run
+keeps the previous cut available. The engine's Sage & Oat video style and its rules
+remain governed by `../taste_principles.md` and `../style_guide.md`; the app identity
+is a separate design system.
+
+Nathan's app identity requirements are binding: authored geometry and typography,
+no SF Symbols, and no visible default Apple app controls. Native file dialogs,
+menus, text editing behavior, and window semantics remain available. The existing
+OFL Work Sans font is bundled with its existing license; no new font or software
+license is introduced.
+
+The app UI's durable design decisions are in [DESIGN.md](DESIGN.md). Detailed
+product and engineering plans remain in [docs/PRODUCT.md](docs/PRODUCT.md) and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

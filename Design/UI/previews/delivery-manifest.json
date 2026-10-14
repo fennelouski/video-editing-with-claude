@@ -1,0 +1,172 @@
+{
+  "scope": "Clauto authored native UI",
+  "captures": "synthetic; offscreen; activationPolicy.prohibited",
+  "outputs": [
+    {
+      "path": "Design/UI/previews/round-2/brief-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "db9923517f7dcf30d275562af61b53f9796dc6bc04ef51aeeae30174b32a9cb1"
+    },
+    {
+      "path": "Design/UI/previews/round-2/brief-wide.png",
+      "pixels": [
+        1440,
+        900
+      ],
+      "sha256": "9a7bcbb4dd0df43fe5deb17ecfe48b57e55f5c6008f89b90c6e5db197151856e"
+    },
+    {
+      "path": "Design/UI/previews/round-2/controls-expanded.png",
+      "pixels": [
+        940,
+        1000
+      ],
+      "sha256": "9b82c99d0f89d5d6cbbe20df7b2d55964d36286559da6738635bf5d1b1396c3c"
+    },
+    {
+      "path": "Design/UI/previews/round-2/controls-values-updated.png",
+      "pixels": [
+        940,
+        1000
+      ],
+      "sha256": "5105a86fc2ba91694a2dfd39b2c47824db57ec95eb4a0c333b0fda890730d4ba"
+    },
+    {
+      "path": "Design/UI/previews/round-2/cut-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "a01d8dad493e1b6155ae301f1b5d93ce80bc4a0f61a6dac6795a03d9dc717bf8"
+    },
+    {
+      "path": "Design/UI/previews/round-2/cut-wide.png",
+      "pixels": [
+        1320,
+        860
+      ],
+      "sha256": "60022f5a5a48f6bea20f8693eb5a080827dbbf5837cb89aaa097922ea24328e9"
+    },
+    {
+      "path": "Design/UI/previews/round-2/derivative-expanded.png",
+      "pixels": [
+        900,
+        900
+      ],
+      "sha256": "379a34e222f71afa568f1a4f6fa32f8b5bfce8ada0850b7445476030c869f97f"
+    },
+    {
+      "path": "Design/UI/previews/round-2/empty-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "f25a9d3d8fb9b7cd244068c399901103767988ccb7373d587439830f41b97b64"
+    },
+    {
+      "path": "Design/UI/previews/round-2/files-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "da1c54997c48d920aa6064b3bd3406c1fcfc28ecab4e2acdd523bad1d87763a6"
+    },
+    {
+      "path": "Design/UI/previews/round-2/long-content-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "7746562420ff3f60961f48f60d7bf79a19637eecbdfd5c78eba7eb1e67512c95"
+    },
+    {
+      "path": "Design/UI/previews/round-2/notice-minimum.png",
+      "pixels": [
+        900,
+        640
+      ],
+      "sha256": "a0de4827e9745689872ce713b76045d52012b9f7e7d9aba15a31e2019576be64"
+    },
+    {
+      "path": "Design/UI/previews/round-2/saved-review-feedback.png",
+      "pixels": [
+        900,
+        1000
+      ],
+      "sha256": "fa65c5fc7db1056f2fdb095be73e3617ba4e90db1cd41be853af116100af6e79"
+    },
+    {
+      "path": "Design/UI/previews/round-2/unavailable-preview.png",
+      "pixels": [
+        680,
+        480
+      ],
+      "sha256": "e402ad562b182a5b38549fcff53f96113ed293f2dfb7a0cc171d313f01009089"
+    },
+    {
+      "path": "Design/UI/previews/round-2/workspace.png",
+      "pixels": [
+        680,
+        680
+      ],
+      "sha256": "bad3da2e03bfeeb1ff9ee31e7a0ab90ef561c7ebdd621f83ec03ed2d63f843b7"
+    }
+  ],
+  "sources": [
+    {
+      "path": "Clauto Editor/Clauto Editor/ContentView.swift",
+      "sha256": "33f44290faf039eda0ddce1434cb171adf8182f7955bae4444825406061f5f22"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Clauto_EditorApp.swift",
+      "sha256": "b84414780c792c574d5c59e401df421956aa5f51673bf93d441a6c288724cd53"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ClautoDesign.swift",
+      "sha256": "59282a20000df156f223f3e8bbe5618d15f0688a0e8ea72f31dba8cab241aa39"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ClautoIcon.swift",
+      "sha256": "1f10605457fa3c367d62ed2ee7ff9c106fe116b8c18b6bde2c64e6c196f94746"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ClautoVideoViewer.swift",
+      "sha256": "ae23777ff3d0848765445936d43bcc545cce6f62e1008a18cb4614d3013a23ba"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ClautoWindow.swift",
+      "sha256": "81ee1784d9bd4d8f1beee20fbb492cca201e146f6cbed4289b7414170d42c21f"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/DerivativeView.swift",
+      "sha256": "5af1831e2ce6ce7b888d353fb8a8057dffbcf990e2d2b9b048bf3e4348d4172a"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/FileDialogs.swift",
+      "sha256": "ba246efb60b8acdbe8117736f2543cf49429705e6c99733333cb22eb830ae7a7"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ProjectView.swift",
+      "sha256": "b6f21351e931c065a856c54e7a9d1d4ab0c5cccfa960a4f2dd61544559d73ec5"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/SetupView.swift",
+      "sha256": "5401f6cd42d9ec1901a879f064c7b9de5261bddc27577d9e05cb6ad38f59050e"
+    }
+  ],
+  "pending_live_checks": [
+    "valid media playback",
+    "physical hover and drop",
+    "keyboard traversal",
+    "VoiceOver speech"
+  ],
+  "primary_owned_synced_files": [
+    "Models/Project.swift",
+    "Services/ProjectRepository.swift",
+    "Services/WorkflowRepository.swift",
+    "Services/EditorStore.swift"
+  ]
+}

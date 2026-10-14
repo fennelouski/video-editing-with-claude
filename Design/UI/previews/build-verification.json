@@ -1,0 +1,47 @@
+{
+  "build": {
+    "result": "BUILD SUCCEEDED",
+    "configuration": "Debug",
+    "scheme": "Clauto Editor",
+    "destination": "platform=macOS",
+    "log": ".artifacts/design-build-final.log",
+    "log_sha256": "5aefbe0a37512c4e85cfc9d8552bf7a7967a7c37524e9d768171c4352b580c72",
+    "completed_at_utc": "2026-10-14T08:25:01.801412+00:00",
+    "isolated_bundle": ".artifacts/DesignDerivedData/Build/Products/Debug/Clauto Editor.app",
+    "automatic_package_resolution": false,
+    "package_updates": false,
+    "launched": false
+  },
+  "codesign": "codesign --verify --deep --strict passed",
+  "delivery_hashes": "14 capture hashes and 10 view source hashes verified",
+  "independent_review": "Accepted after two bounded synthetic rounds and current-item readiness/failure reconciliation; no remaining concrete visual/source blocker",
+  "integration_only_files": [
+    {
+      "path": "Clauto Editor/Clauto Editor/Models/Project.swift",
+      "sha256": "1a6d5eb277530b5ac79001e597505350ff31d5df797901ea7f48be95d2108e0a",
+      "included_in_ui_commit": false
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Services/ProjectRepository.swift",
+      "sha256": "010782c774931e09c17cd158d110bdf01ce98c975479ce7c869acac687e16f24",
+      "included_in_ui_commit": false
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Services/WorkflowRepository.swift",
+      "sha256": "95ba214c9e0e788860f5c9ba77ff787c921316ffd08c66310b8531b347729160",
+      "included_in_ui_commit": false
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Services/EditorStore.swift",
+      "sha256": "247b46b065761d4241c413c39a799d71c1401fff15cb878352e74c7f5cd19b13",
+      "included_in_ui_commit": false
+    }
+  ],
+  "remaining_limits": [
+    "Valid-media playback",
+    "Physical pointer hover and drop",
+    "Foreground keyboard traversal",
+    "VoiceOver speech and accessibility actions"
+  ],
+  "whitespace_check": "Passed for authored source/docs; original OFL line 21 whitespace retained to preserve license bytes"
+}
