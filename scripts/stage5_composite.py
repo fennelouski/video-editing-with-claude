@@ -448,6 +448,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 # Stitch
 # --------------------------------------------------------------------------------------
 
+def _attach_todo_marker(clips, at: float, label: str) -> bool:
+    for clip in clips:
+        if clip.owns_frame(at):
+            clip.markers.append((at, label, True))
+            return True
+    return False
+
+
 def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Path, float, dict]],
              out: Path, resolution: str | None = None) -> Path:
     """
@@ -537,11 +545,7 @@ def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Pat
         at, was_snapped = tmap.nearest(cue["start"])
         at = C.snap_seconds(at)
         label = f"{cue['kind']}: {cue.get('text') or cue.get('anchor', '')[:40]}"
-        for c in clips:
-            if c.offset <= at < c.offset + c.duration:
-                c.markers.append((at, label, True))
-                marker_count += 1
-                break
+        marker_count += _attach_todo_marker(clips, at, label)
 
     print(f"  {len(connected)} connected clip(s), {marker_count} marker(s), "
           f"{len(chapters)} chapter(s) — remapped onto the {tmap.duration:.1f}s cut timeline")

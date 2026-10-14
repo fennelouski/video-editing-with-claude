@@ -94,6 +94,15 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 
 ## Verification record
 
+The later local FCPXML handoff repair uses one shared integer-frame ownership
+rule for connections, chapter markers and stage-5 TODO markers. This prevents
+duplicate connections at float-adjacent boundaries and preserves cues on clips
+that serialize to a one-frame minimum. The current focused FCPXML/stage-5 suite
+passes **61 tests** (49.48 seconds), including regressions from real boundary
+values and synthetic metadata fixtures. No native Final Cut import was attempted;
+the active import and existing checkout remain undisturbed. This engine repair
+does not complete native UI or full-motion editorial acceptance.
+
 Latest bounded increment (14 October): source-bound duration projection and the
 CLI review adapter pass **142 synthetic tests** in the latest focused run. The
 adapter scope repair passed95 independently reviewed cases; the projection module

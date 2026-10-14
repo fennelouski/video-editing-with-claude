@@ -190,6 +190,11 @@ class Clip:
     position: tuple[float, float] = (0.0, 0.0)
     audio_enabled: bool = True
 
+    def owns_frame(self, timeline_seconds: float) -> bool:
+        """Use the serialized half-open span, including its one-frame minimum."""
+        first = C.frames(self.offset)
+        return first <= C.frames(timeline_seconds) < first + max(1, C.frames(self.duration))
+
     def transform_keys(self) -> list[tuple[float, float, float, float]]:
         """(source time, scale, x, y) keyframes describing the whole clip's framing."""
         base0 = self.scale if self.scale is not None else 1.0
@@ -340,6 +345,9 @@ class FCPXMLBuilder:
         spine = ET.SubElement(sequence, "spine")
 
         for clip in clips:
+            # Compare ownership on the same integer frame grid that we serialize.
+            # Float sums can overlap adjacent clips by a few ulps and attach the
+            # same connection/chapter twice at their shared frame boundary.
             el = ET.SubElement(
                 spine, "asset-clip",
                 ref=self._asset_id(clip.asset_path),
@@ -379,7 +387,7 @@ class FCPXMLBuilder:
 
             # Connected clips whose timeline position lands inside this clip.
             for g in connected:
-                if not (clip.offset <= g.offset < clip.offset + clip.duration):
+                if not clip.owns_frame(g.offset):
                     continue
                 # parent-local time — see the module docstring, point 2.
                 local = clip.start + (g.offset - clip.offset)
@@ -414,7 +422,7 @@ class FCPXMLBuilder:
                     ET.SubElement(sub, "adjust-volume", amount=f"{g.gain_db:.1f}dB")
 
             for at, text, todo in clip.markers:
-                if not (clip.offset <= at < clip.offset + clip.duration):
+                if not clip.owns_frame(at):
                     continue
                 local = clip.start + (at - clip.offset)
                 m = ET.SubElement(el, "marker", start=t(local),
@@ -423,7 +431,7 @@ class FCPXMLBuilder:
                     m.set("completed", "0")
 
             for at, title in (chapters or []):
-                if not (clip.offset <= at < clip.offset + clip.duration):
+                if not clip.owns_frame(at):
                     continue
                 local = clip.start + (at - clip.offset)
                 ET.SubElement(el, "chapter-marker", start=t(local),
