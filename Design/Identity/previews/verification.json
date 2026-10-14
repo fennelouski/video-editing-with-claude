@@ -1,0 +1,237 @@
+{
+  "result": "passed",
+  "native_mac_entries": 10,
+  "editable_svg_assets": 25,
+  "interface_icons": 21,
+  "contrast_ratios": {
+    "ink/ivory": 13.335,
+    "muted/ivory": 5.319,
+    "ivory/viridian": 10.219,
+    "citron/viridian": 8.642,
+    "terracotta/ivory": 4.743
+  },
+  "outputs": [
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-16@1x.png",
+      "pixels": [
+        16,
+        16
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "193936d14b3daa166cdc44b1629ace2fa179b6e9fe50fdf82702e6021b89aee6"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-16@2x.png",
+      "pixels": [
+        32,
+        32
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "bc3f301a1dfe5a91871222237a6843463e9cb57e443822ead3592c95568ad8fc"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-32@1x.png",
+      "pixels": [
+        32,
+        32
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "bc3f301a1dfe5a91871222237a6843463e9cb57e443822ead3592c95568ad8fc"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-32@2x.png",
+      "pixels": [
+        64,
+        64
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "1f8f20194670304d6e37d9c000ebfb070394af33677c61cb82d0af4feb2a3ce3"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-128@1x.png",
+      "pixels": [
+        128,
+        128
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "7a8504c5cda1d971e2ecdf4b720d2deb9f93c0d5fee4ceecefac4cb1c90a7c8d"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-128@2x.png",
+      "pixels": [
+        256,
+        256
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "4dcc5ead161b886486e1a18f1ed53d8aad035b877526944cc16b87798d23981d"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-256@1x.png",
+      "pixels": [
+        256,
+        256
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "4dcc5ead161b886486e1a18f1ed53d8aad035b877526944cc16b87798d23981d"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-256@2x.png",
+      "pixels": [
+        512,
+        512
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "0d43cc268b8fb0b0ee14c83efbb20f00bce9201dfea5054de1a57fe1f42e40ef"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-512@1x.png",
+      "pixels": [
+        512,
+        512
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "0d43cc268b8fb0b0ee14c83efbb20f00bce9201dfea5054de1a57fe1f42e40ef"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Assets.xcassets/AppIcon.appiconset/clauto-512@2x.png",
+      "pixels": [
+        1024,
+        1024
+      ],
+      "rgba": true,
+      "corner_alpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opaque_palette_present": [
+        "viridian",
+        "ivory",
+        "citron"
+      ],
+      "sha256": "69c36209a0e3aab25e3b37d84e544e6c32586a4f407c2905fcfee5e679fba8ec"
+    }
+  ],
+  "sources": [
+    {
+      "path": "Design/Identity/geometry.json",
+      "sha256": "c8673532c7af166aaa793eff2bfe3628265cccf5482154810a03f4bac430a553"
+    },
+    {
+      "path": "Design/Identity/app-icon.svg",
+      "sha256": "4906b893b308e62a46888a7ae54e1b52522632cc7237724f2534979ce05f698c"
+    },
+    {
+      "path": "Design/Identity/scripts/generate_identity.py",
+      "sha256": "d053f955577d3f814bf806358281d34c39af007256f14259cf76a3dfb1b5170b"
+    },
+    {
+      "path": "Design/Identity/scripts/render_assets.swift",
+      "sha256": "1053219ae62ed33c16b18cb2a9535f382ebc3493ad2d1b5a76b08635ad46fab4"
+    },
+    {
+      "path": "Clauto Editor/Clauto Editor/Views/ClautoIcon.swift",
+      "sha256": "1f10605457fa3c367d62ed2ee7ff9c106fe116b8c18b6bde2c64e6c196f94746"
+    }
+  ]
+}

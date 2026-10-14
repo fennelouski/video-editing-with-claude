@@ -1,0 +1,44 @@
+{
+  "name": "Clauto splice vocabulary",
+  "grid": 24,
+  "strokeWidth": 1.7,
+  "palette": {
+    "ink": "#172925",
+    "viridian": "#183F35",
+    "ivory": "#F3F0E5",
+    "citron": "#D8E76C",
+    "terracotta": "#AA4F36",
+    "muted": "#52675E"
+  },
+  "emblem": {
+    "viewBox": "0 0 1024 1024",
+    "paths": [
+      { "name": "Cut bracket", "fill": "ivory", "d": "M 292 244 L 778 244 L 708 358 L 370 358 L 370 666 L 708 666 L 778 780 L 292 780 Q 244 780 244 732 L 244 292 Q 244 244 292 244 Z" },
+      { "name": "Revisable strip", "fill": "citron", "d": "M 470 438 L 780 438 L 724 552 L 414 552 Z" }
+    ],
+    "tile": { "name": "Clipped bench", "fill": "viridian", "d": "M 248 88 L 840 88 L 936 184 L 936 776 C 936 864 864 936 776 936 L 248 936 C 160 936 88 864 88 776 L 88 248 C 88 160 160 88 248 88 Z" }
+  },
+  "icons": {
+    "project": { "label": "Project", "stroke": ["M 3 20 L 3 6 L 10 6 L 12 9 L 21 9 L 21 17 L 18 20 Z", "M 7 13 L 17 13", "M 7 16 L 14 16"] },
+    "brief": { "label": "Brief", "stroke": ["M 5 3 L 16 3 L 20 7 L 20 21 L 5 21 Z", "M 15 3 L 15 8 L 20 8", "M 8 12 L 16 12", "M 8 16 L 14 16"] },
+    "files": { "label": "Files", "stroke": ["M 7 3 L 17 3 L 21 7 L 21 17", "M 3 7 L 13 7 L 17 11 L 17 21 L 3 21 Z", "M 12 7 L 12 12 L 17 12"] },
+    "cut": { "label": "Cut", "stroke": ["M 3 5 L 16 5", "M 3 12 L 12 12", "M 3 19 L 8 19", "M 21 3 L 11 21", "M 18 12 L 21 12", "M 14 19 L 21 19"] },
+    "conversation": { "label": "Conversation", "stroke": ["M 3 4 L 21 4 L 21 17 L 10 17 L 5 21 L 5 17 L 3 17 Z", "M 7 9 L 17 9", "M 7 12 L 14 12"] },
+    "add": { "label": "Add", "stroke": ["M 12 4 L 12 20", "M 4 12 L 20 12"] },
+    "folder": { "label": "Folder", "stroke": ["M 3 20 L 3 6 L 10 6 L 12 9 L 21 9 L 21 17 L 18 20 Z"] },
+    "open": { "label": "Open", "stroke": ["M 11 4 L 4 4 L 4 20 L 20 20 L 20 13", "M 12 12 L 21 3", "M 14 3 L 21 3 L 21 10"] },
+    "play": { "label": "Play", "fill": ["M 6 3 L 21 12 L 6 21 Z"] },
+    "pause": { "label": "Pause", "fill": ["M 5 4 L 9 4 L 9 20 L 5 20 Z", "M 15 4 L 19 4 L 19 20 L 15 20 Z"] },
+    "seek": { "label": "Seek forward", "stroke": ["M 21 4 L 21 20"], "fill": ["M 4 4 L 17 12 L 4 20 Z"] },
+    "arrow": { "label": "Arrow", "stroke": ["M 3 12 L 21 12", "M 14 5 L 21 12 L 14 19"] },
+    "science": { "label": "Science", "stroke": ["M 9 3 L 15 3", "M 10 3 L 10 9 L 4 19 Q 3 21 6 21 L 18 21 Q 21 21 20 19 L 14 9 L 14 3", "M 7 16 L 17 16"], "fill": ["M 10 18 L 12 18 L 12 20 L 10 20 Z"] },
+    "font": { "label": "Font", "stroke": ["M 3 20 L 9 4 L 15 20", "M 5.3 14 L 12.7 14", "M 15 10 L 22 10", "M 18.5 10 L 18.5 20"] },
+    "cutout": { "label": "Cutout", "stroke": ["M 8 3 L 3 3 L 3 8", "M 16 3 L 21 3 L 21 8", "M 3 16 L 3 21 L 8 21", "M 16 21 L 21 21 L 21 16", "M 9 7 L 16 7 L 13 12 L 16 17 L 9 17 L 6 12 Z"] },
+    "audio": { "label": "Audio", "stroke": ["M 3 9 L 3 15", "M 7.5 5 L 7.5 19", "M 12 8 L 12 16", "M 16.5 3 L 16.5 21", "M 21 7 L 21 17"] },
+    "export": { "label": "Export", "stroke": ["M 3 14 L 3 21 L 21 21 L 21 14", "M 12 16 L 12 3", "M 6 9 L 12 3 L 18 9"] },
+    "check": { "label": "Check", "stroke": ["M 3 12 L 9 18 L 21 6"] },
+    "close": { "label": "Close", "stroke": ["M 5 5 L 19 19", "M 19 5 L 5 19"] },
+    "settings": { "label": "Settings", "stroke": ["M 3 6 L 7 6", "M 14 6 L 21 6", "M 3 12 L 12 12", "M 19 12 L 21 12", "M 10 18 L 21 18"], "fill": ["M 9 3 L 12 3 L 12 9 L 9 9 Z", "M 14 9 L 17 9 L 17 15 L 14 15 Z", "M 5 15 L 8 15 L 8 21 L 5 21 Z"] },
+    "version": { "label": "Version", "stroke": ["M 6 3 L 21 3 L 21 18", "M 3 6 L 18 6 L 18 21 L 3 21 Z", "M 6 13 L 9 17 L 15 10"] }
+  }
+}
