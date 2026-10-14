@@ -90,9 +90,26 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M6 style packs/neutral assets/engine update | Pending | One house style stated in UI |
 | M7 notarized DMG/appcast/live update/diagnostics | Pending | Local Debug app only, no publication or signing credentials |
 | Independent second reviewer | Complete for this increment | Read-only workflow, PDF/provenance, saved serialization, native player, multisource, selected-camera import/proof and synthetic conversation reviews; 45 routine core tests passed independently, two opt-ins skipped; acceptance limits recorded in REVIEW.md |
-| Accessibility | Partial | Native controls, labels, keyboard choose equivalents; full VoiceOver/drop UI pass pending |
+| Accessibility | Partial | Authored controls retain semantic labels and keyboard choose equivalents; full VoiceOver/drop UI pass pending |
 
 ## Verification record
+
+Latest bounded increment (14 October): source-bound duration projection and the
+CLI review adapter pass **93 synthetic tests**, independently reproduced. Planning
+time counts overlapping capped word intervals once and credits no unverified
+gaps or joins. Saved revision briefs survive resume; an older approval cannot
+inherit new constraints. Unjournaled completed pairs, missing verdict receipts
+and unknown receipt metadata stop before further provider calls. The current
+private edit still needs actual editorial agreement, human facts and delivered
+runtime checks. No video approval follows from these tests.
+
+The custom app workspace passed an isolated Debug Xcode build and strict bundle
+signature verification. Fourteen synthetic UI captures passed bounded independent
+design review after repairs; physical pointer/drop/keyboard, VoiceOver and valid
+live playback acceptance remain pending. The running app and Final Cut were not
+replaced or launched during this increment. The preceding full-engine checkpoint
+passed **787 tests**; native core passed **59 routine tests**, with four opt-ins
+skipped. These earlier broader checks precede the latest 93-test CLI increment.
 
 Verified locally on macOS 26.6.2 with Xcode 27.0:
 

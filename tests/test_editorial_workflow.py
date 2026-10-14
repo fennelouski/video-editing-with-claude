@@ -64,6 +64,118 @@ def test_exact_source_trace_and_exact_byte_identity(sources, script):
     assert json.loads(json.dumps(result.to_dict())) == result.to_dict()
 
 
+def test_script_duration_is_conservative_and_does_not_invent_padding(sources, script):
+    validated = E.validate_script(script, sources)
+    projection = E.script_duration_projection(validated, sources, end_card_seconds=10)
+    assert projection['projection_only'] and not projection['source_audio_boundaries_verified']
+    assert projection['invented_nonverbal_seconds'] == 0
+    assert projection['finished_estimate_seconds'] < 13
+    with pytest.raises(E.EditorialError, match='below the 480'):
+        E.check_script_duration(projection, 480)
+    E.check_script_duration(projection, 8)
+    with pytest.raises(E.EditorialError, match='exact reviewed source'):
+        E.script_duration_projection(validated, [E.TranscriptSource('camera-a', E.sha256(b'changed'), 5, sources[0].words), sources[1]])
+
+
+def test_stretched_asr_token_cannot_make_a_short_script_pass_eight_minutes():
+    source = E.TranscriptSource('synthetic-a', E.sha256(b'synthetic'), 900, [{'word':'It','start':0,'end':700}])
+    script = E.validate_script({'sections':[{'segments':[{'source_id':source.source_id,'source_sha256':source.source_sha256,'first_word':0,'last_word':0}]}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection['source_span_seconds'] == 700
+    assert projection['finished_estimate_seconds'] == 10.45
+    with pytest.raises(E.EditorialError, match='Duration review required'):
+        E.check_script_duration(projection, 480)
+
+
+def test_split_contiguous_words_and_section_joins_cannot_invent_duration():
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 331, [
+        {"word": "dough", "start": i * .3, "end": (i + 1) * .3} for i in range(1100)
+    ])
+    segments = [{"source_id": source.source_id, "source_sha256": source.source_sha256,
+                 "first_word": i, "last_word": i} for i in range(1100)]
+    split = E.validate_script({"sections": [{"segments": segments[:550]}, {"segments": segments[550:]}]}, [source])
+    joined = E.validate_script({"sections": [{"segments": [
+        {**segments[0], "last_word": 1099}
+    ]}]}, [source])
+    projection = E.script_duration_projection(split, [source])
+    assert projection["source_span_seconds"] == pytest.approx(330)
+    assert projection["finished_estimate_seconds"] == pytest.approx(340)
+    assert projection["finished_estimate_seconds"] == pytest.approx(E.script_duration_projection(joined, [source])["finished_estimate_seconds"])
+    assert projection["unverified_pause_seconds_credited"] == 0
+    with pytest.raises(E.EditorialError, match="below the 480"):
+        E.check_script_duration(projection, 480)
+
+
+def test_overlapping_asr_tokens_cannot_inflate_articulation_or_pass_minimum():
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 2, [
+        {"word": "dough", "start": i * .001, "end": i * .001 + .45} for i in range(1100)
+    ])
+    script = E.validate_script({"sections": [{"segments": [
+        {"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 1099}
+    ]}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection["source_span_seconds"] == pytest.approx(1.549)
+    assert projection["repaired_narration_estimate_seconds"] == pytest.approx(1.549)
+    with pytest.raises(E.EditorialError, match="below the 480"):
+        E.check_script_duration(projection, 480)
+
+
+@pytest.mark.parametrize("pause", [.1, 3])
+def test_interword_pauses_are_not_credited_without_audio_evidence(pause):
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 5, [
+        {"word": "Make", "start": .1, "end": .5},
+        {"word": "pizza.", "start": .5 + pause, "end": .9 + pause},
+    ])
+    script = E.validate_script({"sections": [{"segments": [
+        {"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 1}
+    ]}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection["repaired_narration_estimate_seconds"] == pytest.approx(.8)
+    assert projection["finished_estimate_seconds"] == pytest.approx(10.8)
+    assert projection["source_span_seconds"] == pytest.approx(.8 + pause)
+
+
+def test_overlapping_stretched_tokens_retain_caps_without_bridging_a_gap():
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 900, [
+        {"word": "It", "start": 0, "end": 700},
+        {"word": "is", "start": .1, "end": 700.2},
+        {"word": "done", "start": 800, "end": 800.3},
+    ])
+    script = E.validate_script({"sections": [{"segments": [
+        {"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 2}
+    ]}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection["source_span_seconds"] == pytest.approx(800.3)
+    assert projection["repaired_narration_estimate_seconds"] == pytest.approx(.85)
+    with pytest.raises(E.EditorialError, match="below the 480"):
+        E.check_script_duration(projection, 480)
+
+
+def test_duration_projection_binds_unused_and_silent_catalog_sources(sources, script):
+    silent = E.TranscriptSource("silent-broll", E.sha256(b"silent"), 12, [])
+    validated = E.validate_script(script, sources + [silent])
+    changed = E.TranscriptSource(silent.source_id, silent.source_sha256, 13, [])
+    with pytest.raises(E.EditorialError, match="exact reviewed source catalog"):
+        E.script_duration_projection(validated, sources + [changed])
+    changed_words = E.TranscriptSource(sources[0].source_id, sources[0].source_sha256, sources[0].duration,
+                                       [{**word.to_dict(), "word": "Changed"} for word in sources[0].words])
+    with pytest.raises(E.EditorialError, match="exact reviewed source catalog"):
+        E.script_duration_projection(validated, [changed_words, sources[1], silent])
+
+
+def test_sufficient_actual_word_articulation_passes_planning_minimum():
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 500, [
+        {"word": "dough", "start": i * .5, "end": (i + 1) * .5} for i in range(1000)
+    ])
+    script = E.validate_script({"sections": [{"segments": [
+        {"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 999}
+    ]}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection["finished_estimate_seconds"] == pytest.approx(510)
+    E.check_script_duration(projection, 480)
+    assert projection["projection_only"] and projection["final_rendered_file_duration_check_required"]
+
+
 def test_editorial_metadata_is_preserved_but_not_spoken(sources, script):
     script.update(purpose="A concise demonstration", join_notes=["Keep the breath"], notes="Unspoken editorial notes")
     script["sections"][0]["purpose"] = "Set up the action"

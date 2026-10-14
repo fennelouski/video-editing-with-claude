@@ -24,13 +24,27 @@ pipeline; a native script-review screen and live GUI provider transport remain p
 - [x] Enforce order: transcripts → approved script → picture/dialogue → music →
   graphics → final. Horizontal final requires at least ten seconds after dialogue;
   vertical delivery is exempt.
+- [x] Apply an explicit latest duration brief before paired review. A conservative
+  source-word planning estimate counts overlapping articulation once and excludes
+  all unverified gaps, joins and suspiciously stretched alignment tokens. It
+  cannot invent nonverbal padding. This is an
+  estimate, not proof of delivered length. Native project duration bounds and the
+  actual encoded output remain the final duration authority.
+- [x] Record changing revision goals separately without replacing source inputs or
+  resetting actual rounds. Immutable hash-linked directive records retain the
+  effective brief even when a resume omits the directive option. A new brief cannot
+  inherit an older approval. Writer and reviewer receive the latest brief and all
+  carried unresolved issues; original receipts remain retained.
 - [x] Offer a bounded, transcript-only existing-Claude-Pro CLI adapter in
-  `scripts/claude_script_review.py`. It enables only the client's JSON formatter;
-  code, file and browser tools, MCP, raw media,
+  `scripts/claude_script_review.py`. All tools are disabled; plain JSON responses
+  are validated locally. It enables no code, file or browser tools, MCP, raw media,
   persistent sessions or paid API fallback. Caller must have actual user consent
   for that transcript purpose; command-line arguments do not grant permission.
 - [x] Verify observed session IDs and completed provider results. Interrupted,
   cancelled, timed-out, denied or malformed attempts do not count as review rounds.
+- [x] Stop resumption before new provider turns if a completed writer/reviewer
+  pair has not reached the journal. Recover the original receipts first; a crash
+  between paired completion and publication cannot silently reset the round cap.
 - [x] Add project creative-reference intake for `style_guide.md` and
   `taste_principles.md`, retaining exact original bytes, SHA, role and provenance.
 - [x] Preserve distinct Library versions even when their content bytes match.
@@ -55,7 +69,8 @@ pipeline; a native script-review screen and live GUI provider transport remain p
 Synthetic tests cover source grounding, issue carry-forward, independent role
 identity, the actual round cap, human-evidence gates and stage ordering. Adapter
 tests cover malformed/missing identities, disabled paid transport variables,
-context changes and cancellation cleanup. Native reference tests cover exact-byte
+context changes, cancellation cleanup, saved minimums, prior-approval constraints
+and interruption before paired receipt publication. Native reference tests cover exact-byte
 provenance, same-content version updates, changed origins, frozen version changes,
 cleared snapshot identities, and ancestor symlink escapes.
 
@@ -76,9 +91,14 @@ Failed source validation gets at most three technical writer repairs within that
 round; those attempts are preserved and never counted as completed review rounds.
 Resumption verifies the original input identity and retains the actual ledger
 count; it cannot silently reset the ten-round limit or change the source pack.
+An explicit directive can set a minimum finished duration and target, and request
+an earned question/reveal before a natural mid-video break with payoff afterward.
+Such a note never configures an advertising platform, inserts a fake ad or gap,
+guarantees ad serving, or grants new permission to upload.
 If only actual human approval remains, it records that specific blocker. It never
 renders media or advances the picture stage itself. Failed attempts and earlier
-versions remain available for diagnosis; use a new output directory for recovery.
+versions remain available for diagnosis. Resume the original source-bound ledger;
+creating a new output directory does not authorize resetting actual review counts.
 
 Katie's creative references govern the video identity. Clauto's own app brand is
 specified separately in its design documents. Latest explicit project feedback

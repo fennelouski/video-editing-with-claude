@@ -28,7 +28,7 @@ def test_only_observed_completed_identity_is_returned_with_paid_transports_disab
         def __init__(self,args,**kwargs):captured.update({'args':args,'env':kwargs['env']});self.args=args;self.output=kwargs['stdout']
         def communicate(self,prompt,timeout):
             session=self.args[self.args.index('--session-id')+1]
-            event={'type':'result','subtype':'success','is_error':False,'session_id':session,'permission_denials':[],'uuid':'synthetic-provider-receipt','structured_output':{'synthetic':True}}
+            event={'type':'result','subtype':'success','is_error':False,'session_id':session,'permission_denials':[],'uuid':'synthetic-provider-receipt','result':'{"synthetic":true}'}
             self.output.write((json.dumps(event)+'\n').encode());self.output.flush()
     monkeypatch.setenv('ANTHROPIC_API_KEY','synthetic-never-send')
     monkeypatch.setenv('CLAUDE_CODE_USE_BEDROCK','1')
@@ -39,7 +39,7 @@ def test_only_observed_completed_identity_is_returned_with_paid_transports_disab
     assert receipt['session_id']==receipt['observed_session_id']
     assert 'ANTHROPIC_API_KEY' not in captured['env'] and 'CLAUDE_CODE_USE_BEDROCK' not in captured['env']
     args=captured['args']
-    assert args[args.index('--tools')+1]=='StructuredOutput'
+    assert args[args.index('--tools')+1]=='' and '--json-schema' not in args
     assert args[args.index('--mcp-config')+1]=='{"mcpServers":{}}'
     assert '--safe-mode' in args and '--no-chrome' in args and '--no-session-persistence' in args
 
@@ -137,3 +137,134 @@ def test_invalid_writer_draft_is_repaired_without_counting_a_review_round(tmp_pa
     state=R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),tmp_path/'output',1)
     assert count['drafts']==2 and state['round_count']==1 and state['approved']
     assert len(list((tmp_path/'output').glob('round-*/attempt-*/VALIDATION_REFUSAL.json')))==1
+
+
+def synthetic_review_inputs(tmp_path):
+    source={'source_id':'synthetic-a','source_sha256':'a'*64,'duration':2,'words':[{'word':'Make','start':.1,'end':.4},{'word':'pizza.','start':.5,'end':1}]}
+    script={'sections':[{'segments':[{'source_id':'synthetic-a','source_sha256':'a'*64,'first_word':0,'last_word':1}]}]}
+    sources=tmp_path/'sources.json';sources.write_text(json.dumps([source]))
+    context=tmp_path/'context.json';context.write_text('{}')
+    return source,script,sources,context
+
+def completed_synthetic_receipt(number):
+    return {'session_id':f'synthetic-{number}','receipt_id':f'receipt-{number}',
+            'exit_code':0,'result_subtype':'success','is_error':False,'session_identity_verified':True,'permission_denial_count':0}
+
+def test_saved_minimum_survives_resume_without_directive(tmp_path,monkeypatch):
+    from editorial_workflow import sha256,RoundLedger
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    directive=tmp_path/'directive.json';directive.write_text('{"minimum_finished_seconds":480}')
+    output=tmp_path/'output'
+    def short_draft(cli,folder,prompt,schema,system):
+        assert folder.name=='writer-draft' and 'minimum_finished_seconds' in prompt
+        folder.mkdir();value={'script':script,'author_notes':'Synthetic.'};R.save(folder/'result.json',value)
+        return value,{'session_id':'synthetic-draft','receipt_id':'synthetic-draft-receipt'}
+    monkeypatch.setattr(R,'run_turn',short_draft)
+    with pytest.raises(EditorialError,match='Three writer drafts'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,False,directive,sha256(directive.read_bytes()))
+    with pytest.raises(EditorialError,match='Three writer drafts'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True)
+    assert RoundLedger.load(output/'ledger').summary()['round_count']==0
+    assert len(list((output/'revision-directives').iterdir()))==1
+
+def test_prior_approved_short_script_cannot_bypass_new_minimum(tmp_path,monkeypatch):
+    from editorial_workflow import sha256
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    output=tmp_path/'output';counter={'turns':0}
+    def fake(cli,folder,prompt,schema,system):
+        folder.mkdir();counter['turns']+=1
+        value={'script':script,'author_notes':'Synthetic.'} if folder.name=='writer-draft' else {'decision':'agree','script_sha256':sha256((folder.parent/'script.json').read_bytes()),'issues':[]}
+        receipt=completed_synthetic_receipt(counter['turns'])
+        R.save(folder/'result.json',value);R.save(folder/'FINISH.json',receipt)
+        return value,receipt
+    monkeypatch.setattr(R,'run_turn',fake)
+    assert R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1)['approved']
+    directive=tmp_path/'directive.json';directive.write_text('{"minimum_finished_seconds":480}')
+    with pytest.raises(EditorialError,match='below the 480'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True,directive,sha256(directive.read_bytes()))
+    with pytest.raises(EditorialError,match='below the 480'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True)
+    assert counter['turns']==3
+
+def test_unjournaled_completed_pair_stops_resume_before_new_turns(tmp_path,monkeypatch):
+    from editorial_workflow import sha256,RoundLedger
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    output=tmp_path/'output';counter={'turns':0}
+    def fake(cli,folder,prompt,schema,system):
+        folder.mkdir();counter['turns']+=1
+        receipt={'session_id':f'synthetic-{counter["turns"]}','receipt_id':f'receipt-{counter["turns"]}',
+                 'exit_code':0,'result_subtype':'success','is_error':False,'session_identity_verified':True,'permission_denial_count':0}
+        value={'script':script,'author_notes':'Synthetic.'} if folder.name=='writer-draft' else {'decision':'agree','script_sha256':sha256((folder.parent/'script.json').read_bytes()),'issues':[]}
+        R.save(folder/'result.json',value);R.save(folder/'FINISH.json',receipt)
+        return value,receipt
+    monkeypatch.setattr(R,'run_turn',fake)
+    real_append=RoundLedger.append_round
+    def interrupted(*args,**kwargs):raise InterruptedError('Synthetic interruption before append')
+    monkeypatch.setattr(RoundLedger,'append_round',interrupted)
+    with pytest.raises(InterruptedError):R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1)
+    monkeypatch.setattr(RoundLedger,'append_round',real_append)
+    with pytest.raises(EditorialError,match='completed actual provider review pair is not journaled'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True)
+    assert counter['turns']==3 and RoundLedger.load(output/'ledger').summary()['round_count']==0
+
+def test_changed_story_brief_never_inherits_prior_approval_on_later_resume(tmp_path,monkeypatch):
+    from editorial_workflow import sha256
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    output=tmp_path/'output';counter={'turns':0}
+    def fake(cli,folder,prompt,schema,system):
+        folder.mkdir();counter['turns']+=1
+        value={'script':script,'author_notes':'Synthetic.'} if folder.name=='writer-draft' else {'decision':'agree','script_sha256':sha256((folder.parent/'script.json').read_bytes()),'issues':[]}
+        receipt=completed_synthetic_receipt(counter['turns'])
+        R.save(folder/'result.json',value);R.save(folder/'FINISH.json',receipt)
+        return value,receipt
+    monkeypatch.setattr(R,'run_turn',fake)
+    assert R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1)['approved']
+    directive=tmp_path/'directive.json';directive.write_text('{"minimum_finished_seconds":1,"new_story_requirement":"An earned recorded mid-video question and payoff."}')
+    for args in [(directive,sha256(directive.read_bytes())),(None,None),(directive,sha256(directive.read_bytes()))]:
+        with pytest.raises(EditorialError,match='cannot inherit prior script approval'):
+            R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True,*args)
+    assert counter['turns']==3
+
+def test_terminal_review_stream_without_finish_receipt_blocks_resume(tmp_path,monkeypatch):
+    from editorial_workflow import sha256,RoundLedger
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    output=tmp_path/'output';counter={'turns':0}
+    def fake(cli,folder,prompt,schema,system):
+        folder.mkdir();counter['turns']+=1;receipt=completed_synthetic_receipt(counter['turns'])
+        value={'script':script,'author_notes':'Synthetic.'} if folder.name=='writer-draft' else {'decision':'agree','script_sha256':sha256((folder.parent/'script.json').read_bytes()),'issues':[]}
+        R.save(folder/'START.json',{'session_id':receipt['session_id']})
+        if folder.name=='adversarial-reviewer':
+            R.save(folder/'stream.jsonl',{'type':'result','subtype':'success','is_error':False,'session_id':receipt['session_id'],'permission_denials':[],'result':json.dumps(value)})
+            raise InterruptedError('Synthetic parent death after terminal stream, before FINISH')
+        R.save(folder/'result.json',value);R.save(folder/'FINISH.json',receipt)
+        return value,receipt
+    monkeypatch.setattr(R,'run_turn',fake)
+    with pytest.raises(InterruptedError):R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1)
+    with pytest.raises(EditorialError,match='started verdict role has no final receipt'):
+        R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),output,1,True)
+    assert counter['turns']==3 and RoundLedger.load(output/'ledger').summary()['round_count']==0
+
+@pytest.mark.parametrize('changed',[{'session_identity_verified':False},{'permission_denial_count':None},{'exit_code':None},{'status':'interrupted','result_subtype':None}])
+def test_unknown_verdict_receipt_never_implies_an_uncompleted_pair(tmp_path,changed):
+    from editorial_workflow import RoundLedger,TranscriptSource
+    source,script,sources,context=synthetic_review_inputs(tmp_path)
+    output=tmp_path/'output';output.mkdir();ledger=RoundLedger.create(output/'ledger',max_rounds=1)
+    ledger.complete_transcripts([TranscriptSource(**source)])
+    attempt=output/'round-01/attempt-1-synthetic';attempt.mkdir(parents=True)
+    for number,role in enumerate(['writer-verdict','adversarial-reviewer'],1):
+        folder=attempt/role;folder.mkdir();receipt=completed_synthetic_receipt(number)
+        R.save(folder/'FINISH.json',{**receipt,**changed} if number==2 else receipt)
+    with pytest.raises(EditorialError,match='unverified verdict role needs terminal-stream accounting'):
+        R.check_round_accounting(output,ledger)
+
+@pytest.mark.parametrize('payload',['{"decision":"agree","unexpected":true}','{"decision":"agree","decision":"revise"}','{"decision":"agree"}}'])
+def test_plain_json_requires_exact_unambiguous_schema(tmp_path,monkeypatch,payload):
+    class FakeProcess:
+        returncode=0
+        def __init__(self,args,**kwargs):self.args=args;self.output=kwargs['stdout']
+        def communicate(self,prompt,timeout):
+            event={'type':'result','subtype':'success','is_error':False,'session_id':self.args[self.args.index('--session-id')+1],'permission_denials':[],'result':payload}
+            self.output.write((json.dumps(event)+'\n').encode());self.output.flush()
+    monkeypatch.setattr(R.subprocess,'Popen',FakeProcess)
+    with pytest.raises(EditorialError):R.run_turn(tmp_path/'cli',tmp_path/'turn','Synthetic.',R.obj({'decision':{'type':'string','enum':['agree','revise']}}),'No tools.')
+    assert not (tmp_path/'turn/result.json').exists()

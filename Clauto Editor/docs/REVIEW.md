@@ -115,3 +115,20 @@ increment. It passed 185 combined Python tests, a 54-test narrow recheck and
 29 routine native workflow tests, with two opt-ins skipped. Direct native SFX
 identity/timing/hash refusal regressions were subsequently added and passed locally.
 GUI and scientific/visual acceptance remain separate and pending. The review used synthetic media only.
+
+## Script review duration and recovery checks (14 October)
+
+The independent reviewer reproduced inflated duration from overlapping ASR words
+and invented join pauses, lost minimums on resume, prior approval bypassing a new
+brief, and review pairs lost between provider completion and journal publication.
+Regression tests now cap articulation by measured interval union, retain immutable
+hash-linked revision records, persist constraint incompatibility across resumes,
+and refuse new turns until missing or unknown verdict receipts are reconciled.
+Successful provider output whose observed identity or denial metadata is unverified
+cannot silently become a failed attempt that resets accounting.
+
+Final bounded review passed **93 synthetic tests** and whitespace checks, with no
+remaining concrete blocker in the reviewed duration/adapter changes. It performed
+no provider calls, private-media access, NAS writes or GUI activity. This verifies
+the mechanism, not delivered runtime, editorial quality, scientific facts or
+authorization for an actual external provider call.

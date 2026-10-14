@@ -254,6 +254,56 @@ class ValidatedScript:
                 "unresolved_critical": [x.to_dict() for x in self.unresolved_critical]}
 
 
+def script_duration_projection(script: ValidatedScript, sources: Iterable[TranscriptSource], *, end_card_seconds: float = 10) -> dict:
+    """Conservative planning estimate, never evidence of delivered runtime.
+
+    Credit only the union of capped word articulation intervals within each
+    selected segment. ASR overlap cannot count time twice, and neither gaps
+    between words nor editorial joins prove a retained pause. Suspiciously
+    stretched tokens remain capped for planning; actual cuts still need
+    source-audio checks. No unverified pause or nonverbal padding is credited.
+    """
+    catalog = _sources(sources)
+    catalog_hash = sha256(canonical_json([catalog[key].to_dict() for key in sorted(catalog)]))
+    if script.source_catalog_sha256 != catalog_hash:
+        raise EditorialError("Duration planning requires the exact reviewed source catalog.")
+    transcript_hashes = {key: source.transcript_sha256 for key, source in catalog.items()}
+    tail = _number(end_card_seconds, "Post-talk end-card tail")
+    if tail < 0: raise EditorialError("The end-card tail cannot be negative.")
+    voice = 0.0; word_count = 0
+    for segment in script.segments:
+        source = catalog.get(segment.source_id)
+        if source is None or source.source_sha256 != segment.source_sha256 or transcript_hashes[segment.source_id] != segment.transcript_sha256:
+            raise EditorialError("Duration planning requires the exact reviewed source catalog.")
+        words = source.words[segment.first_word:segment.last_word + 1]
+        word_count += len(words)
+        # TranscriptSource orders starts, so accumulate only newly covered
+        # parts of these capped intervals. Do not bridge any intervening gap.
+        covered_until = words[0].start
+        articulation = 0.0
+        for word in words:
+            end = min(word.end, word.start + max(.45, .12 * len(word.word)))
+            if end > covered_until:
+                articulation += end - max(word.start, covered_until)
+                covered_until = end
+        voice += min(articulation, words[-1].end - words[0].start)
+    return {"schema_version": 1, "script_sha256": script.script_sha256, "selected_words": word_count,
+            "source_span_seconds": sum(s.end - s.start for s in script.segments),
+            "repaired_narration_estimate_seconds": voice, "post_talk_tail_seconds": tail,
+            "finished_estimate_seconds": voice + tail, "invented_nonverbal_seconds": 0,
+            "unverified_pause_seconds_credited": 0,
+            "projection_only": True, "source_audio_boundaries_verified": False,
+            "final_rendered_file_duration_check_required": True}
+
+
+def check_script_duration(projection: Mapping, minimum: float) -> None:
+    required = _number(minimum, "Minimum finished duration")
+    actual = _number(projection.get("finished_estimate_seconds"), "Script planning duration")
+    if required <= 0: raise EditorialError("The minimum duration must be positive.")
+    if actual < required:
+        raise EditorialError(f"Duration review required: source-word planning estimate is {actual:.3f}s, below the {required:.3f}s minimum. Select more useful complete recorded explanation/process; do not invent narration or pad dead air. The final encoded file still needs its own duration check.")
+
+
 def validate_script(script: bytes | str | Mapping, sources: Iterable[TranscriptSource] | Mapping[str, TranscriptSource]) -> ValidatedScript:
     """Derive exact source spans; validate spoken selection without inventing text."""
     catalog = _sources(sources)
