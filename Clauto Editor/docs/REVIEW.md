@@ -155,3 +155,8 @@ Independent recovery review found a symlinked round ancestor could escape the
 original output directory. Recovery, seed selection and accounting now reject
 round/attempt/role aliases before artifact reads or writes. Six synthetic
 regressions assert foreign files remain unchanged and no round is journaled.
+
+The independent reviewer reproduced all 132 focused cases after the containment
+repair and found no concrete blocker for completed revise responses with empty
+or mismatched string SHA. Missing/non-string SHA and other malformed response
+shapes remain fail-closed; this recovery does not invent completed valid verdicts.

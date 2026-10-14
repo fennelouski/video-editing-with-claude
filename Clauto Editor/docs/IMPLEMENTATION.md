@@ -104,8 +104,8 @@ eight-minute articulation prerequisite: a protected duration-evidence issue lets
 source-valid drafts reach real review while keeping production blocked. Saved
 revision briefs survive resume; an older approval cannot
 inherit new constraints. Completed pairs are reconciled from original terminal,
-prompt and script evidence before more calls. A provider revision with a missing
-or wrong hash can count only as an explicitly input-bound refusal, carrying a
+prompt and script evidence before more calls. A provider revision with an empty
+or mismatched string hash can count only as an explicitly input-bound refusal, carrying a
 protected critical identity issue; its original critique cannot close issues or
 approve. An unbound agreement is rejected. Missing verdict receipts and unknown
 receipt metadata stop before further provider calls. Larger prior source-valid

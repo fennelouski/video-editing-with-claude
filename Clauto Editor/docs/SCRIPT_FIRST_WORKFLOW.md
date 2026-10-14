@@ -49,7 +49,7 @@ pipeline; a native script-review screen and live GUI provider transport remain p
 - [x] Stop resumption before new provider turns if a completed writer/reviewer
   pair has not reached the journal. Recover the original receipts first; a crash
   between paired completion and publication cannot silently reset the round cap.
-- [x] Recover a completed rejection with missing/wrong provider script SHA only
+- [x] Recover a completed rejection with empty/mismatched string script SHA only
   as a distinct input-bound refusal. Original terminal/result bytes, session and
   receipt remain intact. Both START/FINISH prompt hashes and delivered script
   bytes must match; original unbound issue resolutions never apply. Its protected
