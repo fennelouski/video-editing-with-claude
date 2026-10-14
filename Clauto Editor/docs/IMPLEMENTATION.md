@@ -72,6 +72,8 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M3 folder intake and explicit group drop | Implemented | References supported files individually; no linked-directory discovery assumption |
 | M3 aspect/model project preferences | Implemented | Manifest + paths.json persist settings |
 | M3 script approval and explicit selection | Implemented | Brief text becomes project-owned script.md; a run pins its snapshot instead of selecting an older alphabetical draft |
+| M3 project creative references | Implemented, bounded local acceptance | Exact-byte style/taste documents retain role, SHA and Library provenance; native intake, immutable version copies, legacy sidecar recovery and frozen run snapshots tested. Reference documents do not enter narration discovery. |
+| Script-first independent review and stage ordering | Implemented in engine/CLI, native UI pending | Source-index/script-SHA ledger, observed independent Pro session receipts, unresolved-issue carry-forward, human-evidence gate and ten actual round limit. NAS exclusive record publication/reload/collision tested with synthetic input. See SCRIPT_FIRST_WORKFLOW.md. |
 | M3 docx reading/summary and Replace | Pending | DOCX intake and engine comments parsing are preserved; GUI preview/summary/replace are absent |
 | Projects duplicate/archive/thumbnails | Pending | Create, list, open and recent-project restore implemented |
 | M4 local first-cut orchestration | Implemented, synthetic acceptance passed | Actual cached large-v3 transcription/read-back, stages 1–3 pause, explicit plan approval, strict asset gate, alpha rendering, captions and saved version tested on NAS |
