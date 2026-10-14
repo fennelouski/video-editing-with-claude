@@ -9,7 +9,7 @@ let package = Package(
     products: [.library(name: "ClautoCore", targets: ["ClautoCore"])],
     targets: [
         .target(name: "ClautoCore", path: "Clauto Editor/Clauto Editor", exclude: ["Views", "ContentView.swift", "Clauto_EditorApp.swift", "Assets.xcassets", "Services/EditorStore.swift", "Services/Updater.swift"],
-                sources: ["Models/Project.swift", "Services/ProcessRunner.swift", "Services/ProjectRepository.swift", "Services/SetupService.swift", "Services/WorkflowRepository.swift", "Services/PipelineService.swift", "Services/HandoffExportService.swift", "Services/ClaudeSession.swift", "Services/DerivativeService.swift"]),
+                sources: ["Models/Project.swift", "Models/TranscriptReview.swift", "Services/TranscriptReviewRepository.swift", "Services/TranscriptReviewController.swift", "Services/ProcessRunner.swift", "Services/ProjectRepository.swift", "Services/SetupService.swift", "Services/WorkflowRepository.swift", "Services/PipelineService.swift", "Services/HandoffExportService.swift", "Services/ClaudeSession.swift", "Services/DerivativeService.swift"]),
         .testTarget(name: "ClautoCoreTests", dependencies: ["ClautoCore"], path: "Clauto Editor/Clauto EditorTests")
     ],
     swiftLanguageModes: [.v5]
