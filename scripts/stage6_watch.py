@@ -391,7 +391,7 @@ def append_to_style_guide(report: Report) -> int:
     """
     if not report.fails:
         return 0
-    sg = C.STYLE_GUIDE
+    sg = C.correction_log_path(create=True)
     if not sg.exists():
         return 0
     text = sg.read_text()

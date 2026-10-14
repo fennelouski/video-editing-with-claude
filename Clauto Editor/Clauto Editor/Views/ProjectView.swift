@@ -167,7 +167,7 @@ private struct FilesView: View {
                             }.disabled(store.working || store.runningProjectID == project.id)
                                 .accessibilityLabel("Choose files for \(group.rawValue.lowercased())")
                                 .accessibilityIdentifier("chooseGroup\(group.rawValue)")
-                            let files = project.manifest.files.filter { $0.group == group }
+                            let files = project.manifest.files.filter { $0.displayedGroup == group }
                             if files.isEmpty { Text("Drop \(group.rawValue.lowercased()) here, or use Add Files.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(12) }
                             ForEach(files) { file in fileRow(file) }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(8)

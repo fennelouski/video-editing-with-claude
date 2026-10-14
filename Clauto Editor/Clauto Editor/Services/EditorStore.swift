@@ -91,7 +91,18 @@ final class EditorStore {
     func intake(_ urls: [URL], group: FileGroup? = nil, copy: Bool = false) async {
         guard let project = selected, !working, runningProjectID != project.id else { return }
         working = true; defer { working = false }
-        do { update(try await repository.add(urls, to: project, group: group, copy: copy)) }
+        do {
+            let referenceURLs = urls.filter { ["style_guide.md", "taste_principles.md"].contains($0.lastPathComponent.lowercased()) && (group == nil || group == .creativeReferences) }
+            guard group != .creativeReferences || referenceURLs.count == urls.count else {
+                throw WorkflowFailure.invalid("Choose style_guide.md and taste_principles.md for the project's creative references.")
+            }
+            let requests = try referenceURLs.map(CreativeReferenceImport.local)
+            let otherURLs = urls.filter { !referenceURLs.contains($0) }
+            var next = project
+            if !otherURLs.isEmpty { next = try await repository.add(otherURLs, to: next, group: group, copy: copy) }
+            if !requests.isEmpty { next = try await repository.addCreativeReferences(requests, to: next) }
+            update(next)
+        }
         catch { notice = error.localizedDescription }
     }
 

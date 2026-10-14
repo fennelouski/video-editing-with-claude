@@ -16,7 +16,13 @@ struct Clauto_EditorApp: App {
         WindowGroup {
             ContentView(store: store)
                 .frame(minWidth: 900, minHeight: 640)
-                .task { await store.restore() }
+                .task {
+                    if let path = ProcessInfo.processInfo.environment["CLAUTO_OPEN_PROJECT"] {
+                        await store.open(URL(fileURLWithPath: path, isDirectory: true))
+                    } else {
+                        await store.restore()
+                    }
+                }
         }
         .commands {
             CommandGroup(after: .appInfo) {

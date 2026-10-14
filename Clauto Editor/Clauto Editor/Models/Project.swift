@@ -1,7 +1,8 @@
 import Foundation
+import CryptoKit
 
 enum FileGroup: String, Codable, CaseIterable, Identifiable, Sendable {
-    case footage = "Footage", audio = "Audio", music = "Music", graphics = "Graphics", scripts = "Scripts", other = "Other"
+    case footage = "Footage", audio = "Audio", music = "Music", graphics = "Graphics", scripts = "Scripts", creativeReferences = "Creative references", other = "Other"
     var id: String { rawValue }
     var folder: String {
         switch self {
@@ -10,6 +11,7 @@ enum FileGroup: String, Codable, CaseIterable, Identifiable, Sendable {
         case .music: "assets/music"
         case .graphics: "assets/graphics"
         case .scripts: "script"
+        case .creativeReferences: "notes/creative-references"
         case .other: "notes"
         }
     }
@@ -32,6 +34,8 @@ struct ProjectFile: Codable, Identifiable, Hashable, Sendable {
     var originalPath: String
     var copied: Bool
     var needsRole: Bool
+    var creativeReferenceRole: CreativeReference.Role? = nil
+    var displayedGroup: FileGroup { creativeReferenceRole == nil ? group : .creativeReferences }
 }
 
 struct ProjectManifest: Codable, Identifiable, Sendable {
@@ -48,7 +52,44 @@ struct ProjectManifest: Codable, Identifiable, Sendable {
     var archived = false
     var durationBounds: VideoDurationBounds? = nil
     var exportResolution: ExportResolution? = nil
+    var creativeReferences: [CreativeReference]? = nil
     var outputResolution: ExportResolution { exportResolution ?? .fullHD }
+}
+
+struct CreativeReference: Codable, Identifiable, Equatable, Sendable {
+    enum Role: String, Codable, Hashable, Sendable { case styleGuide = "style_guide", tastePrinciples = "taste_principles" }
+    var id: UUID
+    var role: Role
+    var name: String
+    var relativePath: String
+    var sha256: String
+    var byteCount: Int
+    var provenance: Provenance
+    struct Provenance: Codable, Equatable, Sendable {
+        var libraryFileID: String?
+        var backingFileID: String?
+        var version: Int?
+        var originalPath: String
+    }
+}
+
+struct CreativeReferenceImport: Sendable {
+    var source: URL
+    var role: CreativeReference.Role
+    var expectedSHA256: String
+    var provenance: CreativeReference.Provenance
+    static func local(_ source: URL) throws -> Self {
+        let role: CreativeReference.Role
+        switch source.lastPathComponent.lowercased() {
+        case "style_guide.md": role = .styleGuide
+        case "taste_principles.md": role = .tastePrinciples
+        default: throw WorkflowFailure.invalid("Choose style_guide.md or taste_principles.md for the project's creative references.")
+        }
+        let data = try Data(contentsOf: source)
+        return .init(source: source, role: role,
+            expectedSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+            provenance: .init(libraryFileID: nil, backingFileID: nil, version: nil, originalPath: source.path))
+    }
 }
 
 enum ExportResolution: String, Codable, CaseIterable, Identifiable, Sendable {

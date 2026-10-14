@@ -68,8 +68,33 @@ GRAPHICS = BUILD / "graphics"
 REVIEW = BUILD / "review"
 EXPORTS = BUILD / "exports"
 
-TASTE_PRINCIPLES = ROOT / "taste_principles.md"
-STYLE_GUIDE = ROOT / "style_guide.md"
+def _creative_reference(key: str) -> Path:
+    """Use a run's exact project reference; never silently fall back if supplied."""
+    value = _PATH_SETTINGS.get(key)
+    if not value:
+        return ROOT / (key + ".md")
+    import hashlib
+    chosen = Path(value).expanduser().resolve()
+    expected = _PATH_SETTINGS.get(key + "_sha256")
+    if not chosen.is_file() or not expected or hashlib.sha256(chosen.read_bytes()).hexdigest() != expected:
+        raise ValueError(f"{key} creative reference is missing or changed; start a new run with the intended version")
+    return chosen
+
+
+TASTE_PRINCIPLES = _creative_reference("taste_principles")
+STYLE_GUIDE = _creative_reference("style_guide")
+
+
+def correction_log_path(*, create: bool = False) -> Path:
+    """Generated corrections never rewrite a hash-pinned creative reference."""
+    if not _PATH_SETTINGS.get("style_guide"):
+        return STYLE_GUIDE  # Preserve the existing engine-owned correction workflow.
+    path = BUILD / "creative-corrections.md"
+    if create and not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write("# Generated creative corrections\n\nOriginal project references remain unchanged.\n\n<!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->\n")
+    return path
 
 ALL_BUILD_DIRS = [TRANSCRIPTS, ROUGHCUT, PLAN_DIR, FRAMES, GRAPHICS, REVIEW, EXPORTS]
 

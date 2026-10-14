@@ -102,6 +102,11 @@ def load(path: Path | None = None) -> list[Correction]:
     indistinguishable from one that does until someone reads it, and the whole point of the
     file is that the pipeline reads it instead.
     """
+    if path is None:
+        log = C.correction_log_path()
+        if log != C.STYLE_GUIDE:
+            # Both original rules and this run's correction overlay remain binding.
+            return load(C.STYLE_GUIDE) + load(log)
     path = path or C.STYLE_GUIDE
     if not path.exists():
         return []

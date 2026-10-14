@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 actor ProjectRepository {
     private let manager = FileManager.default
@@ -69,10 +70,11 @@ actor ProjectRepository {
 
     func open(_ folder: URL) throws -> Project {
         try Self.validateDrive(folder)
-        let manifest = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: folder.appendingPathComponent("clauto-project.json")))
+        var manifest = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: folder.appendingPathComponent("clauto-project.json")))
         guard manifest.schemaVersion == 1 else { throw ProjectFailure.invalidProject }
         try manifest.durationBounds?.validate()
         for file in manifest.files { _ = try intakeURL(file, folder: folder) }
+        manifest = try ProjectRepositoryReferenceSnapshot.recover(manifest, in: folder)
         let markdown = try String(contentsOf: folder.appendingPathComponent("brief.md"), encoding: .utf8)
         return Project(manifest: manifest, folder: folder, brief: Brief(markdown: markdown))
     }
@@ -208,6 +210,51 @@ actor ProjectRepository {
         try text.write(to: folder.appendingPathComponent("script.md"), atomically: true, encoding: .utf8)
     }
 
+    /// Keep Katie's creative source documents out of script discovery and preserve
+    /// each attached version as original bytes. These documents grant no permissions.
+    func addCreativeReferences(_ requests: [CreativeReferenceImport], to project: Project) throws -> Project {
+        var next = try open(project.folder)
+        var created: [URL] = []
+        do {
+            for request in requests {
+                let data = try Data(contentsOf: request.source)
+                let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                guard !data.isEmpty, data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil,
+                      hash == request.expectedSHA256,
+                      URL(fileURLWithPath: request.provenance.originalPath).standardizedFileURL == request.source.standardizedFileURL else {
+                    throw WorkflowFailure.invalid("The creative reference changed or is not readable UTF-8. Import its verified original version.")
+                }
+                if next.manifest.creativeReferences?.contains(where: { $0.role == request.role && $0.sha256 == hash && $0.provenance == request.provenance && $0.name == request.source.lastPathComponent }) == true { continue }
+                let id = UUID(), name = request.source.lastPathComponent
+                let relative = "notes/creative-references/\(id.uuidString)/\(name)"
+                // Keep the serialized group readable by an already-running older
+                // editor; the optional role supplies the new display category.
+                let file = ProjectFile(id: id, name: name, group: .other, relativePath: relative,
+                                       originalPath: request.source.path, copied: true, needsRole: false, creativeReferenceRole: request.role)
+                let destination = try intakeURL(file, folder: project.folder)
+                try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                created.append(destination.deletingLastPathComponent())
+                try data.write(to: destination, options: .withoutOverwriting)
+                let reference = CreativeReference(id: id, role: request.role, name: name, relativePath: relative,
+                    sha256: hash, byteCount: data.count, provenance: request.provenance)
+                try encoder.encode(reference).write(to: destination.deletingLastPathComponent().appendingPathComponent("provenance.json"), options: .withoutOverwriting)
+                next.manifest.files.append(file)
+                if next.manifest.creativeReferences == nil { next.manifest.creativeReferences = [] }
+                next.manifest.creativeReferences!.append(reference)
+            }
+            next.manifest.modified = Date()
+            try saveManifest(next)
+            return next
+        } catch {
+            for folder in created { try? manager.removeItem(at: folder) }
+            throw error
+        }
+    }
+
+    func creativeReferenceContext(project: Project) throws -> [(CreativeReference, Data)] {
+        try ProjectRepositoryReferenceSnapshot.read(project)
+    }
+
     func remove(_ file: ProjectFile, from project: Project) throws -> Project {
         try Self.validateDrive(project.folder)
         var next = try open(project.folder)
@@ -223,6 +270,7 @@ actor ProjectRepository {
             try manager.moveItem(at: destination, to: saved); preserved = saved
         }
         next.manifest.files.removeAll { $0.id == file.id }; next.manifest.modified = Date()
+        next.manifest.creativeReferences?.removeAll { $0.id == file.id }
         do { try saveManifest(next) }
         catch { if let preserved { try? manager.moveItem(at: preserved, to: destination) }; throw error }
         // Remove only the reference after recording it. The target is never deleted.
@@ -233,6 +281,9 @@ actor ProjectRepository {
     }
 
     func assign(_ group: FileGroup, to file: ProjectFile, project: Project) throws -> Project {
+        guard group != .creativeReferences, file.displayedGroup != .creativeReferences else {
+            throw WorkflowFailure.invalid("Creative references keep their document roles. Import a new guide version or remove its attachment instead.")
+        }
         try Self.validateDrive(project.folder)
         var next = try open(project.folder)
         guard let index = next.manifest.files.firstIndex(where: { $0.id == file.id }) else { throw ProjectFailure.invalidProject }
@@ -252,13 +303,76 @@ actor ProjectRepository {
               !parts.contains(".."), !parts.contains("."), !parts.contains(""),
               ["footage", "assets", "script", "notes"].contains(String(parts[0])) else { throw ProjectFailure.invalidProject }
         let url = folder.appendingPathComponent(file.relativePath)
-        let parent = url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
-        let root = folder.resolvingSymlinksInPath().standardizedFileURL.path + "/"
-        guard parent.hasPrefix(root) else { throw ProjectFailure.invalidProject }
+        let base = folder.resolvingSymlinksInPath().standardizedFileURL
+        var ancestor = base
+        // Resolve each ancestor before appending an absent tail. Foundation may
+        // otherwise leave that whole tail unresolved and hide an escaped notes link.
+        for component in parts.dropLast() {
+            ancestor = ancestor.appendingPathComponent(String(component)).resolvingSymlinksInPath().standardizedFileURL
+            guard ancestor.path.hasPrefix(base.path + "/") else { throw ProjectFailure.invalidProject }
+        }
         return url
     }
 
     private func saveManifest(_ project: Project) throws {
         try encoder.encode(project.manifest).write(to: project.folder.appendingPathComponent("clauto-project.json"), options: .atomic)
+    }
+}
+
+enum ProjectRepositoryReferenceSnapshot {
+    /// Older running app versions may rewrite a manifest without optional new
+    /// fields. Recover only attachments still listed by exact ID/path, using
+    /// their original immutable sidecars; no broad document discovery occurs.
+    static func recover(_ original: ProjectManifest, in folder: URL) throws -> ProjectManifest {
+        var manifest = original
+        let decoder = JSONDecoder()
+        let base = folder.resolvingSymlinksInPath().standardizedFileURL
+        var references = manifest.creativeReferences ?? []
+        for index in manifest.files.indices {
+            let file = manifest.files[index]
+            guard file.copied, file.relativePath.hasPrefix("notes/creative-references/") else { continue }
+            let parts = file.relativePath.split(separator: "/", omittingEmptySubsequences: false)
+            guard !parts.contains(where: { ["", ".", ".."].contains(String($0)) }) else { throw ProjectFailure.invalidProject }
+            var parent = base
+            for part in parts.dropLast() {
+                parent = parent.appendingPathComponent(String(part)).resolvingSymlinksInPath().standardizedFileURL
+                guard parent.path.hasPrefix(base.path + "/") else { throw ProjectFailure.invalidProject }
+            }
+            let sidecar = parent.appendingPathComponent("provenance.json")
+            guard sidecar.resolvingSymlinksInPath().path.hasPrefix(base.path + "/") else { throw ProjectFailure.invalidProject }
+            guard FileManager.default.fileExists(atPath: sidecar.path) else { continue }
+            let saved = try decoder.decode(CreativeReference.self, from: Data(contentsOf: sidecar))
+            guard saved.id == file.id, saved.relativePath == file.relativePath else { throw ProjectFailure.invalidProject }
+            if let current = references.first(where: { $0.id == saved.id }) {
+                guard current == saved else { throw WorkflowFailure.invalid("Creative-reference metadata differs from its original provenance.") }
+            } else { references.append(saved) }
+            manifest.files[index].creativeReferenceRole = saved.role
+        }
+        manifest.creativeReferences = references.isEmpty ? nil : references
+        return manifest
+    }
+
+    static func read(_ project: Project) throws -> [(CreativeReference, Data)] {
+        try ProjectRepository.validateDrive(project.folder)
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let saved = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json")))
+        let current = try recover(saved, in: project.folder)
+        guard current.id == project.id else { throw ProjectFailure.invalidProject }
+        let base = project.folder.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        return try (current.creativeReferences ?? []).map { reference in
+            guard let file = current.files.first(where: { $0.id == reference.id }),
+                  file.displayedGroup == .creativeReferences,
+                  file.copied, file.relativePath == reference.relativePath,
+                  file.relativePath.hasPrefix("notes/creative-references/"),
+                  !file.relativePath.split(separator: "/", omittingEmptySubsequences: false).contains(where: { ["", ".", ".."].contains(String($0)) }) else { throw ProjectFailure.invalidProject }
+            let url = project.folder.appendingPathComponent(file.relativePath)
+            guard url.resolvingSymlinksInPath().standardizedFileURL.path.hasPrefix(base) else { throw ProjectFailure.invalidProject }
+            let data = try Data(contentsOf: url)
+            guard data.count == reference.byteCount, String(data: data, encoding: .utf8) != nil,
+                  SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == reference.sha256 else {
+                throw WorkflowFailure.invalid("\(reference.name) changed. Import a new reference version before using it for a cut.")
+            }
+            return (reference, data)
+        }
     }
 }

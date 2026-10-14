@@ -19,6 +19,8 @@ struct EditRun: Codable, Identifiable, Sendable {
     var aspect: String? = nil
     var whisperModel: String? = nil
     var outputSettingsSchema: Int? = nil
+    var creativeReferenceHashes: [String: String]? = nil
+    var creativeReferenceSnapshotSHA256: String? = nil
 }
 
 struct StageEventRecord: Codable, Identifiable, Sendable {
@@ -172,6 +174,33 @@ actor WorkflowRepository {
             guard sources.allSatisfy({ value in linked.contains { $0.resolvingSymlinksInPath().path == value["source"] && $0.deletingPathExtension().lastPathComponent == value["key"] } }),
                   sources.count == linked.count else { throw WorkflowFailure.invalid("The narration order changed. Start a new run with the intended clips.") }
         }
+        let snapshotURL = try safe("inputs/creative-references/provenance.json", in: run.folder)
+        if fm.fileExists(atPath: snapshotURL.path) {
+            let data = try Data(contentsOf: snapshotURL)
+            guard run.creativeReferenceSnapshotSHA256 == SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined(),
+                  settings["creative_reference_schema"] == "1" else { throw WorkflowFailure.invalid("This run's creative-reference snapshot changed or its identity was cleared.") }
+            let frozen = try decoder.decode([CreativeReference].self, from: data)
+            var hashes: [String: String] = [:]
+            for reference in frozen { hashes[reference.role.rawValue] = reference.sha256 }
+            guard hashes == (run.creativeReferenceHashes ?? [:]) else {
+                throw WorkflowFailure.invalid("This run's creative-reference identities differ from its preserved snapshot.")
+            }
+        } else if run.creativeReferenceSnapshotSHA256 != nil || settings["creative_reference_schema"] != nil {
+            throw WorkflowFailure.invalid("This run's creative-reference snapshot is missing.")
+        }
+        for key in ["style_guide", "taste_principles"] {
+            guard settings[key + "_sha256"] == run.creativeReferenceHashes?[key],
+                  (settings[key] != nil) == (run.creativeReferenceHashes?[key] != nil) else {
+                throw WorkflowFailure.invalid("This run's creative-reference identities changed. Start a new run with the intended versions.")
+            }
+            if let path = settings[key] {
+                let url = URL(fileURLWithPath: path)
+                guard url.resolvingSymlinksInPath().path.hasPrefix((try safe("inputs/creative-references", in: run.folder)).resolvingSymlinksInPath().path + "/"),
+                      settings[key + "_sha256"] == SHA256.hash(data: try Data(contentsOf: url)).map({ String(format: "%02x", $0) }).joined() else {
+                    throw WorkflowFailure.invalid("This run's creative references changed. Start a new run with the intended reference versions.")
+                }
+            }
+        }
         return settings
     }
 
@@ -222,6 +251,25 @@ actor WorkflowRepository {
         }
         paths["approved_script"] = try safe("inputs/script/" + selectedScript.lastPathComponent, in: folder).path
         try fm.copyItem(at: project.folder.appendingPathComponent("brief.md"), to: inputs.appendingPathComponent("brief.md"))
+        let references = try ProjectRepositoryReferenceSnapshot.read(project)
+        for key in ["style_guide", "taste_principles"] { paths.removeValue(forKey: key); paths.removeValue(forKey: key + "_sha256") }
+        var referenceSnapshotSHA256: String?
+        if !references.isEmpty {
+            let referenceFolder = try safe("inputs/creative-references", in: folder)
+            try fm.createDirectory(at: referenceFolder, withIntermediateDirectories: true)
+            let snapshot = try encoder.encode(references.map(\.0))
+            try snapshot.write(to: referenceFolder.appendingPathComponent("provenance.json"), options: .withoutOverwriting)
+            referenceSnapshotSHA256 = SHA256.hash(data: snapshot).map { String(format: "%02x", $0) }.joined()
+            paths["creative_reference_schema"] = "1"
+            // Last attachment of a role wins for this new run; previous versions
+            // remain retained in the project and previous run snapshots.
+            for (reference, data) in references {
+                let destination = referenceFolder.appendingPathComponent(reference.id.uuidString + "-" + reference.name)
+                try data.write(to: destination, options: .withoutOverwriting)
+                paths[reference.role.rawValue] = destination.path
+                paths[reference.role.rawValue + "_sha256"] = reference.sha256
+            }
+        }
         let narration = inputs.appendingPathComponent("footage/a-cam")
         try fm.createDirectory(at: narration, withIntermediateDirectories: true)
         for file in selected {
@@ -255,6 +303,9 @@ actor WorkflowRepository {
         run.aspect = project.manifest.aspect
         run.whisperModel = project.manifest.whisperModel
         run.outputSettingsSchema = 1
+        let referenceHashes = Dictionary(uniqueKeysWithValues: ["style_guide", "taste_principles"].compactMap { key in paths[key + "_sha256"].map { (key, $0) } })
+        run.creativeReferenceHashes = referenceHashes.isEmpty ? nil : referenceHashes
+        run.creativeReferenceSnapshotSHA256 = referenceSnapshotSHA256
         try save(run)
         prepared = true
         return run

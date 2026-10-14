@@ -337,7 +337,7 @@ def write_entries(changes: list[Change], project: str, path: Path | None = None)
     """
     if not changes:
         return 0
-    path = path or C.STYLE_GUIDE
+    path = path or C.correction_log_path(create=True)
     text = path.read_text()
     marker = "<!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->"
     if marker not in text:
