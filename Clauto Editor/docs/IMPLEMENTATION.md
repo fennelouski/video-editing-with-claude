@@ -95,11 +95,21 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 ## Verification record
 
 Latest bounded increment (14 October): source-bound duration projection and the
-CLI review adapter pass **93 synthetic tests**, independently reproduced. Planning
-time counts overlapping capped word intervals once and credits no unverified
-gaps or joins. Saved revision briefs survive resume; an older approval cannot
-inherit new constraints. Unjournaled completed pairs, missing verdict receipts
-and unknown receipt metadata stop before further provider calls. The current
+CLI review adapter pass **132 synthetic tests** in the latest focused run. The
+adapter scope repair passed95 independently reviewed cases; the projection module
+passed77 focused cases after replay protection. Planning time counts overlapping
+capped word intervals once across all reused selections of the same physical
+source and credits no unverified gaps or joins. This is a lower estimate, not an
+eight-minute articulation prerequisite: a protected duration-evidence issue lets
+source-valid drafts reach real review while keeping production blocked. Saved
+revision briefs survive resume; an older approval cannot
+inherit new constraints. Completed pairs are reconciled from original terminal,
+prompt and script evidence before more calls. A provider revision with a missing
+or wrong hash can count only as an explicitly input-bound refusal, carrying a
+protected critical identity issue; its original critique cannot close issues or
+approve. An unbound agreement is rejected. Missing verdict receipts and unknown
+receipt metadata stop before further provider calls. Larger prior source-valid
+drafts may supply unapproved revision material, never approval or extra rounds. The current
 private edit still needs actual editorial agreement, human facts and delivered
 runtime checks. No video approval follows from these tests.
 
@@ -109,7 +119,7 @@ design review after repairs; physical pointer/drop/keyboard, VoiceOver and valid
 live playback acceptance remain pending. The running app and Final Cut were not
 replaced or launched during this increment. The preceding full-engine checkpoint
 passed **787 tests**; native core passed **59 routine tests**, with four opt-ins
-skipped. These earlier broader checks precede the latest 93-test CLI increment.
+skipped. These earlier broader checks precede the latest132-test CLI increment.
 
 Verified locally on macOS 26.6.2 with Xcode 27.0:
 

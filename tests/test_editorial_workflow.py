@@ -176,6 +176,64 @@ def test_sufficient_actual_word_articulation_passes_planning_minimum():
     assert projection["projection_only"] and projection["final_rendered_file_duration_check_required"]
 
 
+def test_replayed_source_word_cannot_supply_the_minimum_deficit():
+    source = E.TranscriptSource("synthetic-a", E.sha256(b"synthetic"), 1, [
+        {"word": "dough", "start": 0, "end": .5},
+    ])
+    segment = {"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 0}
+    script = E.validate_script({"sections": [{"segments": [segment] * 500}, {"segments": [segment] * 500}]}, [source])
+    projection = E.script_duration_projection(script, [source])
+    assert projection["selected_words"] == 1000
+    assert projection["source_span_seconds"] == 500
+    assert projection["selected_articulation_seconds"] == 500
+    assert projection["replay_articulation_seconds_not_credited"] == 499.5
+    assert projection["finished_estimate_seconds"] == 10.5
+    with pytest.raises(E.EditorialError, match="below the 480"):
+        E.check_script_duration(projection, 480)
+
+
+def test_alias_source_ids_share_credit_but_distinct_physical_sources_do_not():
+    words = [{"word": "dough", "start": .1, "end": .6}]
+    original = E.TranscriptSource("original", E.sha256(b"original bytes"), 1, words)
+    alias = E.TranscriptSource("copied-file", original.source_sha256, 1, words)
+    distinct = E.TranscriptSource("different-take", E.sha256(b"different bytes"), 1, words)
+    segments = [{"source_id": source.source_id, "source_sha256": source.source_sha256, "first_word": 0, "last_word": 0}
+                for source in (original, alias, distinct)]
+    sources = [original, alias, distinct]
+    script = E.validate_script({"sections": [{"segments": segments}]}, sources)
+    projection = E.script_duration_projection(script, sources)
+    assert projection["selected_words"] == 3
+    assert projection["source_span_seconds"] == pytest.approx(1.5)
+    assert projection["selected_articulation_seconds"] == pytest.approx(1.5)
+    assert projection["repaired_narration_estimate_seconds"] == pytest.approx(1)
+    assert projection["replay_articulation_seconds_not_credited"] == pytest.approx(.5)
+    assert projection["finished_estimate_seconds"] == pytest.approx(11)
+
+
+@pytest.mark.parametrize("alias_id", [False, True])
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_partially_overlapping_segments_credit_original_time_once(alias_id, reverse_order):
+    original = E.TranscriptSource("original", E.sha256(b"original bytes"), 3, [
+        {"word": "dough", "start": i * .5, "end": (i + 1) * .5} for i in range(6)
+    ])
+    alias = E.TranscriptSource("copied-file", original.source_sha256, original.duration, original.words)
+    second_source = alias if alias_id else original
+    segments = [
+        {"source_id": original.source_id, "source_sha256": original.source_sha256, "first_word": 0, "last_word": 3},
+        {"source_id": second_source.source_id, "source_sha256": second_source.source_sha256, "first_word": 2, "last_word": 5},
+    ]
+    if reverse_order: segments.reverse()
+    sources = [original, alias]
+    script = E.validate_script({"sections": [{"segments": segments}]}, sources)
+    projection = E.script_duration_projection(script, sources)
+    assert projection["selected_words"] == 8
+    assert projection["source_span_seconds"] == 4
+    assert projection["selected_articulation_seconds"] == 4
+    assert projection["repaired_narration_estimate_seconds"] == 3
+    assert projection["replay_articulation_seconds_not_credited"] == 1
+    assert projection["finished_estimate_seconds"] == 13
+
+
 def test_editorial_metadata_is_preserved_but_not_spoken(sources, script):
     script.update(purpose="A concise demonstration", join_notes=["Keep the breath"], notes="Unspoken editorial notes")
     script["sections"][0]["purpose"] = "Set up the action"

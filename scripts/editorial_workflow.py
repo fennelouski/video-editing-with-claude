@@ -254,14 +254,25 @@ class ValidatedScript:
                 "unresolved_critical": [x.to_dict() for x in self.unresolved_critical]}
 
 
+def _interval_union_seconds(intervals: Iterable[tuple[float, float]]) -> float:
+    covered_until = -math.inf
+    portions = []
+    for start, end in sorted(intervals):
+        if end > covered_until:
+            portions.append(end - max(start, covered_until))
+            covered_until = end
+    return math.fsum(portions)
+
+
 def script_duration_projection(script: ValidatedScript, sources: Iterable[TranscriptSource], *, end_card_seconds: float = 10) -> dict:
     """Conservative planning estimate, never evidence of delivered runtime.
 
-    Credit only the union of capped word articulation intervals within each
-    selected segment. ASR overlap cannot count time twice, and neither gaps
-    between words nor editorial joins prove a retained pause. Suspiciously
-    stretched tokens remain capped for planning; actual cuts still need
-    source-audio checks. No unverified pause or nonverbal padding is credited.
+    Credit capped word articulation once per physical source SHA, including
+    across overlapping/replayed segments and alias source IDs. Raw selected
+    word/span metrics still include every editorial occurrence. ASR overlap
+    cannot count time twice, and neither gaps between words nor editorial joins
+    prove a retained pause. Suspiciously stretched tokens remain capped; actual
+    cuts still need source-audio checks. No unverified padding is credited.
     """
     catalog = _sources(sources)
     catalog_hash = sha256(canonical_json([catalog[key].to_dict() for key in sorted(catalog)]))
@@ -270,26 +281,27 @@ def script_duration_projection(script: ValidatedScript, sources: Iterable[Transc
     transcript_hashes = {key: source.transcript_sha256 for key, source in catalog.items()}
     tail = _number(end_card_seconds, "Post-talk end-card tail")
     if tail < 0: raise EditorialError("The end-card tail cannot be negative.")
-    voice = 0.0; word_count = 0
+    word_count = 0
+    selected_articulation = []
+    physical_source_intervals = {}
     for segment in script.segments:
         source = catalog.get(segment.source_id)
         if source is None or source.source_sha256 != segment.source_sha256 or transcript_hashes[segment.source_id] != segment.transcript_sha256:
             raise EditorialError("Duration planning requires the exact reviewed source catalog.")
         words = source.words[segment.first_word:segment.last_word + 1]
         word_count += len(words)
-        # TranscriptSource orders starts, so accumulate only newly covered
-        # parts of these capped intervals. Do not bridge any intervening gap.
-        covered_until = words[0].start
-        articulation = 0.0
-        for word in words:
-            end = min(word.end, word.start + max(.45, .12 * len(word.word)))
-            if end > covered_until:
-                articulation += end - max(word.start, covered_until)
-                covered_until = end
-        voice += min(articulation, words[-1].end - words[0].start)
+        intervals = [(word.start, min(word.end, word.start + max(.45, .12 * len(word.word)))) for word in words]
+        selected_articulation.append(min(_interval_union_seconds(intervals), words[-1].end - words[0].start))
+        # Editorial order need not follow source time. Union all selected
+        # intervals using original time and physical identity, never alias ID.
+        physical_source_intervals.setdefault(source.source_sha256, []).extend(intervals)
+    selected_voice = math.fsum(selected_articulation)
+    voice = math.fsum(_interval_union_seconds(intervals) for intervals in physical_source_intervals.values())
     return {"schema_version": 1, "script_sha256": script.script_sha256, "selected_words": word_count,
             "source_span_seconds": sum(s.end - s.start for s in script.segments),
+            "selected_articulation_seconds": selected_voice,
             "repaired_narration_estimate_seconds": voice, "post_talk_tail_seconds": tail,
+            "replay_articulation_seconds_not_credited": max(0.0, selected_voice - voice),
             "finished_estimate_seconds": voice + tail, "invented_nonverbal_seconds": 0,
             "unverified_pause_seconds_credited": 0,
             "projection_only": True, "source_audio_boundaries_verified": False,
@@ -349,6 +361,9 @@ def validate_script(script: bytes | str | Mapping, sources: Iterable[TranscriptS
     return ValidatedScript(raw, sha256(raw), catalog_hash, tuple(result), issues)
 
 
+INPUT_BINDING_ISSUE = "clauto-review-input-binding-required"
+
+
 @dataclass(frozen=True)
 class ReviewReceipt:
     session_id: str
@@ -361,11 +376,22 @@ class ReviewReceipt:
             if value != value.strip() or value.strip().lower() in {"unknown", "unreviewed", "pending", "placeholder"}:
                 raise EditorialError(f"Supply the {label} from a completed actual session.")
         data, raw = _json(self.artifact_json)
-        _object(data, {"decision", "script_sha256", "issues"}, {"decision", "script_sha256", "issues"}, "Completed review verdict")
+        _object(data, {"decision", "script_sha256", "issues", "input_bound_provider_refusal"}, {"decision", "script_sha256", "issues"}, "Completed review verdict")
         if data["decision"] not in ("agree", "revise"):
             raise EditorialError("A completed verdict must explicitly say agree or revise; partial/failed streams cannot approve.")
         _hash(data["script_sha256"], "Explicit reviewed script hash")
         _issues(data["issues"], "review")
+        if "input_bound_provider_refusal" in data:
+            binding=data["input_bound_provider_refusal"]
+            keys={"original_artifact_json","original_artifact_sha256","input_prompt_sha256","disposition"}
+            _object(binding,keys,keys,"Input-bound provider refusal")
+            original,original_raw=_json(binding["original_artifact_json"])
+            if sha256(original_raw)!=binding["original_artifact_sha256"]:raise EditorialError("The original unverified refusal artifact changed.")
+            _hash(binding["input_prompt_sha256"],"Delivered input prompt hash")
+            if binding["disposition"]!="input-bound-refusal-not-model-identity-confirmation" or data["decision"]!="revise" or original.get("decision")!="revise" or original.get("script_sha256")==data["script_sha256"]:
+                raise EditorialError("Input-bound refusals cannot approve or replace an already bound verdict.")
+            expected=[{"id":INPUT_BINDING_ISSUE,"description":"The provider requested revision but did not confirm the supplied script identity. Its original critique remains diagnostic; a later verified exact-SHA verdict is required.","severity":"critical","status":"open"}]
+            if data["issues"]!=expected:raise EditorialError("An input-bound refusal must retain only its protected critical binding issue.")
         object.__setattr__(self, "artifact_json", raw)
 
     @classmethod
@@ -380,6 +406,10 @@ class ReviewReceipt:
     @property
     def artifact_sha256(self) -> str:
         return sha256(self.artifact_json)
+
+    @property
+    def is_input_bound_refusal(self) -> bool:
+        return "input_bound_provider_refusal" in self.verdict
 
     @property
     def issues(self) -> tuple[Issue, ...]:
@@ -672,6 +702,11 @@ class RoundLedger:
             if not isinstance(payload["human_fact_approvals"], list):
                 raise EditorialError("Separate human approval evidence must be a list of trusted-boundary receipts.")
             issue_groups = [("script", script.issues), ("writer", writer.issues), ("reviewer", reviewer.issues)]
+            # Only a later exact-SHA provider receipt closes a host binding
+            # refusal. Unbound provider issue resolutions are never applied.
+            for origin, receipt in (("writer", writer), ("reviewer", reviewer)):
+                if not receipt.is_input_bound_refusal:
+                    state.unresolved.pop((origin, "review", INPUT_BINDING_ISSUE), None)
             fact_ids = {x.id for _, issues in issue_groups for x in issues if x.category == "fact_flags" or x.resolved_by == "human"}
             fact_ids.update(x["id"] for x in state.unresolved.values() if x.get("awaiting_human_approval"))
             for entry in payload["human_fact_approvals"]:
@@ -686,6 +721,9 @@ class RoundLedger:
             # defect. Its same-role, same-ID resolution must say what changed.
             for origin, issues in issue_groups:
                 for issue in issues:
+                    if origin in {"writer", "reviewer"} and issue.id == INPUT_BINDING_ISSUE:
+                        if not (writer if origin == "writer" else reviewer).is_input_bound_refusal:
+                            continue
                     key = (origin, issue.category, issue.id)
                     needs_human = (issue.category == "fact_flags" or issue.resolved_by == "human"
                                    or state.unresolved.get(key, {}).get("awaiting_human_approval", False))

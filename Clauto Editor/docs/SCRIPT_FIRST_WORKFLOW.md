@@ -24,12 +24,16 @@ pipeline; a native script-review screen and live GUI provider transport remain p
 - [x] Enforce order: transcripts → approved script → picture/dialogue → music →
   graphics → final. Horizontal final requires at least ten seconds after dialogue;
   vertical delivery is exempt.
-- [x] Apply an explicit latest duration brief before paired review. A conservative
+- [x] Apply an explicit latest finished-duration brief during paired review. A conservative
   source-word planning estimate counts overlapping articulation once and excludes
   all unverified gaps, joins and suspiciously stretched alignment tokens. It
-  cannot invent nonverbal padding. This is an
-  estimate, not proof of delivered length. Native project duration bounds and the
-  actual encoded output remain the final duration authority.
+  cannot invent nonverbal padding. This lower estimate does not prove that useful
+  recorded process coverage or verified natural timing cannot satisfy the goal.
+  A host-owned critical duration-evidence issue blocks production when evidence
+  is missing; models cannot remove it by prose or omission. Source-valid drafts
+  still reach actual writer/reviewer sessions. Native project duration bounds,
+  assembled timeline and the actual decoded/ffprobed export remain the final
+  duration authority. B-roll overlays add zero runtime.
 - [x] Record changing revision goals separately without replacing source inputs or
   resetting actual rounds. Immutable hash-linked directive records retain the
   effective brief even when a resume omits the directive option. A new brief cannot
@@ -45,6 +49,14 @@ pipeline; a native script-review screen and live GUI provider transport remain p
 - [x] Stop resumption before new provider turns if a completed writer/reviewer
   pair has not reached the journal. Recover the original receipts first; a crash
   between paired completion and publication cannot silently reset the round cap.
+- [x] Recover a completed rejection with missing/wrong provider script SHA only
+  as a distinct input-bound refusal. Original terminal/result bytes, session and
+  receipt remain intact. Both START/FINISH prompt hashes and delivered script
+  bytes must match; original unbound issue resolutions never apply. Its protected
+  critical identity marker closes only after a later exact-SHA provider receipt.
+  Unbound agreement is refused, and the recovered rejection consumes a round.
+- [x] Supply larger prior source-valid writer drafts as explicitly unapproved
+  revision material, with original provider result provenance and no round credit.
 - [x] Add project creative-reference intake for `style_guide.md` and
   `taste_principles.md`, retaining exact original bytes, SHA, role and provenance.
 - [x] Preserve distinct Library versions even when their content bytes match.
@@ -95,7 +107,11 @@ An explicit directive can set a minimum finished duration and target, and reques
 an earned question/reveal before a natural mid-video break with payoff afterward.
 Such a note never configures an advertising platform, inserts a fake ad or gap,
 guarantees ad serving, or grants new permission to upload.
-If only actual human approval remains, it records that specific blocker. It never
+If both agree editorially and only actual human or local duration evidence remains,
+it records editorial consensus with production blocked instead of burning rounds
+to force extra talk. The pure CLI has no external process-timing evidence intake
+yet; such source-bound useful inserts require local verification, never invented
+time. It never
 renders media or advances the picture stage itself. Failed attempts and earlier
 versions remain available for diagnosis. Resume the original source-bound ledger;
 creating a new output directory does not authorize resetting actual review counts.

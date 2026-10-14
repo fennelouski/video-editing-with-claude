@@ -132,3 +132,26 @@ remaining concrete blocker in the reviewed duration/adapter changes. It performe
 no provider calls, private-media access, NAS writes or GUI activity. This verifies
 the mechanism, not delivered runtime, editorial quality, scientific facts or
 authorization for an actual external provider call.
+
+The following scope review found that requiring480s of capped articulation before
+review overconstrains a finished video that may include useful recorded process.
+Source-valid drafts now reach both actual reviewers with an adapter-owned critical
+duration-evidence issue. Models cannot omit or resolve it by assertion. Paired
+editorial agreement can be recorded while picture remains blocked on local timing
+or actual human evidence; no invented B-roll credit is added. This adapter repair
+passed95 independently reviewed cases. Replay protection then unions qualifying
+articulation by physical source SHA, including alias IDs and overlapping/repeated
+selections; raw word/span totals remain distinct. The projection module passed77
+focused cases. The latest combined local run passed132 cases, including recovery
+of complete provider pairs, altered evidence refusals, receipt reuse, cap
+exhaustion, and refusal-only input binding. The raw provider result stays intact;
+an unbound agreement cannot be recovered as approval. Only a later verified
+exact-SHA receipt closes the host identity marker. Larger unapproved prior drafts
+are source-validated revision material and carry no review or approval credit.
+Encoded MP4 duration still
+needs ffprobe/decode validation; FCPXML duration alone does not prove delivery.
+
+Independent recovery review found a symlinked round ancestor could escape the
+original output directory. Recovery, seed selection and accounting now reject
+round/attempt/role aliases before artifact reads or writes. Six synthetic
+regressions assert foreign files remain unchanged and no round is journaled.
