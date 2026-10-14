@@ -95,7 +95,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 ## Verification record
 
 Latest bounded increment (14 October): source-bound duration projection and the
-CLI review adapter pass **132 synthetic tests** in the latest focused run. The
+CLI review adapter pass **142 synthetic tests** in the latest focused run. The
 adapter scope repair passed95 independently reviewed cases; the projection module
 passed77 focused cases after replay protection. Planning time counts overlapping
 capped word intervals once across all reused selections of the same physical
@@ -119,7 +119,7 @@ design review after repairs; physical pointer/drop/keyboard, VoiceOver and valid
 live playback acceptance remain pending. The running app and Final Cut were not
 replaced or launched during this increment. The preceding full-engine checkpoint
 passed **787 tests**; native core passed **59 routine tests**, with four opt-ins
-skipped. These earlier broader checks precede the latest132-test CLI increment.
+skipped. These earlier broader checks precede the latest142-test CLI increment.
 
 Verified locally on macOS 26.6.2 with Xcode 27.0:
 

@@ -142,7 +142,7 @@ or actual human evidence; no invented B-roll credit is added. This adapter repai
 passed95 independently reviewed cases. Replay protection then unions qualifying
 articulation by physical source SHA, including alias IDs and overlapping/repeated
 selections; raw word/span totals remain distinct. The projection module passed77
-focused cases. The latest combined local run passed132 cases, including recovery
+focused cases. The latest combined local run passed142 cases, including recovery
 of complete provider pairs, altered evidence refusals, receipt reuse, cap
 exhaustion, and refusal-only input binding. The raw provider result stays intact;
 an unbound agreement cannot be recovered as approval. Only a later verified
@@ -160,3 +160,11 @@ The independent reviewer reproduced all 132 focused cases after the containment
 repair and found no concrete blocker for completed revise responses with empty
 or mismatched string SHA. Missing/non-string SHA and other malformed response
 shapes remain fail-closed; this recovery does not invent completed valid verdicts.
+
+The provider-rate-error repair passes 142 independently reproduced focused cases.
+The CLI can emit first-party HTTP429 with subtype success while is_error=true.
+Recovery accepts this only with matching prompt/session/terminal evidence, a
+rejected rate event, no actual verdict or tools, and no contradictory saved
+result/refusal/repair artifact. Calls remain blocked before the provider reset.
+The original completed writer can be paired once with a fresh missing reviewer;
+its original script and receipt are preserved. This does not extend the round cap.

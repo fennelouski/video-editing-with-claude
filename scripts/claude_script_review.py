@@ -276,6 +276,43 @@ def original_role(folder, output):
         if path.is_symlink() or not path.is_dir():raise EditorialError("A review role ancestor became an alias or is missing.")
     if folder.resolve().parent.parent.parent!=output.resolve():raise EditorialError("A review role escaped its original output.")
 
+def provider_rate_limit_failure(folder):
+    """Recognize the CLI's success-subtype first-party429 without a verdict."""
+    original_role(folder,folder.parents[2])
+    # Contradictory saved verdict evidence must be reconciled, never skipped
+    # under an error label (including aliases of these protected artifacts).
+    for name in ("result.json","INPUT_BOUND_REFUSAL.json","RESPONSE_SYNTAX_REPAIR.json"):
+        if recovery_bytes(folder,name,required=False) is not None:return None
+    finish=json.loads(recovery_bytes(folder,"FINISH.json"));start=json.loads(recovery_bytes(folder,"START.json"))
+    prompt=recovery_bytes(folder,"prompt.txt")
+    if (finish.get("exit_code")!=1 or finish.get("is_error") is not True or finish.get("session_identity_verified") is not True
+            or finish.get("permission_denial_count")!=0 or finish.get("session_id")!=start.get("session_id")
+            or finish.get("observed_session_id")!=finish.get("session_id")
+            or any(r.get("prompt_sha256")!=sha256(prompt) for r in (start,finish))):return None
+    terminal=None;limit=None
+    for line in recovery_bytes(folder,"stream.jsonl").splitlines():
+        try:event=json.loads(line,object_pairs_hook=unique_json_fields)
+        except ValueError:continue
+        if not isinstance(event,dict) or event.get("session_id",finish["session_id"])!=finish["session_id"]:return None
+        if event.get("type")=="assistant":
+            for block in event.get("message",{}).get("content",[]):
+                if block.get("type")=="tool_use":return None
+                if block.get("type")=="text":
+                    try:value=json.loads(block.get("text",""))
+                    except ValueError:continue
+                    if isinstance(value,dict) and {"decision","issues"}<=set(value):return None
+        if event.get("type")=="rate_limit_event" and event.get("rate_limit_info",{}).get("status")=="rejected":limit=event["rate_limit_info"]
+        if event.get("type")=="result":terminal=event
+    if (not terminal or not limit or terminal.get("session_id")!=finish["session_id"] or terminal.get("uuid")!=finish.get("receipt_id")
+            or terminal.get("is_error") is not True or terminal.get("terminal_reason")!="api_error"
+            or terminal.get("api_error_status")!=429 or terminal.get("api_error_origin")!="first_party"
+            or terminal.get("permission_denials")!=[] or type(limit.get("resetsAt")) is not int or limit["resetsAt"]<=0):return None
+    try:value=json.loads(terminal.get("result",""))
+    except ValueError:value=None
+    if isinstance(value,dict) and {"decision","issues"}<=set(value):return None
+    return {"resets_at":limit["resetsAt"],"rate_limit_type":limit.get("rateLimitType"),"completed_review":False,
+            "original_terminal_receipt_id":finish["receipt_id"],"original_stream_sha256":sha256(recovery_bytes(folder,"stream.jsonl"))}
+
 def check_round_accounting(output, ledger):
     """Fail closed if completed provider pairs have not reached the journal."""
     counted={(r["writer"]["receipt_id"],r["reviewer"]["receipt_id"]) for r in ledger.summary()["rounds"]}
@@ -297,6 +334,12 @@ def check_round_accounting(output, ledger):
                                   and run["result_subtype"].startswith("error") and type(run.get("exit_code")) is int
                                   and run.get("session_identity_verified") is True and type(run.get("permission_denial_count")) is int
                                   and run["permission_denial_count"]>=0 and run.get("status") not in {"interrupted","timeout"})
+                if not explicit_failure and run.get("is_error") is True:
+                    rate_failure=provider_rate_limit_failure(role_folder)
+                    if rate_failure:
+                        if datetime.datetime.now(datetime.timezone.utc).timestamp()<rate_failure["resets_at"]:
+                            raise EditorialError("The verified Claude Pro usage limit has not reset; do not send another turn.")
+                        explicit_failure=True
                 if not explicit_failure:
                     raise EditorialError("An unverified verdict role needs terminal-stream accounting before any new turns; do not infer that no actual review completed.")
                 break

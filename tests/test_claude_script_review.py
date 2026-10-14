@@ -496,3 +496,45 @@ def test_revision_seed_rejects_ancestor_alias_before_any_external_write(tmp_path
     original={str(p.relative_to(outside)):p.read_bytes() for p in outside.rglob('*') if p.is_file()}
     with pytest.raises(EditorialError,match='alias'):R.unapproved_revision_seed(output,[TranscriptSource(**source)],0)
     assert {str(p.relative_to(outside)):p.read_bytes() for p in outside.rglob('*') if p.is_file()}==original
+
+def synthetic_rate_limited_pair(tmp_path,reset=1):
+    output,ledger,source,validated,attempt=completed_synthetic_pair(tmp_path)
+    folder=attempt/'adversarial-reviewer';path=folder/'FINISH.json'
+    finish=json.loads(path.read_bytes());finish.update({'exit_code':1,'is_error':True});path.write_text(json.dumps(finish))
+    (folder/'result.json').unlink()
+    rate={'type':'rate_limit_event','session_id':finish['session_id'],'rate_limit_info':{'status':'rejected','rateLimitType':'five_hour','resetsAt':reset}}
+    terminal={'type':'result','session_id':finish['session_id'],'uuid':finish['receipt_id'],'subtype':'success','is_error':True,'permission_denials':[],'api_error_status':429,'api_error_origin':'first_party','terminal_reason':'api_error','result':'Synthetic usage limit reached.'}
+    (folder/'stream.jsonl').write_text(json.dumps(rate)+'\n'+json.dumps(terminal)+'\n')
+    return output,ledger,folder,terminal
+
+def test_verified_first_party_rate_failure_has_no_round_credit(tmp_path):
+    output,ledger,folder,_=synthetic_rate_limited_pair(tmp_path)
+    result=R.provider_rate_limit_failure(folder)
+    assert result['completed_review'] is False and result['resets_at']==1
+    R.check_round_accounting(output,ledger)
+    assert ledger.summary()['round_count']==0
+
+def test_rate_failure_before_reset_stops_new_turns(tmp_path):
+    output,ledger,folder,_=synthetic_rate_limited_pair(tmp_path,reset=9999999999)
+    with pytest.raises(EditorialError,match='has not reset'):R.check_round_accounting(output,ledger)
+    assert ledger.summary()['round_count']==0
+
+@pytest.mark.parametrize('mutation',['session','receipt','origin','status','verdict'])
+def test_rate_failure_cannot_hide_completed_or_unverified_review(tmp_path,mutation):
+    _,ledger,folder,terminal=synthetic_rate_limited_pair(tmp_path)
+    if mutation=='session':terminal['session_id']='other-session'
+    elif mutation=='receipt':terminal['uuid']='other-receipt'
+    elif mutation=='origin':terminal['api_error_origin']='unverified-origin'
+    elif mutation=='status':terminal['api_error_status']=500
+    else:terminal['result']=json.dumps({'decision':'revise','script_sha256':'a'*64,'issues':[]})
+    lines=(folder/'stream.jsonl').read_text().splitlines();lines[-1]=json.dumps(terminal);(folder/'stream.jsonl').write_text('\n'.join(lines)+'\n')
+    assert R.provider_rate_limit_failure(folder) is None
+    assert ledger.summary()['round_count']==0
+
+@pytest.mark.parametrize('artifact',['result.json','INPUT_BOUND_REFUSAL.json','RESPONSE_SYNTAX_REPAIR.json'])
+def test_rate_failure_refuses_contradictory_saved_verdict_evidence(tmp_path,artifact):
+    output,ledger,folder,_=synthetic_rate_limited_pair(tmp_path)
+    R.save(folder/artifact,{'decision':'revise','script_sha256':'a'*64,'issues':[]})
+    assert R.provider_rate_limit_failure(folder) is None
+    with pytest.raises(EditorialError,match='unverified verdict role'):R.check_round_accounting(output,ledger)
+    assert ledger.summary()['round_count']==0

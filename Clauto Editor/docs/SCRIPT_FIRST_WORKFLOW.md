@@ -119,3 +119,10 @@ creating a new output directory does not authorize resetting actual review count
 Katie's creative references govern the video identity. Clauto's own app brand is
 specified separately in its design documents. Latest explicit project feedback
 has precedence over older guide defaults; genuine contradictions remain recorded.
+
+A verified first-party usage-limit failure never counts as a completed review.
+The CLI success-subtype/error-flag variant requires terminal HTTP429, matching
+prompt/session/receipt, rejected-rate evidence and absence of any saved verdict
+or refusal. Resume only after its reported reset; preserve a completed writer
+and obtain the missing independent reviewer, then count that original pair once.
+No quota bypass, paid fallback or extra review round is implied.
