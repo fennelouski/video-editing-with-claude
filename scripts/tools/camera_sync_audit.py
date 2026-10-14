@@ -59,6 +59,39 @@ def extract(path, destination):
     return np.fromfile(destination, dtype="<f4")
 
 
+def consistent_anchor_candidates(anchors, minimum_score=.25, dominance=1.5, tolerance=.05):
+    """Dominant, consistent offsets across nonoverlapping query windows.
+
+    Cross-microphone waveforms need not have high absolute correlation. Requiring
+    a dominant peak and agreement across independent windows is more informative
+    than an absolute score alone. These remain candidates, never physical
+    clap/mouth or frame-drift acceptance. Repeated/ambiguous peaks are withheld.
+    """
+    votes=[]
+    for anchor in anchors:
+        if not np.isfinite(anchor['a_start']) or not np.isfinite(anchor['query_seconds']) or anchor['a_start']<0 or anchor['query_seconds']<=0:continue
+        peaks=sorted([p for p in anchor['candidates'] if np.isfinite(p['score']) and np.isfinite(p['b_minus_a'])],key=lambda p:p['score'],reverse=True)
+        if not peaks or peaks[0]['score']<minimum_score:continue
+        if len(peaks)>1 and peaks[0]['score']<dominance*peaks[1]['score']:continue
+        peak=peaks[0]
+        votes.append({'start':anchor['a_start'],'length':anchor['query_seconds'],
+                      'offset':peak['b_minus_a'],'score':peak['score']})
+    groups=[]
+    for seed in votes:
+        near=sorted([v for v in votes if abs(v['offset']-seed['offset'])<=tolerance],key=lambda v:v['start'])
+        independent=[]
+        for vote in near:
+            if not independent or vote['start']>=independent[-1]['start']+independent[-1]['length']:
+                independent.append(vote)
+        if len(independent)<2:continue
+        offset=float(np.median([v['offset'] for v in independent]))
+        if any(abs(g['b_minus_a_seconds']-offset)<=tolerance for g in groups):continue
+        groups.append({'b_minus_a_seconds':offset,'independent_anchor_count':len(independent),
+                       'offset_spread_ms':1000*(max(v['offset'] for v in independent)-min(v['offset'] for v in independent)),
+                       'minimum_score':min(v['score'] for v in independent),'physical_sync_approved':False})
+    return groups
+
+
 def probe(path):
     result = subprocess.run(["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", str(path)], capture_output=True, check=True)
     return json.loads(result.stdout)
