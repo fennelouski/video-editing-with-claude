@@ -95,3 +95,45 @@ def test_omitted_critical_issue_continues_real_round_loop_until_explicit_resolut
     monkeypatch.setattr(R,'run_turn',fake_turn)
     state=R.review(tmp_path/'cli',sources,context,hashlib.sha256(context.read_bytes()).hexdigest(),tmp_path/'output',3)
     assert state['round_count']==3 and state['approved'] is True and count['pending_seen'] is True
+
+def test_resume_keeps_actual_count_and_refuses_changed_input(tmp_path,monkeypatch):
+    from editorial_workflow import RoundLedger,TranscriptSource,ReviewReceipt,validate_script,sha256
+    source={'source_id':'synthetic-a','source_sha256':'a'*64,'duration':2,'words':[{'word':'Make','start':.1,'end':.4},{'word':'pizza.','start':.5,'end':1}]}
+    script={'sections':[{'segments':[{'source_id':'synthetic-a','source_sha256':'a'*64,'first_word':0,'last_word':1}]}]}
+    sources=tmp_path/'sources.json';sources.write_text(json.dumps([source]))
+    context=tmp_path/'context.json';context.write_text('{"synthetic":true}')
+    output=tmp_path/'output';output.mkdir()
+    ledger=RoundLedger.create(output/'ledger',max_rounds=1);ledger.complete_transcripts([TranscriptSource(**source)])
+    validated=validate_script(script,[TranscriptSource(**source)])
+    issue={'id':'meaning-01','description':'Synthetic unresolved premise.'}
+    writer=ReviewReceipt.from_artifact('writer-existing','writer-receipt',{'decision':'revise','script_sha256':validated.script_sha256,'issues':[issue]})
+    reviewer=ReviewReceipt.from_artifact('reviewer-existing','reviewer-receipt',{'decision':'revise','script_sha256':validated.script_sha256,'issues':[issue]})
+    ledger.append_round(validated,writer=writer,reviewer=reviewer,round_id='actual-round-01')
+    identity={'context_sha256':sha256(context.read_bytes()),'sources_sha256':sha256(sources.read_bytes()),'max_rounds':1,'render_enabled':False}
+    R.save(output/'INPUT_IDENTITY.json',identity)
+    def refused(*args,**kwargs):pytest.fail('Exhausted or changed review must not send another turn.')
+    monkeypatch.setattr(R,'run_turn',refused)
+    state=R.review(tmp_path/'cli',sources,context,identity['context_sha256'],output,1,True)
+    assert state['round_count']==1 and state['exhausted_without_approval'] and not state['approved']
+    sources.write_text(json.dumps([{**source,'duration':3}]))
+    with pytest.raises(EditorialError,match='input identity changed'):
+        R.review(tmp_path/'cli',sources,context,identity['context_sha256'],output,1,True)
+
+def test_invalid_writer_draft_is_repaired_without_counting_a_review_round(tmp_path,monkeypatch):
+    from editorial_workflow import sha256
+    source={'source_id':'synthetic-a','source_sha256':'a'*64,'duration':2,'words':[{'word':'Make','start':.1,'end':.4},{'word':'pizza.','start':.5,'end':1}]}
+    script={'sections':[{'segments':[{'source_id':'synthetic-a','source_sha256':'a'*64,'first_word':0,'last_word':1}]}]}
+    sources=tmp_path/'sources.json';sources.write_text(json.dumps([source]));context=tmp_path/'context.json';context.write_text('{}')
+    count={'drafts':0,'turns':0}
+    def fake(cli,folder,prompt,schema,system):
+        folder.mkdir();count['turns']+=1
+        receipt={'session_id':f'synthetic-session-{count["turns"]}','receipt_id':f'synthetic-receipt-{count["turns"]}'}
+        if folder.name=='writer-draft':
+            count['drafts']+=1
+            value={'script':{**script,'fact_flags':[{'id':'fact-01','description':'Synthetic fact','status':'resolved','resolution':'Model says yes','resolved_by':'writer'}]} if count['drafts']==1 else script,'author_notes':'Synthetic'}
+        else:value={'decision':'agree','script_sha256':sha256((folder.parent/'script.json').read_bytes()),'issues':[]}
+        R.save(folder/'result.json',value);return value,receipt
+    monkeypatch.setattr(R,'run_turn',fake)
+    state=R.review(tmp_path/'cli',sources,context,sha256(context.read_bytes()),tmp_path/'output',1)
+    assert count['drafts']==2 and state['round_count']==1 and state['approved']
+    assert len(list((tmp_path/'output').glob('round-*/attempt-*/VALIDATION_REFUSAL.json')))==1

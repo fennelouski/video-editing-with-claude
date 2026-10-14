@@ -72,6 +72,10 @@ creates immutable local evidence for each writer draft, writer verification and
 independent adversarial review. Those three turns comprise one review round.
 
 If there is editorial disagreement, it revises and reviews again within the cap.
+Failed source validation gets at most three technical writer repairs within that
+round; those attempts are preserved and never counted as completed review rounds.
+Resumption verifies the original input identity and retains the actual ledger
+count; it cannot silently reset the ten-round limit or change the source pack.
 If only actual human approval remains, it records that specific blocker. It never
 renders media or advances the picture stage itself. Failed attempts and earlier
 versions remain available for diagnosis; use a new output directory for recovery.
