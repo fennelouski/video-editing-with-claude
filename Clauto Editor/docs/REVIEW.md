@@ -1,5 +1,38 @@
 # Independent local workflow review
 
+## Native transcript review — 14 October 2026
+
+A separate read-only reviewer inspected the exact final transcript models,
+repository/controller, native tab/inspector, captured-project integration and
+termination hook. It independently passed 18 routine synthetic tests, skipped
+the real-catalog opt-in, and ran additional actual-I/O probes. No remaining
+reproduced blocker was found after these fixes:
+
+- Cap encoded checkpoint/export/draft bytes before publication, so a large comment
+  cannot advance the current pointer to a file that exceeds the read limit.
+- Reject descending word starts and backwards row intervals; preserve raw terminal
+  alignment overrun as a review flag rather than deleting it. Selected bounds
+  inspect all words, not just the row's last endpoint.
+- Wait for in-flight Undo and other review operations during normal Quit, as well
+  as autosave. MainActor continuations settle the operation without a tight loop.
+
+The independent I/O probe and routine regression confirm that comments, Keep and
+graphic requests arriving during a write persist in a later checkpoint. The
+review also checked exact catalog/hash pinning, full stable-row coverage, escaped
+duplicate keys, immutable revisions/undo, stale-writer refusal, filtered reorder,
+project-captured callbacks and exports that never assert approval or apply a cut.
+
+A separate design reviewer accepted four synthetic offscreen transcript captures
+and the source layout: readable type and intact controls, coherent existing craft
+direction, and a compact Back-to-passages path. It performed no live UI actions.
+
+These reviews did not run private NAS acceptance or inspect real media. The owner
+separately verified the saved 27-source, 914-row catalog locally. Native pointer,
+keyboard traversal, VoiceOver, playback and termination/dialog interaction remain
+unverified. Paired-ledger approval and applying source spans remain unfinished.
+
+## Earlier foundation review
+
 Reviewed 13 October 2026 by a separate read-only agent. It used disposable synthetic
 inputs and tests, and did not edit files, use GUI/private media, or invoke Claude.
 

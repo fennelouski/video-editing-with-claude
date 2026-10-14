@@ -3,7 +3,9 @@
 The edit now has a source-bound review ledger in `scripts/editorial_workflow.py`.
 It records actual completed review receipts and blocks picture, music and graphics
 until their preceding stages are confirmed. This supplements the existing native
-pipeline; a native script-review screen and live GUI provider transport remain pending.
+pipeline. The native Transcript tab now supports project-owned source-row drafts,
+ordering, exclusion, separate annotations and review-only export; paired-ledger
+approval and live GUI provider transport remain pending. See [TRANSCRIPT_REVIEW.md](TRANSCRIPT_REVIEW.md).
 
 ## Requirements checklist
 
@@ -67,8 +69,11 @@ pipeline; a native script-review screen and live GUI provider transport remain p
   explicit hash-verified paths. Keep them out of narration script discovery.
 - [x] Write generated watch/roundtrip corrections to a separate run-owned overlay
   when a guide is pinned; both original rules and overlay corrections remain binding.
-- [ ] Integrate the review ledger, editable script selections and actual trusted
-  human-approval inputs into the native editor UI.
+- [x] Add a native source-bound draft review screen with stable row ordering,
+  explicit keep/exclude, comments, requested graphics, imported suggestions,
+  immutable checkpoints and review-only export.
+- [ ] Integrate paired-review ledger approval and actual trusted human-approval
+  inputs into the native editor UI; apply approved selections to the engine.
 - [ ] Apply approved selections to picture with source-audio boundary checks,
   natural breaths/room tone and a rendered-output readback.
 - [ ] Complete local picture acceptance, tracked localized grade, final music,

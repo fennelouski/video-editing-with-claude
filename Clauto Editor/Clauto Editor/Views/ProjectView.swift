@@ -29,7 +29,7 @@ struct ProjectView: View {
                     ClautoAction("Project folder", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
-                    ClautoSegments(selection: $tab, options: [("Brief", .brief), ("Files", .files), ("Cut", .cut)]).accessibilityIdentifier("projectTabs")
+                    ClautoSegments(selection: $tab, options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut)]).accessibilityIdentifier("projectTabs")
                     Spacer()
                 }.padding(.horizontal, 28).padding(.bottom, 20)
                 ClautoRule()
@@ -43,10 +43,13 @@ struct ProjectView: View {
                     Group {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
+                        else if tab == "Transcript" { TranscriptReviewView(store: store, project: project) }
                         else { CutView(store: store) }
                     }.frame(maxHeight: .infinity)
-                    ClautoRule()
-                    conversation(compact: true)
+                    if tab != "Transcript" {
+                        ClautoRule()
+                        conversation(compact: true)
+                    }
                 }
             }
         }.background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)
@@ -143,7 +146,10 @@ private struct BriefView: View {
                 }
                 ClautoSection("Script", detail: "Review the wording and factual claims before using an annotated script.") {
                     ClautoTextArea(text: $brief.script, label: "Script").frame(height: 114)
-                    ClautoAction("Use as approved script", icon: .check) { Task { await store.approveScript(brief.script) } }.disabled(brief.script.isEmpty || store.runningProjectID != nil)
+                    ClautoAction("Use as approved script", icon: .check) {
+                        let submitted = brief.script, captured = project
+                        Task { await store.approveScript(submitted, project: captured) }
+                    }.disabled(brief.script.isEmpty || store.runningProjectID != nil)
                 }
                 ClautoField(label: "Things to avoid", text: $brief.avoid, placeholder: "Anything this cut should leave out")
                 Text("Your brief saves automatically. The video house style stays Sage & Oat, cut cardboard and marker on paper.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)

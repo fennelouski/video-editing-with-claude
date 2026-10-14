@@ -29,6 +29,7 @@ final class EditorStore {
     var planReviews: [UUID: String] = [:]
     var runningProjectID: UUID?
     var exportingPDF = false
+    var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
     @ObservationIgnored private let workflow = WorkflowRepository()
@@ -50,6 +51,19 @@ final class EditorStore {
     var selected: Project? { projects.first { $0.id == selectedID } }
     var details: String { selectedID.flatMap { runDetails[$0] } ?? "" }
     var checkSummary: String? { selectedID.flatMap { checkSummaries[$0] } }
+
+    func transcriptReview(for project: Project) -> TranscriptReviewController {
+        if let existing = transcriptReviews[project.id] { return existing }
+        let controller = TranscriptReviewController(project: project)
+        transcriptReviews[project.id] = controller
+        return controller
+    }
+
+    var hasPendingTranscriptSaves: Bool { transcriptReviews.values.contains { $0.dirty || $0.saving || $0.loading } }
+
+    func flushTranscriptReviewsForExit() async -> Bool {
+        await TranscriptReviewExit.flush(Array(transcriptReviews.values))
+    }
 
     func restore() async {
         for path in defaults.stringArray(forKey: recentKey) ?? [] {
@@ -221,8 +235,8 @@ final class EditorStore {
         catch { notice = error.localizedDescription }
     }
 
-    func approveScript(_ text: String) async {
-        guard let project = selected, runningProjectID == nil else { return }
+    func approveScript(_ text: String, project: Project) async {
+        guard runningProjectID == nil else { return }
         do {
             try await repository.approveScript(text, project: project)
             notice = "Approved script saved. New runs will use it."; noticeTitle = "Script saved"

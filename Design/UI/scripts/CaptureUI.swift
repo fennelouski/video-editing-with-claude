@@ -82,6 +82,16 @@ struct ControlGallery: View {
         try await makeSavedCut(project: project)
         await store.loadWorkflow()
         var evidence: [[String: Any]] = []
+        let transcript = store.transcriptReview(for: project)
+        let catalog = try makeTranscriptCatalog(project: project)
+        let transcriptURL = fixture.appendingPathComponent("synthetic-transcript.json")
+        try JSONEncoder().encode(catalog).write(to: transcriptURL)
+        await transcript.importCatalog(transcriptURL)
+        guard transcript.session != nil, transcript.failure == nil else { throw CaptureFailure.failed("Synthetic transcript import failed") }
+        evidence.append(try await capture(ContentView(store: store, initialProjectTab: "Transcript"), name: "transcript-project-wide", width: 1440, height: 900, output: output))
+        evidence.append(try await capture(ContentView(store: store, initialProjectTab: "Transcript"), name: "transcript-project-minimum", width: 900, height: 640, output: output))
+        evidence.append(try await capture(TranscriptWorkspace(controller: transcript, initialSelectedID: catalog.rows[0].id), name: "transcript-inspector-wide", width: 1100, height: 860, output: output))
+        evidence.append(try await capture(TranscriptWorkspace(controller: transcript, initialSelectedID: catalog.rows[0].id), name: "transcript-inspector-minimum", width: 630, height: 640, output: output))
         for (name, width, height, tab) in [
             ("brief-wide", 1440, 900, "Brief"),
             ("brief-minimum", 900, 640, "Brief"),
@@ -226,7 +236,7 @@ struct ControlGallery: View {
     static func makeProject(in root: URL) throws -> Project {
         let folder = root.appendingPathComponent("The table experiment — synthetic", isDirectory: true)
         let fm = FileManager.default
-        for name in ["notes", "cuts", "build/runs", "footage/a-cam", "footage/audio", "assets/music", "script"] {
+        for name in ["notes", "cuts", "build/runs", "footage/a-cam", "footage/audio", "assets/music", "script", ".clauto"] {
             try fm.createDirectory(at: folder.appendingPathComponent(name), withIntermediateDirectories: true)
         }
         var brief = Brief()
@@ -250,6 +260,33 @@ struct ControlGallery: View {
         let messages = [LocalMessage(text: "Keep the opening concise, then let the complete demonstration breathe."), LocalMessage(text: "Use the supplied comparison label when the second result appears.")]
         try encoder.encode(messages).write(to: folder.appendingPathComponent("notes/conversation.json"))
         return Project(manifest: manifest, folder: folder, brief: brief)
+    }
+
+    static func makeTranscriptCatalog(project: Project) throws -> TranscriptCatalog {
+        let sentences = ["Begin with the result on the table.", "This is the first complete synthetic take.",
+                         "Now compare the second result with it.", "Keep the explanation connected to this action.",
+                         "Pause briefly before showing the next step.", "Close by returning to the opening question."]
+        var words: [TranscriptWord] = [], rows: [TranscriptRow] = []
+        let sourceSHA = String(repeating: "a", count: 64), sourceID = "Synthetic_Canon_01"
+        for (index, sentence) in sentences.enumerated() {
+            let first = words.count
+            for (offset, word) in sentence.split(separator: " ").enumerated() {
+                let start = Double(index) * 4 + Double(offset) * 0.3 + 0.1
+                words.append(.init(word: String(word), start: start, end: start + 0.2))
+            }
+            let last = words.count - 1
+            rows.append(.init(id: sourceID + String(format: "-w%05d-%05d-", first, last) + sourceSHA.prefix(8),
+                sourceID: sourceID, sourceSHA256: sourceSHA, firstWord: first, lastWord: last,
+                start: words[first].start, end: words[last].end,
+                inTimecode: String(format: "00:00:%02d:02", index * 4), outTimecode: String(format: "00:00:%02d:08", index * 4 + 2),
+                text: sentence, keep: index != 1, notes: index == 0 ? "Synthetic comment: keep the opening concise." : "",
+                requestedGraphics: index == 0 ? "Synthetic request: a comparison title." : "",
+                assistantGraphics: "Optional paper comparison diagram. This is a suggestion, not an approved graphic.",
+                handwrittenAsset: "", section: "Synthetic main shoot", uncertainty: "Synthetic ASR; listening acceptance not asserted.", originalOrder: index + 1))
+        }
+        return .init(schemaVersion: 1, title: "Synthetic transcript review", datasetSHA256: String(repeating: "e", count: 64),
+            sources: [.init(id: sourceID, path: project.folder.appendingPathComponent("footage/a-cam/Complete narration take.mov").path,
+                            sourceSHA256: sourceSHA, transcriptSHA256: String(repeating: "c", count: 64), duration: 30, words: words)], rows: rows)
     }
 }
 

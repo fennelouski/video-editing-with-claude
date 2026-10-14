@@ -26,3 +26,10 @@ live-app review authorized by Nathan.
 The isolated Xcode build goes to `.artifacts/DesignDerivedData`. It uses the
 already cached Sparkle dependency and disables package updates and automatic
 resolution. No production bundle or user launch is part of this workflow.
+
+The transcript milestone adds four synthetic captures: the integrated Transcript
+tab and selected passage inspector at wide/minimum widths. Its catalog is authored
+in the harness; no actual saved transcript or Sheet is loaded. The selected
+inspector uses an explicit initial row-ID seed, which verifies composition without
+claiming a real pointer/keyboard action. Core tests separately verify the controls'
+ordering, keep/exclude, annotation and persistence behavior.

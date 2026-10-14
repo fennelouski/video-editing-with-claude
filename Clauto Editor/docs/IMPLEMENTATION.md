@@ -73,7 +73,7 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M3 aspect/model project preferences | Implemented | Manifest + paths.json persist settings |
 | M3 script approval and explicit selection | Implemented | Brief text becomes project-owned script.md; a run pins its snapshot instead of selecting an older alphabetical draft |
 | M3 project creative references | Implemented, bounded local acceptance | Exact-byte style/taste documents retain role, SHA and Library provenance; native intake, immutable version copies, legacy sidecar recovery and frozen run snapshots tested. Reference documents do not enter narration discovery. |
-| Script-first independent review and stage ordering | Implemented in engine/CLI, native UI pending | Source-index/script-SHA ledger, observed independent Pro session receipts, unresolved-issue carry-forward, human-evidence gate and ten actual round limit. NAS exclusive record publication/reload/collision tested with synthetic input. See SCRIPT_FIRST_WORKFLOW.md. |
+| Script-first independent review and stage ordering | Engine/CLI implemented; native draft review implemented, paired approval pending | Native Transcript tab adds exact-catalog-bound stable rows, keep/exclude, order, comments, separate graphic fields, immutable checkpoints/undo and review-only export. Paired ledger approval and applying source spans remain pending. Source-index/script-SHA ledger, human-evidence gate and ten actual round limit stay separate. See SCRIPT_FIRST_WORKFLOW.md and TRANSCRIPT_REVIEW.md. |
 | M3 docx reading/summary and Replace | Pending | DOCX intake and engine comments parsing are preserved; GUI preview/summary/replace are absent |
 | Projects duplicate/archive/thumbnails | Pending | Create, list, open and recent-project restore implemented |
 | M4 local first-cut orchestration | Implemented, synthetic acceptance passed | Actual cached large-v3 transcription/read-back, stages 1–3 pause, explicit plan approval, strict asset gate, alpha rendering, captions and saved version tested on NAS |
@@ -93,6 +93,28 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | Accessibility | Partial | Authored controls retain semantic labels and keyboard choose equivalents; full VoiceOver/drop UI pass pending |
 
 ## Verification record
+
+Native transcript review increment (14 October, overnight work): the final full
+core suite passed **77 routine tests**, with five opt-ins skipped (82 registered
+cases). Eighteen new routine transcript tests cover source/copy identity, global
+row order, explicit exclusion, separate annotation fields, immutable checkpoints,
+undo, stale writers, escaped duplicate keys, containment, backwards timing,
+oversized-write refusal, edits arriving during actual repository I/O, and
+pending saves/Undo during exit. The source-only independent reviewer reproduced
+three defects during development; all have fixes and regressions. Native quit
+dialog interaction is still unverified.
+
+The actual saved yeast catalog passed local NAS acceptance through the same native
+repository: **27 sources, 914 rows, 11,900 words**, unchanged input catalog hash,
+saved/reopened row order and annotations, and a unique review-only selection export.
+Only a new labelled QA project was written; the live Sheet, source media, v7 and
+expansion proposal remained untouched. Source media were not read or re-hashed in
+this acceptance. The final Debug app build and strict signature check passed
+without launching the app. Four new synthetic offscreen transcript captures
+passed independent static craft/layout review. Interactive typing, pointer,
+keyboard traversal, VoiceOver, source playback and actual quit interaction remain
+pending. Applying source-span selections and paired-review approval are separate
+unfinished integration. See [TRANSCRIPT_REVIEW.md](TRANSCRIPT_REVIEW.md).
 
 The later local FCPXML handoff repair uses one shared integer-frame ownership
 rule for connections, chapter markers and stage-5 TODO markers. This prevents

@@ -1,6 +1,15 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor enum FileDialogs {
+    static func transcript() async -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]; panel.prompt = "Import Transcript"
+        return await withCheckedContinuation { continuation in
+            panel.begin { response in continuation.resume(returning: response == .OK ? panel.url : nil) }
+        }
+    }
     static func folder(initial: URL? = nil) async -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false

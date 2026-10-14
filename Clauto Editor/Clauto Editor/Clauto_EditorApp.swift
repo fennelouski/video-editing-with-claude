@@ -11,6 +11,7 @@ import SwiftUI
 struct Clauto_EditorApp: App {
     @State private var store = EditorStore()
     @State private var updater = Updater()
+    @NSApplicationDelegateAdaptor(ClautoAppDelegate.self) private var delegate
 
     init() { ClautoFonts.register() }
 
@@ -19,6 +20,7 @@ struct Clauto_EditorApp: App {
             ContentView(store: store)
                 .frame(minWidth: 900, minHeight: 640)
                 .task {
+                    delegate.store = store
                     if let path = ProcessInfo.processInfo.environment["CLAUTO_OPEN_PROJECT"] {
                         await store.open(URL(fileURLWithPath: path, isDirectory: true))
                     } else {
