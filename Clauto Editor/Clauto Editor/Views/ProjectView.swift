@@ -29,7 +29,7 @@ struct ProjectView: View {
             }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 12)
                 .accessibilityIdentifier("projectTabs")
             Divider()
-            if tab == "Brief" { BriefView(brief: $draft, store: store) }
+            if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
             else if tab == "Files" { FilesView(store: store, project: project) }
             else { CutView(store: store) }
             Divider()
@@ -58,6 +58,7 @@ struct ProjectView: View {
 private struct BriefView: View {
     @Binding var brief: Brief
     @Bindable var store: EditorStore
+    var project: Project
     var body: some View {
         Form {
             Section("What is this video about?") {
@@ -66,6 +67,16 @@ private struct BriefView: View {
             Section("Audience & pacing") {
                 TextField("Who is it for?", text: $brief.audience)
                 TextField("Target length", text: $brief.length)
+                DurationBoundsView(store: store, project: project).id(project.id)
+                Picker("Export resolution", selection: Binding(get: { project.manifest.outputResolution }, set: { value in
+                    let captured = project
+                    Task { await store.exportResolution(value, project: captured) }
+                })) {
+                    ForEach(ExportResolution.allCases) { value in Text(value.label).tag(value) }
+                }.disabled(store.working || store.runningProjectID == project.id).accessibilityIdentifier("projectExportResolution")
+                if project.manifest.outputResolution == .ultraHD {
+                    Text("4K output can enlarge lower-resolution footage. It does not add source detail; review any upscaled shots.").font(.caption).foregroundStyle(.secondary)
+                }
                 TextField("Tone", text: $brief.tone)
                 Picker("Aspect ratio", selection: Binding(get: { store.selected?.manifest.aspect ?? "16:9" }, set: { value in Task { await store.preferences(aspect: value) } })) {
                     Text("16:9 · landscape").tag("16:9"); Text("9:16 · vertical").tag("9:16")
@@ -88,6 +99,43 @@ private struct BriefView: View {
             Section("Things to avoid") { TextField("Avoid", text: $brief.avoid) }
             Text("Changes save to brief.md. House style: cut cardboard, marker on paper, Sage & Oat.").font(.caption).foregroundStyle(.secondary)
         }.formStyle(.grouped)
+    }
+}
+
+private struct DurationBoundsView: View {
+    @Bindable var store: EditorStore
+    var project: Project
+    @State private var minimum = ""
+    @State private var maximum = ""
+    @State private var issue: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                TextField("Minimum seconds (optional)", text: $minimum).accessibilityIdentifier("minimumDuration")
+                TextField("Maximum seconds (optional)", text: $maximum).accessibilityIdentifier("maximumDuration")
+                Button("Apply Limits") {
+                    let captured = project
+                    do {
+                        func value(_ text: String) throws -> Double? {
+                            let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if text.isEmpty { return nil }
+                            guard let seconds = Double(text) else { throw WorkflowFailure.invalid("Enter duration limits as seconds, or leave them blank.") }
+                            return seconds
+                        }
+                        let bounds = VideoDurationBounds(minimum: try value(minimum), maximum: try value(maximum))
+                        try bounds.validate(); issue = nil
+                        Task { await store.durationBounds(bounds, project: captured) }
+                    } catch { issue = error.localizedDescription }
+                }.disabled(store.working || store.runningProjectID == project.id)
+            }
+            Text("Limits apply to new cuts. If complete narration cannot fit, the run stops for review without padding or retiming.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let issue { Text(issue).font(.caption).foregroundStyle(.red) }
+        }
+        .onAppear {
+            minimum = project.manifest.durationBounds?.minimum.map { String($0) } ?? ""
+            maximum = project.manifest.durationBounds?.maximum.map { String($0) } ?? ""
+        }
     }
 }
 
@@ -243,6 +291,15 @@ private struct CutView: View {
                         if current.briefChanged(project) {
                             Label("The brief changed since this cut. Run the updated inputs to make a new version.", systemImage: "exclamationmark.circle")
                         }
+                        if current.durationBounds != project.manifest.durationBounds {
+                            Text("Duration limits changed since this cut. A new run uses the updated limits.").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let resolution = current.exportResolution {
+                            Text("Saved output: \(resolution.label) · \(current.aspect ?? "16:9")").font(.caption).foregroundStyle(.secondary)
+                            if resolution != project.manifest.outputResolution || current.aspect != project.manifest.aspect {
+                                Text("Output settings changed since this cut. A new run uses the updated settings.").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                         versionResults(current, project: project)
                     }
                     if !versions.isEmpty {
@@ -266,8 +323,9 @@ private struct CutView: View {
     private func versionResults(_ version: CutVersion, project: Project) -> some View {
         let folder = project.folder.appendingPathComponent("cuts/" + version.folderName)
         return VStack(alignment: .leading, spacing: 12) {
+            DerivativeView(store: store, project: project, version: version).id(version.id)
             if let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
-                CutPreview(url: folder.appendingPathComponent(preview)).id(version.id).frame(height: 240)
+                VersionReview(store: store, project: project, version: version, url: folder.appendingPathComponent(preview)).id(version.id)
             }
             Text(version.savedSchemaChecked == true ? "The saved timeline passed Final Cut's schema check. Review the import before editing." : "Final Cut's schema check is unverified for this saved cut. Review the timeline import before editing.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -290,20 +348,124 @@ private struct CutView: View {
 @MainActor
 private struct CutPreview: NSViewRepresentable {
     let url: URL
+    @Binding var playhead: Double
+    var seek: ReviewSeek?
+    var control: ReviewPlaybackControl
+    @MainActor final class Coordinator {
+        var owner: CutPreview
+        var player: AVPlayer?
+        var observer: Any?
+        var lastSeek: UUID?
+        var generation = UUID()
+        init(_ owner: CutPreview) { self.owner = owner }
+        func install(_ player: AVPlayer) {
+            teardown(); self.player = player
+            owner.control.player = player
+            let token = generation
+            observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] time in
+                let seconds = time.seconds
+                let coordinator = self
+                Task { @MainActor in
+                    guard let coordinator, coordinator.generation == token, coordinator.player != nil, seconds.isFinite else { return }
+                    coordinator.owner.playhead = max(0, seconds)
+                }
+            }
+        }
+        func teardown() {
+            if owner.control.player === player { owner.control.player = nil }
+            if let observer { player?.removeTimeObserver(observer) }
+            generation = UUID(); observer = nil; player?.pause(); player = nil
+        }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.controlsStyle = .inline
-        view.player = AVPlayer(url: url)
+        let player = AVPlayer(url: url); view.player = player; context.coordinator.install(player)
         return view
     }
     func updateNSView(_ view: AVPlayerView, context: Context) {
+        context.coordinator.owner = self
         if (view.player?.currentItem?.asset as? AVURLAsset)?.url != url {
             view.player?.pause()
-            view.player = AVPlayer(url: url)
+            let player = AVPlayer(url: url); view.player = player; context.coordinator.install(player)
+        }
+        if let seek, context.coordinator.lastSeek != seek.id {
+            context.coordinator.lastSeek = seek.id
+            view.player?.seek(to: CMTime(seconds: seek.seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
     }
-    static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) {
+    static func dismantleNSView(_ view: AVPlayerView, coordinator: Coordinator) {
+        coordinator.teardown()
         view.player?.pause()
         view.player = nil
+    }
+}
+
+private struct ReviewSeek { var id = UUID(); var seconds: Double }
+@MainActor private final class ReviewPlaybackControl { weak var player: AVPlayer? }
+
+private struct VersionReview: View {
+    @Bindable var store: EditorStore
+    var project: Project
+    var version: CutVersion
+    var url: URL
+    @State private var playhead = 0.0
+    @State private var seek: ReviewSeek?
+    @State private var control = ReviewPlaybackControl()
+    @State private var start = "0"
+    @State private var end = ""
+    @State private var text = ""
+    @State private var saving = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CutPreview(url: url, playhead: $playhead, seek: seek, control: control).frame(height: 240)
+            GroupBox("Feedback for v\(version.number)") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button("Use Playhead") {
+                            let time = control.player?.currentTime().seconds ?? playhead
+                            if time.isFinite { start = String(format: "%.6f", max(0, time)) }
+                        }
+                            .accessibilityIdentifier("feedbackUsePlayhead")
+                        TextField("Start seconds", text: $start).frame(width: 110).accessibilityIdentifier("feedbackStart")
+                        TextField("End seconds (optional)", text: $end).frame(width: 160).accessibilityIdentifier("feedbackEnd")
+                    }
+                    TextField("What should change at this moment?", text: $text, axis: .vertical)
+                        .lineLimit(2...5).accessibilityIdentifier("feedbackText")
+                    Button("Save Feedback") {
+                        let endText = end.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard let at = Double(start), endText.isEmpty || Double(endText) != nil else { store.notice = "Enter times in seconds."; return }
+                        let submitted = text, submittedEnd = endText.isEmpty ? nil : Double(endText)
+                        let submittedVersion = version, submittedProject = project
+                        saving = true
+                        Task {
+                            if await store.addFeedback(submitted, start: at, end: submittedEnd, version: submittedVersion, project: submittedProject), text == submitted { text = "" }
+                            saving = false
+                        }
+                    }.disabled(saving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("saveFeedback")
+                    ForEach((store.cutFeedback[project.id] ?? []).filter { $0.versionID == version.id }) { entry in
+                        HStack(alignment: .top) {
+                            Button(entry.endSeconds.map { String(format: "%.3f–%.3fs", entry.startSeconds, $0) } ?? String(format: "%.3fs", entry.startSeconds)) { seek = ReviewSeek(seconds: entry.startSeconds) }
+                                .disabled(entry.attachment != .verified)
+                                .accessibilityLabel("Go to feedback at \(entry.startSeconds) seconds")
+                            VStack(alignment: .leading) {
+                                Text(entry.text).textSelection(.enabled)
+                                if let end = entry.endSeconds { Text(String(format: "Range %.3f–%.3f seconds", entry.startSeconds, end)).font(.caption).foregroundStyle(.secondary) }
+                                Text(entry.resolved ? "Resolved" : "Open").font(.caption).foregroundStyle(.secondary)
+                                if entry.attachment != .verified {
+                                    Text("Saved version or time range changed. Restore the verified cut to use this feedback.").font(.caption).foregroundStyle(.orange)
+                                }
+                            }
+                            Spacer()
+                            Button(entry.resolved ? "Reopen" : "Resolve") { Task { await store.resolveFeedback(entry.id, resolved: !entry.resolved, project: project) } }
+                                .disabled(entry.attachment != .verified)
+                        }
+                    }
+                    Text("Feedback stays attached to this saved version. The cut is unchanged until a reviewed edit applies it.").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+        }
     }
 }

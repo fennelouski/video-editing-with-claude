@@ -170,6 +170,30 @@ ASPECTS = {
 
 DEFAULT_ASPECT = "16:9"
 
+RESOLUTIONS = {"720p": 720, "1080p": 1080, "2160p": 2160}
+DEFAULT_RESOLUTION = _PATH_SETTINGS.get("export_resolution", "1080p")
+if DEFAULT_RESOLUTION not in RESOLUTIONS:
+    raise ValueError("export_resolution must be 720p, 1080p, or 2160p")
+
+
+def canvas_spec(aspect: str, resolution: str | None = None) -> dict:
+    """Scale the authoring grid, captions and safe areas together from the 1080p design."""
+    resolution = DEFAULT_RESOLUTION if resolution is None else resolution
+    if resolution not in RESOLUTIONS:
+        raise ValueError("resolution must be 720p, 1080p, or 2160p")
+    spec = dict(ASPECTS[aspect])
+    factor = RESOLUTIONS[resolution] / 1080
+    for key in ("author", "render", "hero_band"):
+        if key in spec:
+            spec[key] = tuple(round(v * factor) for v in spec[key])
+    for key in ("margin_left", "margin_right", "margin_top", "margin_bottom", "margin_bottom_captioned",
+                "chrome_bottom", "chrome_right", "caption_baseline"):
+        spec[key] = round(spec[key] * factor)
+    spec["pixel_scale"] = factor
+    spec["resolution"] = resolution
+    spec["fcp_format_name"] = "FFVideoFormatRateUndefined"
+    return spec
+
 SPACING_RAMP = (8, 16, 24, 32, 48, 64, 96, 128)
 GRID_UNIT = 8
 

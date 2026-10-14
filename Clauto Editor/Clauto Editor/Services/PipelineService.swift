@@ -20,14 +20,17 @@ struct PipelineService: Sendable {
         let recorder = EventRecorder()
         let modelCache = URL(fileURLWithPath: settings["model_cache"] ?? project.folder.appendingPathComponent("build/models").path)
         let environment = ["CLAUTO_PATHS": run.folder.appendingPathComponent("paths.json").path,
-                           "CLAUTO_WHISPER_MODEL": project.manifest.whisperModel,
+                           "CLAUTO_WHISPER_MODEL": run.whisperModel ?? settings["whisper_model"]!,
                            "HF_HOME": modelCache.appendingPathComponent("huggingface").path,
                            "TORCH_HOME": modelCache.appendingPathComponent("torch").path,
                            "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "CLAUTO_OFFLINE": "1"]
         var arguments = ["run_pipeline.py", "--from", String(start), "--to", String(stop), "--progress", "json", "--preview", "--strict-assets",
-                         "--project", "video\(project.id.uuidString.prefix(8))", "--aspect", project.manifest.aspect,
+                         "--project", "video\(project.id.uuidString.prefix(8))", "--aspect", run.aspect ?? project.manifest.aspect,
+                         "--resolution", (run.exportResolution ?? project.manifest.outputResolution).rawValue,
                          "--script", settings["approved_script"]!]
         if let assembly = settings["assembly"] { arguments += ["--assembly", assembly] }
+        if let minimum = run.durationBounds?.minimum { arguments += ["--min-duration", String(minimum)] }
+        if let maximum = run.durationBounds?.maximum { arguments += ["--max-duration", String(maximum)] }
         do {
             let result = try await runner.run(ProcessCommand(executable: engine.appendingPathComponent("run"),
                 arguments: arguments,
@@ -46,8 +49,10 @@ struct PipelineService: Sendable {
             if result.cancelled { run.state = .cancelled; run.failure = "Run stopped; the previous cut is unchanged." }
             else if await recorder.invalid { run.state = .failed; run.failure = "The engine returned unreadable progress. Check Details and retry with the supported engine." }
             else if !result.succeeded {
-                run.state = run.events.last?.stage == 4 ? .needsAssets : .failed
-                run.failure = "The engine stopped. Resolve its reported missing input or read-back issue, then retry."
+                let failure = run.events.last { $0.state == "fail" }
+                let durationReview = failure?.detail.hasPrefix("Duration review required:") == true
+                run.state = failure?.stage == 4 && !durationReview ? .needsAssets : .failed
+                run.failure = failure?.detail ?? "The engine stopped. Resolve its reported missing input or read-back issue, then retry."
             } else {
                 let completed = await recorder.events.filter { $0.state == "done" }.map(\.stage)
                 guard completed == Array(start...stop), !(await recorder.events).contains(where: { $0.state == "fail" }) else { throw WorkflowFailure.invalid("The engine did not confirm every requested stage; this cut remains unverified.") }

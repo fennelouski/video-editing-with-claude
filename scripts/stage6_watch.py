@@ -145,8 +145,8 @@ def measure_loudness(video: Path) -> dict:
 # Checks
 # --------------------------------------------------------------------------------------
 
-def check_frame(path: Path, aspect: str, report: Report) -> None:
-    spec = C.ASPECTS[aspect]
+def check_frame(path: Path, aspect: str, report: Report, resolution: str | None = None) -> None:
+    spec = C.canvas_spec(aspect, resolution)
     with Image.open(path) as im:
         im = im.convert("RGB")
         if im.size != tuple(spec["author"]):
@@ -443,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("video", nargs="?", help="FCP export to review (default: newest in build/exports)")
     ap.add_argument("--project", default=None)
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
+    ap.add_argument("--resolution", default=C.DEFAULT_RESOLUTION, choices=list(C.RESOLUTIONS))
     ap.add_argument("--every", type=float, default=2.0, help="seconds between sampled frames")
     ap.add_argument("--no-log", action="store_true", help="don't append fails to style_guide.md")
     ap.add_argument("--dry-run", action="store_true")
@@ -473,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {len(frames)} frames extracted")
 
     for i, f in enumerate(frames):
-        check_frame(f, args.aspect, report)
+        check_frame(f, args.aspect, report, resolution=args.resolution)
         if (i + 1) % 25 == 0:
             print(f"    …{i + 1}/{len(frames)}")
 

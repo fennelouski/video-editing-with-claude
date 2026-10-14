@@ -61,7 +61,7 @@ def probe(path: Path) -> dict:
     # are different facts, and a caller checking [S-007] must be able to tell them apart.
     info: dict = {"duration": 0.0, "has_video": False, "has_audio": False,
                   "width": 0, "height": 0, "channels": 2, "sample_rate": 48000,
-                  "fps": None}
+                  "fps": None, "frame_duration": None}
     for line in proc.stdout.splitlines():
         if "=" not in line:
             continue
@@ -85,6 +85,7 @@ def probe(path: Path) -> dict:
             num, den = v.split("/", 1)
             if den.isdigit() and int(den) and num.isdigit() and int(num):
                 info["fps"] = int(num) / int(den)
+                info["frame_duration"] = f"{int(den)}/{int(num)}s"
     return info
 
 
@@ -185,6 +186,9 @@ class Clip:
     # can take the left of the frame. Composed with `scale`/`push_to` into one keyframed
     # transform; a snap in and out, one frame long.
     reframe: list[tuple[float, float]] = field(default_factory=list)
+    conform: str | None = None
+    position: tuple[float, float] = (0.0, 0.0)
+    audio_enabled: bool = True
 
     def transform_keys(self) -> list[tuple[float, float, float, float]]:
         """(source time, scale, x, y) keyframes describing the whole clip's framing."""
@@ -237,15 +241,18 @@ class Connected:
     # a level she can no longer change — this lands it where it was measured and leaves the
     # fader where she can reach it. [S-006]
     gain_db: float | None = None
+    scale: float = 1.0
+    position: tuple[float, float] = (0.0, 0.0)
+    conform: str | None = None
 
 
 class FCPXMLBuilder:
     def __init__(self, project: str, aspect: str = C.DEFAULT_ASPECT,
-                 event: str = C.LIBRARY_EVENT_NAME):
+                 event: str = C.LIBRARY_EVENT_NAME, resolution: str | None = None):
         self.project = project
         self.aspect = aspect
         self.event = event
-        self.spec = C.ASPECTS[aspect]
+        self.spec = C.canvas_spec(aspect, resolution)
         self._resources: dict[str, str] = {}     # path -> resource id
         self._assets: list[tuple[str, Path, dict]] = []
         self._next_id = 2                        # r1 is the format
@@ -286,6 +293,16 @@ class FCPXMLBuilder:
             colorSpace="1-1-1 (Rec. 709)",
         )
 
+        source_formats: dict[tuple, str] = {}
+        for _, _, info in self._assets:
+            if not info["has_video"]: continue
+            key = (info["width"], info["height"], info.get("frame_duration") or C.FRAME_DURATION)
+            if key == (w,h,C.FRAME_DURATION): source_formats[key] = "r1"; continue
+            if key not in source_formats:
+                fid = f"sourceFormat{len(source_formats)+1}"
+                source_formats[key] = fid
+                ET.SubElement(resources,"format",id=fid,name="FFVideoFormatRateUndefined",width=str(key[0]),height=str(key[1]),frameDuration=key[2],colorSpace="1-1-1 (Rec. 709)")
+
         for rid, path, info in self._assets:
             attrs = {
                 "id": rid,
@@ -293,7 +310,7 @@ class FCPXMLBuilder:
                 "start": "0s",
                 "duration": dur(info["duration"] or 1.0),
                 "hasVideo": "1" if info["has_video"] else "0",
-                "format": "r1",
+                "format": source_formats.get((info["width"],info["height"],info.get("frame_duration") or C.FRAME_DURATION),"r1"),
             }
             if info["has_audio"]:
                 attrs |= {
@@ -336,14 +353,22 @@ class FCPXMLBuilder:
             info = next(i for r, p, i in self._assets if p.resolve() == clip.asset_path.resolve())
             if info["has_audio"]:
                 el.set("audioRole", C.ROLE_DIALOGUE)
+            if not clip.audio_enabled:
+                el.set("srcEnable", "video")
+            if clip.conform is not None:
+                if clip.conform not in ("fit", "fill", "none"):
+                    raise ValueError("unsupported conform mode")
+                ET.SubElement(el, "adjust-conform", type=clip.conform)
             # Video intrinsics precede audio intrinsics in the DTD, so this sits before volume.
-            if clip.scale is not None or clip.push_to is not None or clip.reframe:
+            if clip.scale is not None or clip.push_to is not None or clip.reframe or clip.position != (0.0, 0.0):
                 keys = clip.transform_keys()
                 frm = keys[0][1]
                 xf = ET.SubElement(el, "adjust-transform", scale=f"{frm:.4f} {frm:.4f}")
+                if clip.position != (0.0, 0.0):
+                    xf.set("position", f"{clip.position[0]:.6f} {clip.position[1]:.6f}")
                 if len(keys) > 1:
                     for name, fmt in (("scale", lambda k: f"{k[1]:.4f} {k[1]:.4f}"),
-                                      ("position", lambda k: f"{k[2]:.1f} {k[3]:.1f}")):
+                                      ("position", lambda k: f"{k[2] + clip.position[0]:.6f} {k[3] + clip.position[1]:.6f}")):
                         prm = ET.SubElement(xf, "param", name=name)
                         kfa = ET.SubElement(prm, "keyframeAnimation")
                         for k in keys:
@@ -375,7 +400,17 @@ class FCPXMLBuilder:
                     duration=dur(g.duration),
                     **extra,
                 )
+                if g.audio:
+                    if g.video_only: raise ValueError("a connected clip cannot be both audio-only and video-only")
+                    sub.set("srcEnable","audio")
+                if not g.audio:
+                    if g.conform is not None:
+                        if g.conform not in ("fit", "fill", "none"): raise ValueError("unsupported connected conform mode")
+                        ET.SubElement(sub,"adjust-conform",type=g.conform)
+                    if g.scale != 1 or g.position != (0.0,0.0):
+                        ET.SubElement(sub,"adjust-transform",scale=f"{g.scale:.6f} {g.scale:.6f}",position=f"{g.position[0]:.6f} {g.position[1]:.6f}")
                 if g.gain_db is not None:
+                    if g.video_only: raise ValueError("a video-only connected clip cannot carry an audio gain")
                     ET.SubElement(sub, "adjust-volume", amount=f"{g.gain_db:.1f}dB")
 
             for at, text, todo in clip.markers:

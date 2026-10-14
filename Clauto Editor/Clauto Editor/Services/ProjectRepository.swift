@@ -21,7 +21,7 @@ actor ProjectRepository {
         }
     }
 
-    func create(name: String, root: URL, engine: URL, engineVersion: String = "development") throws -> Project {
+    func create(name: String, root: URL, engine: URL, engineVersion: String = "development", resolution: ExportResolution = .fullHD) throws -> Project {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 160, !name.contains("/"), !name.contains(":"),
               !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
@@ -35,7 +35,7 @@ actor ProjectRepository {
             for path in ["footage/a-cam", "footage/audio", "assets/music", "assets/graphics", "script", "notes", "cuts", "build", ".clauto"] {
                 try manager.createDirectory(at: folder.appendingPathComponent(path), withIntermediateDirectories: true)
             }
-            let project = Project(manifest: ProjectManifest(name: name, engineVersion: engineVersion), folder: folder, brief: Brief())
+            let project = Project(manifest: ProjectManifest(name: name, engineVersion: engineVersion, exportResolution: resolution), folder: folder, brief: Brief())
             let paths = ["footage": folder.appendingPathComponent("footage").path,
                          "assets": folder.appendingPathComponent("assets").path,
                          "build": folder.appendingPathComponent("build").path,
@@ -71,6 +71,7 @@ actor ProjectRepository {
         try Self.validateDrive(folder)
         let manifest = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: folder.appendingPathComponent("clauto-project.json")))
         guard manifest.schemaVersion == 1 else { throw ProjectFailure.invalidProject }
+        try manifest.durationBounds?.validate()
         for file in manifest.files { _ = try intakeURL(file, folder: folder) }
         let markdown = try String(contentsOf: folder.appendingPathComponent("brief.md"), encoding: .utf8)
         return Project(manifest: manifest, folder: folder, brief: Brief(markdown: markdown))
@@ -144,6 +145,22 @@ actor ProjectRepository {
         var settings = try decoder.decode([String: String].self, from: Data(contentsOf: path))
         settings["whisper_model"] = model
         try encoder.encode(settings).write(to: path, options: .atomic)
+        try saveManifest(next)
+        return next
+    }
+
+    func exportResolution(_ resolution: ExportResolution, project: Project) throws -> Project {
+        var next = try open(project.folder)
+        next.manifest.exportResolution = resolution; next.manifest.modified = Date()
+        try saveManifest(next)
+        return next
+    }
+
+    func durationBounds(_ bounds: VideoDurationBounds, project: Project) throws -> Project {
+        try bounds.validate()
+        var next = try open(project.folder)
+        next.manifest.durationBounds = bounds.enabled ? bounds : nil
+        next.manifest.modified = Date()
         try saveManifest(next)
         return next
     }

@@ -177,14 +177,14 @@ def load_texture(name: str, size: tuple[int, int]) -> "Image.Image":
 # Compositing primitives
 # --------------------------------------------------------------------------------------
 
-def contact_shadow(sprite: "Image.Image") -> "Image.Image":
+def contact_shadow(sprite: "Image.Image", pixel_scale: float = 1) -> "Image.Image":
     """
     §4.4 — a warm, soft, down-right contact shadow. Never pure black, never a different
     direction from the rest of the channel.
     """
-    ox = sum(C.SHADOW["offset_x"]) // 2
-    oy = sum(C.SHADOW["offset_y"]) // 2
-    blur = sum(C.SHADOW["blur"]) // 2
+    ox = round(sum(C.SHADOW["offset_x"]) / 2 * pixel_scale)
+    oy = round(sum(C.SHADOW["offset_y"]) / 2 * pixel_scale)
+    blur = round(sum(C.SHADOW["blur"]) / 2 * pixel_scale)
     opacity = sum(C.SHADOW["opacity"]) / 2
     r, g, b = C.SHADOW["rgb"]
 
@@ -209,19 +209,19 @@ def content_box(spec: dict) -> tuple[int, int, int, int]:
     return x, y, w - x - spec["margin_right"], h - y - spec["margin_bottom"]
 
 
-def fit_to_slot(sprite: "Image.Image", slot_w: int, slot_h: int, fill: float = 0.86) -> "Image.Image":
+def fit_to_slot(sprite: "Image.Image", slot_w: int, slot_h: int, fill: float = 0.86, pixel_scale: float = 1) -> "Image.Image":
     """
     Scale a scan down into its layout slot.
 
     Source cutouts are ≥2400px on the long edge (§1.2) so the edit can push in on them — which
     means they are almost always larger than the canvas and must be fitted, never composited at
-    native size. Only ever scales down; upscaling a scan past 1:1 destroys the fibre detail that
-    is the entire reason for shooting it big.
+    native size on the 1080p design grid. Export resolution scales that grid uniformly;
+    a 4K export can enlarge a lower-resolution scan and must retain an upscale warning.
     """
     if sprite.width <= 0 or sprite.height <= 0:
         return sprite
-    factor = min(slot_w * fill / sprite.width, slot_h * fill / sprite.height, 1.0)
-    if factor >= 0.999:
+    factor = min(slot_w * fill / sprite.width, slot_h * fill / sprite.height, pixel_scale)
+    if abs(factor - 1) < 0.001:
         return sprite
     return resize_rgba(sprite, (max(1, int(sprite.width * factor)),
                                 max(1, int(sprite.height * factor))))
@@ -237,7 +237,7 @@ def layout_slots(n: int, spec: dict) -> list[tuple[int, int, int, int]]:
     bx, by, bw, bh = content_box(spec)
     if n <= 1:
         return [(bx, by, bw, bh)]
-    gap = 64
+    gap = round(64 * spec.get("pixel_scale", 1))
     slot_w = (bw - gap * (n - 1)) // n
     return [(bx + i * (slot_w + gap), by, slot_w, bh) for i in range(n)]
 
@@ -255,6 +255,16 @@ def apply_transform(sprite: "Image.Image", t: SC.Transform) -> "Image.Image":
         a = sprite.getchannel("A").point(lambda v: int(v * max(0.0, t.opacity)))
         sprite.putalpha(a)
     return sprite
+
+
+def place_sprite(sprite: "Image.Image", slot: tuple[int, int, int, int], pose: SC.Transform,
+                 pixel_scale: float = 1) -> tuple["Image.Image", tuple[int,int]]:
+    sx,sy,sw,sh = slot
+    sprite = fit_to_slot(sprite,sw,sh,pixel_scale=pixel_scale)
+    sprite = contact_shadow(sprite,pixel_scale=pixel_scale)
+    sprite = apply_transform(sprite,pose)
+    return sprite, (int(sx+sw/2-sprite.width/2+pose.x*pixel_scale),
+                    int(sy+sh/2-sprite.height/2+pose.y*pixel_scale))
 
 
 def grain_pass(frame: "Image.Image", grain: "Image.Image", opacity: float) -> "Image.Image":
@@ -290,9 +300,9 @@ def grain_pass(frame: "Image.Image", grain: "Image.Image", opacity: float) -> "I
 # --------------------------------------------------------------------------------------
 
 def render_cue(cue: dict, aspect: str, out_dir: Path, clock: SC.StepClock,
-               grain: "Image.Image | None") -> Path | None:
+               grain: "Image.Image | None", resolution: str | None = None) -> Path | None:
     """Render one cue to a PNG sequence, stepping on 2s and holding odd frames."""
-    spec = C.ASPECTS[aspect]
+    spec = C.canvas_spec(aspect, resolution)
     size = spec["author"]
 
     refs = cue.get("assets") or []
@@ -338,15 +348,8 @@ def render_cue(cue: dict, aspect: str, out_dir: Path, clock: SC.StepClock,
                 if pose is None or pose.opacity <= 0.001:
                     continue
                 vi = SC.variant_for(eid, frame, len(cut.variants), clock)
-                sx, sy, sw, sh = slots[i]
-                sprite = fit_to_slot(cut.load(vi), sw, sh)
-                sprite = contact_shadow(sprite)
-                sprite = apply_transform(sprite, pose)
-
-                # Centre in the slot, then apply the pose offset.
-                px = int(sx + sw / 2 - sprite.width / 2 + pose.x)
-                py = int(sy + sh / 2 - sprite.height / 2 + pose.y)
-                composite.alpha_composite(sprite, (px, py))
+                sprite, position = place_sprite(cut.load(vi),slots[i],pose,spec["pixel_scale"])
+                composite.alpha_composite(sprite, position)
 
             if grain is not None:
                 lo, hi = C.GRAIN_OPACITY
@@ -379,14 +382,14 @@ def encode_sequence(seq_dir: Path, out: Path) -> Path:
 # Captions  (§6.7)
 # --------------------------------------------------------------------------------------
 
-def build_ass(words: list[dict], aspect: str, out: Path) -> Path:
+def build_ass(words: list[dict], aspect: str, out: Path, resolution: str | None = None) -> Path:
     """
     Burned captions as ASS. Cut, never slide, never step. Word-level highlight uses a rust
     *background fill*, not coloured text — coloured text on video fails contrast.
     """
-    spec = C.ASPECTS[aspect]
+    spec = C.canvas_spec(aspect, resolution)
     w, h = spec["author"]
-    size = C.TYPE_SCALE["caption"][0 if aspect == "16:9" else 1]
+    size = round(C.TYPE_SCALE["caption"][0 if aspect == "16:9" else 1] * spec["pixel_scale"])
     margin_v = h - spec["caption_baseline"]
 
     header = f"""[Script Info]
@@ -446,7 +449,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 # --------------------------------------------------------------------------------------
 
 def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Path, float, dict]],
-             out: Path) -> Path:
+             out: Path, resolution: str | None = None) -> Path:
     """
     Build the Final Cut package: the cut timeline, her graphic layers attached as connected
     clips at the right timecodes, a marker on every cue, and chapter markers.
@@ -551,7 +554,7 @@ def assemble(project: str, aspect: str, edl_path: Path, overlays: list[tuple[Pat
         print("    They land too close to the outro to hold for the §5.4 minimum. "
               "Either give the outro more room or move the cue earlier.")
 
-    builder = FX.FCPXMLBuilder(project=project, aspect=aspect)
+    builder = FX.FCPXMLBuilder(project=project, aspect=aspect, resolution=resolution)
     tree = builder.build(clips, connected, chapters)
     builder.write(tree, out)
 
@@ -577,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage 5 — composite graphics, burn captions, stitch")
     ap.add_argument("plan", nargs="?")
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
+    ap.add_argument("--resolution", default=C.DEFAULT_RESOLUTION, choices=list(C.RESOLUTIONS))
     ap.add_argument("--edl", help="explicit retained-span edit list")
     ap.add_argument("--transcript", help="explicit word timings for captions")
     ap.add_argument("--graphics-only", action="store_true",
@@ -612,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
             return 3
 
     clock = SC.StepClock()
-    spec = C.ASPECTS[args.aspect]
+    spec = C.canvas_spec(args.aspect, args.resolution)
     print(f"Stage 5 — {args.aspect} @ {C.FPS:.3f}p ({C.FPS_STR}), "
           f"graphics stepping on {C.GRAPHIC_STEP}s")
 
@@ -633,7 +637,7 @@ def main(argv: list[str] | None = None) -> int:
     for cue in plan["cues"]:
         if cue.get("start") is None or cue["kind"] in {"NOTE", "VO", "CAM", "BROLL", "MACRO"}:
             continue
-        seq = render_cue(cue, args.aspect, C.FRAMES, clock, grain)
+        seq = render_cue(cue, args.aspect, C.FRAMES, clock, grain, resolution=args.resolution)
         if seq:
             mov = encode_sequence(seq, C.GRAPHICS / f"{project}_{cue['id']}.mov")
             overlays.append((mov, cue["start"], cue))
@@ -664,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out = C.EXPORTS / f"{project}.fcpxml"
     try:
-        assemble(project, args.aspect, edls[0], overlays, out)
+        assemble(project, args.aspect, edls[0], overlays, out, resolution=args.resolution)
     except Exception as exc:  # noqa: BLE001
         print(f"! {exc}", file=sys.stderr)
         return 1

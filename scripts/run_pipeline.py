@@ -30,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cli
 import config as C  # noqa: E402
+from duration_bounds import (DurationBounds, DurationReviewRequired, check_final_output,
+                             check_roughcut, expected_final_output)
 
 
 @dataclass
@@ -143,6 +145,10 @@ def stage_args(stage: Stage, args) -> list[str]:
         out += ["--project", args.project]
         if getattr(args, "assembly", None):
             out += ["--assembly", args.assembly]
+        elif getattr(args, "max_duration", None) is not None and len(list(C.TRANSCRIPTS.glob("*.words.json"))) == 1:
+            # The existing target can tighten pauses to the breath floor, never sentences.
+            # An assembly's maximum belongs to the whole cut, not to every source clip.
+            out += ["--target", str(args.max_duration)]
         if args.aggressive:
             out.append("--aggressive")
         if args.preview:
@@ -166,15 +172,33 @@ def stage_args(stage: Stage, args) -> list[str]:
         plan = C.PLAN_DIR / f"{args.project}.plan.json"
         if plan.exists():
             out.append(str(plan))
-        out += ["--aspect", args.aspect]
+        out += ["--aspect", args.aspect, "--resolution", getattr(args, "resolution", C.DEFAULT_RESOLUTION)]
         if getattr(args, "assembly", None):
             from multisource import EDL, TRANSCRIPT
             out += ["--edl", str(C.ROUGHCUT / EDL), "--transcript", str(C.TRANSCRIPTS / TRANSCRIPT)]
         if args.no_captions:
             out.append("--no-captions")
     elif stage.key == "watch":
-        out += ["--aspect", args.aspect, "--project", args.project]
+        out += ["--aspect", args.aspect, "--project", args.project, "--resolution", getattr(args, "resolution", C.DEFAULT_RESOLUTION)]
     return out
+
+
+def run_bounded_stage(stage: Stage, args, bounds: DurationBounds) -> tuple[int, str]:
+    """Use one duration gate for ordinary CLI and machine-readable stage events."""
+    try:
+        if not args.dry_run and stage.number in (4, 5):
+            check_roughcut(C.ROUGHCUT, bounds, assembly=bool(args.assembly))
+        if bounds.enabled and not args.dry_run and stage.number == 5:
+            expected_final_output(C.EXPORTS, args.project)
+        code = run_stage(stage, stage_args(stage, args), args.dry_run)
+        if not code and not args.dry_run and stage.number in (2, 5):
+            check_roughcut(C.ROUGHCUT, bounds, assembly=bool(args.assembly))
+        if not code and not args.dry_run and stage.number == 5:
+            check_final_output(C.EXPORTS, args.project, bounds)
+    except DurationReviewRequired as exc:
+        print(f"! {exc}", file=sys.stderr)
+        return 1, str(exc)
+    return code, stage.gate_message if code else stage.title
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,10 +213,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--only", type=int, help="run exactly one stage")
     ap.add_argument("--skip", type=int, nargs="*", default=[], help="skip these stages")
     ap.add_argument("--aspect", default=C.DEFAULT_ASPECT, choices=list(C.ASPECTS))
+    ap.add_argument("--resolution", default=C.DEFAULT_RESOLUTION, choices=list(C.RESOLUTIONS))
     ap.add_argument("--project", default="video001", help="project name, used for filenames")
     ap.add_argument("--strict-assets", action="store_true", help="stop for asset quality warnings as well as missing files")
     ap.add_argument("--script", help="explicit annotated script selected by the editor")
     ap.add_argument("--assembly", help="explicit ordered narration source manifest")
+    ap.add_argument("--min-duration", type=float, metavar="SECONDS",
+                    help="minimum retained runtime; stops for review rather than padding the cut")
+    ap.add_argument("--max-duration", type=float, metavar="SECONDS",
+                    help="maximum retained runtime; stops for review rather than clipping sentences")
     ap.add_argument("--model", default=C.WHISPER_MODEL, help="whisper model")
     ap.add_argument("--preview", action="store_true",
                     help="stage 2: also render a flattened preview mp4")
@@ -206,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip-preflight", action="store_true")
     args = ap.parse_args(argv)
 
+    try:
+        bounds = DurationBounds(args.min_duration, args.max_duration)
+    except ValueError as exc:
+        ap.error(str(exc))
+
     if args.json and not args.dry_run:
         ap.error("--json requires --dry-run")
     if args.json:
@@ -217,6 +251,9 @@ def main(argv: list[str] | None = None) -> int:
                                      ("cuts", "CUTS"), ("script", "SCRIPT_DIR"), ("templates", "TEMPLATES"))},
                           "whisper_model": C.WHISPER_MODEL}))
         return 1 if problems else 0
+    if bounds.enabled and args.dry_run:
+        print("Duration bounds will be checked after stage 2 and before stages 4/5. "
+              "A dry run does not verify or accept a cut's duration.", file=sys.stderr)
     if args.progress:
         with redirect_stdout(sys.stderr):
             problems = [] if args.skip_preflight else preflight()
@@ -233,9 +270,9 @@ def main(argv: list[str] | None = None) -> int:
         for stage in selected:
             print(json.dumps({"stage": stage.number, "state": "start", "detail": stage.title}), flush=True)
             with redirect_stdout(sys.stderr):
-                code = run_stage(stage, stage_args(stage, args), args.dry_run)
+                code, detail = run_bounded_stage(stage, args, bounds)
             print(json.dumps({"stage": stage.number, "state": "done" if not code else "fail",
-                              "detail": stage.gate_message if code else stage.title}), flush=True)
+                              "detail": detail}), flush=True)
             if code and stage.blocking:
                 return code
         return 0
@@ -265,14 +302,14 @@ def main(argv: list[str] | None = None) -> int:
 
     results: dict[int, int] = {}
     for stage in selected:
-        code = run_stage(stage, stage_args(stage, args), args.dry_run)
+        code, detail = run_bounded_stage(stage, args, bounds)
         results[stage.number] = code
 
         if code != 0 and stage.blocking and not args.dry_run:
             print("═" * 70)
-            if stage.gate_message:
+            if detail:
                 print(f"STOPPED at stage {stage.number}.")
-                print(f"  {stage.gate_message}")
+                print(f"  {detail}")
             else:
                 print(f"STOPPED — stage {stage.number} exited {code}.")
             print("═" * 70)

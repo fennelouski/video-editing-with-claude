@@ -46,6 +46,43 @@ struct ProjectManifest: Codable, Identifiable, Sendable {
     var whisperModel = "large-v3"
     var files: [ProjectFile] = []
     var archived = false
+    var durationBounds: VideoDurationBounds? = nil
+    var exportResolution: ExportResolution? = nil
+    var outputResolution: ExportResolution { exportResolution ?? .fullHD }
+}
+
+enum ExportResolution: String, Codable, CaseIterable, Identifiable, Sendable {
+    case hd = "720p", fullHD = "1080p", ultraHD = "2160p"
+    var id: String { rawValue }
+    var shortEdge: Int { switch self { case .hd: 720; case .fullHD: 1080; case .ultraHD: 2160 } }
+    var label: String { switch self { case .hd: "720p · HD"; case .fullHD: "1080p · Full HD"; case .ultraHD: "2160p · 4K" } }
+    func dimensions(aspect: String) -> (width: Int, height: Int) {
+        aspect == "9:16" ? (shortEdge, shortEdge * 16 / 9) : (shortEdge * 16 / 9, shortEdge)
+    }
+}
+
+struct VideoDurationBounds: Codable, Equatable, Sendable {
+    var minimum: Double? = nil
+    var maximum: Double? = nil
+    var enabled: Bool { minimum != nil || maximum != nil }
+
+    func validate() throws {
+        guard [minimum, maximum].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 > 0 }),
+              minimum == nil || maximum == nil || minimum! <= maximum! else {
+            throw WorkflowFailure.invalid("Duration limits must be positive seconds, with the minimum no greater than the maximum.")
+        }
+    }
+
+    func check(_ seconds: Double) throws {
+        try validate()
+        guard seconds.isFinite, seconds > 0 else { throw WorkflowFailure.invalid("The finished timeline has no verifiable duration.") }
+        if let minimum, seconds < minimum - 1e-9 {
+            throw WorkflowFailure.invalid(String(format: "Duration review required: the finished timeline is %.3fs, below the %.3fs minimum. Select complete narration or revise the limit. The previous cut stays current.", seconds, minimum))
+        }
+        if let maximum, seconds > maximum + 1e-9 {
+            throw WorkflowFailure.invalid(String(format: "Duration review required: the finished timeline is %.3fs, above the %.3fs maximum. Review whole takes or sentences, or revise the limit. The previous cut stays current.", seconds, maximum))
+        }
+    }
 }
 
 struct Project: Identifiable, Sendable {

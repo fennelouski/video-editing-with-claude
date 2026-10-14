@@ -242,3 +242,30 @@ When external-AI testing is separately authorized, capture a real Claude CLI str
 fixture and implement one resumable turn. Complete scientific escalation cards,
 multicamera selection/synchronization, notifications and branch/watch.
 Keep engine version pinning explicit and never bypass the read-back or asset gates.
+
+
+## Expanded local workflows (14 October)
+
+See `EXPANDED_FEATURES.md` for all eight requested features and remaining acceptance.
+Timed feedback binds project/version/timeline/range identity. Optional duration
+limits are persisted and frozen, checked against the frame-aligned retained EDL
+and actual emitted/saved FCPXML, and preserve the previous current cut on failure.
+Duration failures retain their editorial review message instead of entering the
+missing-assets flow.
+
+Global new-project export defaults and project overrides support 720p/1080p/2160p.
+Runs freeze resolution, aspect and model, reject missing/changed metadata, and
+verify actual sequence dimensions before saving. Raster spacing, motion, shadows,
+captions and safe areas scale together. FCPXML resources retain source dimensions
+and rates separately from the chosen sequence format.
+
+Saved cuts can produce immutable local derivatives in `build/derivatives/<UUID>/`:
+selected ranges, portrait/landscape output, fit/fill framing and position, captions,
+graphical layers and local audio effects. Gain, filters, compression and echo
+create separate PCM dialogue; an optional project sound is placed at sample-aligned
+time. Full decode, hashes and true peak are checked before completion. The native
+service validates the parent, chosen range/framing/effects and output receipt,
+retains the original engine contract and records only completed derivatives.
+Unsupported animated transforms/volume, nested/transition effects or missing
+source spans fail with a review message. GUI acceptance and support for additional
+timeline effects remain pending. The app does not open Final Cut during export.

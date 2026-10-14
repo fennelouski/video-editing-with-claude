@@ -14,6 +14,10 @@ struct SetupView: View {
                         folderRow("Editing engine", url: store.engineRoot) { store.setFolders(engine: $0) }
                     }.padding(8)
                 }
+                Picker("Default export resolution for new videos", selection: Binding(get: { store.defaultExportResolution }, set: { store.setDefaultExportResolution($0) })) {
+                    ForEach(ExportResolution.allCases) { value in Text(value.label).tag(value) }
+                }.accessibilityIdentifier("defaultExportResolution")
+                Text("Each video keeps its own resolution. Changing the default applies when you create a new project.").font(.caption).foregroundStyle(.secondary)
                 Button(store.checking ? "Checking…" : "Check Setup", systemImage: "checklist") { Task { await store.checkSetup() } }
                     .buttonStyle(.borderedProminent).disabled(store.checking)
                 ForEach(store.setupChecks) { check in

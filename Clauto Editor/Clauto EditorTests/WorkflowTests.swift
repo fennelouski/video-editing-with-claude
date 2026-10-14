@@ -12,7 +12,8 @@ private actor FixtureRunner: CommandRunning {
     var commands: [ProcessCommand] = []
     var failStage: Int?
     var malformed: Bool
-    init(failStage: Int? = nil, malformed: Bool = false) { self.failStage = failStage; self.malformed = malformed }
+    var failDetail: String
+    init(failStage: Int? = nil, malformed: Bool = false, failDetail: String = "Missing fixture") { self.failStage = failStage; self.malformed = malformed; self.failDetail = failDetail }
     func cancel() {}
     func run(_ command: ProcessCommand, onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
         commands.append(command)
@@ -21,12 +22,46 @@ private actor FixtureRunner: CommandRunning {
         for stage in start...stop {
             await onLine?(ProcessLine(text: "{\"stage\":\(stage),\"state\":\"start\",\"detail\":\"Synthetic fixture\"}", isError: false))
             if stage == failStage {
-                await onLine?(ProcessLine(text: "{\"stage\":\(stage),\"state\":\"fail\",\"detail\":\"Missing fixture\"}", isError: false))
+                let detail = String(decoding: try JSONEncoder().encode(failDetail), as: UTF8.self)
+                await onLine?(ProcessLine(text: "{\"stage\":\(stage),\"state\":\"fail\",\"detail\":\(detail)}", isError: false))
                 return ProcessResult(exitCode: 3, output: "", error: "", cancelled: false)
             }
             await onLine?(ProcessLine(text: malformed ? "unrecognized response" : "{\"stage\":\(stage),\"state\":\"done\",\"detail\":\"Synthetic fixture\"}", isError: false))
         }
         return ProcessResult(exitCode: 0, output: "", error: "", cancelled: false)
+    }
+}
+
+private actor DerivativeProtocolRunner: CommandRunning {
+    var mode: String
+    init(_ mode: String) { self.mode = mode }
+    func cancel() {}
+    func run(_ command: ProcessCommand, onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
+        let parent = URL(fileURLWithPath: command.arguments[1]), folder = URL(fileURLWithPath: command.arguments[2])
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        if mode != "missing" {
+            // Protocol fixture only. Actual codec/alpha/audio acceptance is covered by
+            // Python integration tests and the opt-in real native-service test below.
+            try Data("synthetic-protocol-output".utf8).write(to: folder.appendingPathComponent("review.mp4"))
+            try FileManager.default.copyItem(at: parent, to: folder.appendingPathComponent("timeline.fcpxml"))
+            let range = [0.0, (0.5 * 24000 / 1001).rounded(.toNearestOrEven) * 1001 / 24000]
+            var recipe: [String: Any] = ["state": "complete", "parent_sha256": try DerivativeService.digest(parent),
+                "aspect": "9:16", "resolution": "720p", "full_decode_passed": true,
+                "selected_range_seconds": mode == "wrongRange" ? [0.0, 0.8] : range,
+                "framing": ["conform": "fit", "position_percent_of_height": [0.0, 0.0]], "audio_effects": NSNull(),
+                "output_sha256": ["review.mp4": try DerivativeService.digest(folder.appendingPathComponent("review.mp4")),
+                                  "timeline.fcpxml": try DerivativeService.digest(folder.appendingPathComponent("timeline.fcpxml"))]]
+            if let index = command.arguments.firstIndex(of: "--sound") {
+                let sound = URL(fileURLWithPath: command.arguments[index + 1])
+                let at = Double(command.arguments[command.arguments.firstIndex(of: "--sound-at")! + 1])!
+                let gain = Double(command.arguments[command.arguments.firstIndex(of: "--sound-gain-db")! + 1])!
+                recipe["source_sha256"] = [sound.path: mode == "badSoundHash" ? "wrong" : try DerivativeService.digest(sound)]
+                recipe["sound_effect"] = ["source": mode == "badSoundIdentity" ? sound.path + ".different" : sound.path,
+                    "at": mode == "badSoundTime" ? DerivativeRequest.snapped(at) + 0.1 : DerivativeRequest.snapped(at), "gain_db": gain]
+            }
+            try JSONSerialization.data(withJSONObject: recipe).write(to: folder.appendingPathComponent("derivative.json"))
+        }
+        return ProcessResult(exitCode: 0, output: "Synthetic protocol fixture", error: "", cancelled: false)
     }
 }
 
@@ -70,6 +105,244 @@ struct WorkflowTests {
         let evidence: [String: Any] = ["timeline": "video.fcpxml", "sha256": SHA256.hash(data: Data(xml.utf8)).map { String(format: "%02x", $0) }.joined(), "problems": [], "schemaChecked": false]
         try JSONSerialization.data(withJSONObject: evidence).write(to: run.folder.appendingPathComponent("exports/video.validation.json"))
         if withReadback { try "Synthetic read-back.".write(to: run.folder.appendingPathComponent("roughcut/clip.heard.txt"), atomically: true, encoding: .utf8) }
+    }
+
+    @Test func derivativeProtocolRequiresReceiptAndExactSelectedVersionRange() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Parent")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run, project: project)
+        let request = DerivativeRequest(resolution: .hd, end: 0.5)
+        for mode in ["missing", "wrongRange"] {
+            await #expect(throws: (any Error).self) {
+                try await DerivativeService(runner: DerivativeProtocolRunner(mode), disk: disk).export(request, version: parent, project: project, engine: engine, onLine: { _ in })
+            }
+        }
+        #expect(try await disk.derivatives(project: project).isEmpty)
+        let result = try await DerivativeService(runner: DerivativeProtocolRunner("complete"), disk: disk).export(request, version: parent, project: project, engine: engine, onLine: { _ in })
+        #expect(try await WorkflowRepository().derivatives(project: project).first?.id == result.id)
+        #expect(result.parentVersionID == parent.id && result.request == request)
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        let folder = try await disk.derivativeFolder(result.id, project: project)
+        try Data("changed".utf8).write(to: folder.appendingPathComponent("review.mp4"))
+        #expect(try await disk.derivatives(project: project).isEmpty)
+    }
+
+    @Test func derivativeSoundIdentityTimingAndHashMustMatchTheChosenLocalFile() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let sound = root.appendingPathComponent("synthetic-effect.wav")
+        let bytes = Data("protocol-only synthetic sound identity".utf8); try bytes.write(to: sound)
+        let project = try await ProjectRepository().add([sound], to: original, group: .audio)
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Sound parent")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run, project: project)
+        let file = try #require(project.manifest.files.first { $0.group == .audio })
+        let request = DerivativeRequest(resolution: .hd, end: 0.5, soundFileID: file.id, soundAt: 0.0625625)
+        for mode in ["badSoundIdentity", "badSoundTime", "badSoundHash"] {
+            await #expect(throws: WorkflowFailure.self) {
+                try await DerivativeService(runner: DerivativeProtocolRunner(mode), disk: disk).export(request, version: parent, project: project, engine: engine, onLine: { _ in })
+            }
+        }
+        #expect(try await disk.derivatives(project: project).isEmpty)
+        let accepted = try await DerivativeService(runner: DerivativeProtocolRunner("sound"), disk: disk).export(request, version: parent, project: project, engine: engine, onLine: { _ in })
+        #expect(try await disk.derivatives(project: project).first?.id == accepted.id)
+        #expect(try Data(contentsOf: sound) == bytes)
+        #expect(try await disk.current(project: project)?.id == parent.id)
+    }
+
+    @Test func derivativeParametersRejectInvalidTimesAndEffects() throws {
+        #expect(DerivativeRequest.snapped(0.0625625) == 2002.0 / 24000.0)
+        for request in [DerivativeRequest(start: -.infinity), DerivativeRequest(end: 3), DerivativeRequest(x: 101),
+                        DerivativeRequest(effects: LocalAudioEffects(gainDB: .nan))] {
+            #expect(throws: WorkflowFailure.self) { try request.validate(duration: 2) }
+        }
+        let legacy = try JSONDecoder().decode(DerivativeRequest.self, from: Data(#"{"aspect":"9:16","resolution":"720p","start":0,"framing":"fit","x":0,"y":0}"#.utf8))
+        #expect(legacy.soundFileID == nil && legacy.soundAt == 0 && legacy.soundGainDB == -12)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_DERIVATIVE_ACCEPTANCE_PROJECT"] != nil))
+    func actualNativeSelectedVersionDerivativeAcceptance() async throws {
+        let projectURL = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["CLAUTO_DERIVATIVE_ACCEPTANCE_PROJECT"]))
+        let engine = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["CLAUTO_ACCEPTANCE_ENGINE"]))
+        let project = try await ProjectRepository().open(projectURL), disk = WorkflowRepository()
+        let parent = try #require(try await disk.current(project: project))
+        let request = DerivativeRequest(resolution: .hd, start: 0.0625625, end: 0.75, effects: LocalAudioEffects(gainDB: -3, highpassHZ: 80, compressor: true))
+        let result = try await DerivativeService(runner: ProcessRunner(), disk: disk).export(request, version: parent, project: project, engine: engine, onLine: { _ in })
+        #expect(result.parentVersionID == parent.id)
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await WorkflowRepository().derivatives(project: project).contains { $0.id == result.id })
+        print("NATIVE_DERIVATIVE_ACCEPTANCE_FOLDER=" + project.folder.appendingPathComponent("build/derivatives/" + result.id.uuidString).path)
+    }
+
+    @Test func outputPreferencesPersistFreezeAndRefuseMismatchedTimeline() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let repo = ProjectRepository(), disk = WorkflowRepository(), runner = FixtureRunner()
+        let project = try await repo.exportResolution(.ultraHD, project: original)
+        #expect(try await repo.open(project.folder).manifest.outputResolution == .ultraHD)
+        var run = try await disk.prepare(project: project, engine: engine, label: "4K")
+        let changed = try await repo.preferences(aspect: "9:16", model: "small", project: project)
+        _ = try await repo.exportResolution(.hd, project: changed)
+        let finished = try await PipelineService(runner: runner, disk: disk).execute(run, project: changed, engine: engine, start: 1, stop: 3, onEvent: { _ in })
+        #expect(finished.state == .needsReview)
+        let command = try #require(await runner.commands.first)
+        #expect(command.arguments[command.arguments.firstIndex(of: "--resolution")! + 1] == "2160p")
+        #expect(command.arguments[command.arguments.firstIndex(of: "--aspect")! + 1] == "16:9")
+        #expect(command.environment["CLAUTO_WHISPER_MODEL"] == "large-v3")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        // The fixture emits 1920x1080: success receipts cannot disguise the wrong canvas.
+        await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(run, project: project) }
+        #expect(try await disk.current(project: project) == nil)
+        var missing = run
+        missing.exportResolution = nil; missing.aspect = nil; missing.whisperModel = nil; missing.outputSettingsSchema = nil
+        await #expect(throws: WorkflowFailure.self) { try await disk.settings(missing, project: project, engine: engine) }
+        await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(missing, project: project) }
+        var settings = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: run.folder.appendingPathComponent("paths.json")))
+        settings["export_resolution"] = "720p"
+        try JSONEncoder().encode(settings).write(to: run.folder.appendingPathComponent("paths.json"))
+        await #expect(throws: WorkflowFailure.self) { try await disk.settings(run, project: project, engine: engine) }
+    }
+
+    @Test func durationLimitsPersistFreezeAndRejectTampering() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let repo = ProjectRepository(), disk = WorkflowRepository(), runner = FixtureRunner()
+        let bounds = VideoDurationBounds(minimum: 0.5, maximum: 2)
+        let project = try await repo.durationBounds(bounds, project: original)
+        #expect(try await repo.open(project.folder).manifest.durationBounds == bounds)
+        let run = try await disk.prepare(project: project, engine: engine, label: "Bounded")
+        let changed = try await repo.durationBounds(VideoDurationBounds(maximum: 0.8), project: project)
+        #expect(run.durationBounds == bounds)
+        let done = try await PipelineService(runner: runner, disk: disk).execute(run, project: changed, engine: engine, start: 1, stop: 3, onEvent: { _ in })
+        #expect(done.state == .needsReview)
+        let command = try #require(await runner.commands.first)
+        #expect(command.arguments.contains("--min-duration") && command.arguments.contains("--max-duration"))
+        #expect(command.arguments[command.arguments.firstIndex(of: "--max-duration")! + 1] == "2.0")
+        var settings = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: run.folder.appendingPathComponent("paths.json")))
+        settings["duration_bounds"] = #"{"maximum":20}"#
+        try JSONEncoder().encode(settings).write(to: run.folder.appendingPathComponent("paths.json"))
+        await #expect(throws: WorkflowFailure.self) { try await disk.settings(run, project: changed, engine: engine) }
+        for invalid in [VideoDurationBounds(minimum: 0), VideoDurationBounds(maximum: .infinity), VideoDurationBounds(minimum: 2, maximum: 1)] {
+            await #expect(throws: WorkflowFailure.self) { try await repo.durationBounds(invalid, project: original) }
+        }
+    }
+
+    @Test func actualTimelineBoundsGatePreservesThePreviousCut() async throws {
+        let (root, engine, original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository(), repo = ProjectRepository()
+        var first = try await disk.prepare(project: original, engine: engine, label: "Previous")
+        try plan(first); try outputs(first, project: original)
+        first.state = .complete; first.approvedPlanHash = try await disk.plan(first).hash
+        let previous = try await disk.snapshot(first, project: original)
+        for bounds in [VideoDurationBounds(maximum: 0.9), VideoDurationBounds(minimum: 1.1)] {
+            let project = try await repo.durationBounds(bounds, project: original)
+            var run = try await disk.prepare(project: project, engine: engine, label: "Impossible")
+            try plan(run); try outputs(run, project: project)
+            run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+            await #expect(throws: WorkflowFailure.self) { try await disk.snapshot(run, project: project) }
+            #expect(try await disk.current(project: project)?.id == previous.id)
+            #expect(try await disk.versions(project: project).count == 1)
+        }
+        let project = try await repo.durationBounds(VideoDurationBounds(minimum: 1, maximum: 1), project: original)
+        var run = try await disk.prepare(project: project, engine: engine, label: "Exact")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let accepted = try await disk.snapshot(run, project: project)
+        #expect(accepted.durationBounds == project.manifest.durationBounds && accepted.number == 2)
+    }
+
+    @Test func resumedDurationFailureShowsTheEditorialProblem() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Review")
+        try plan(run); run.approvedPlanHash = try await disk.plan(run).hash; run.state = .needsReview
+        let message = "Duration review required: retained narration is above the maximum. Review whole takes or sentences."
+        let runner = FixtureRunner(failStage: 4, failDetail: message)
+        let failed = try await PipelineService(runner: runner, disk: disk).execute(run, project: project, engine: engine, start: 4, stop: 5, onEvent: { _ in })
+        #expect(failed.state == .failed && failed.failure == message)
+    }
+
+    @Test func oldManifestsRunsAndVersionsLoadWithoutDurationLimits() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        #expect(try await ProjectRepository().open(project.folder).manifest.durationBounds == nil)
+        let disk = WorkflowRepository()
+        let run = try await disk.prepare(project: project, engine: engine, label: "Legacy")
+        #expect(try await disk.recentRun(project: project)?.durationBounds == nil)
+        #expect(try await disk.settings(run, project: project, engine: engine)["duration_bounds"] == nil)
+    }
+
+    @Test func timedFeedbackStaysWithItsVersionAndPreservesCuts() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var versions: [CutVersion] = []
+        for label in ["First", "Second"] {
+            var run = try await disk.prepare(project: project, engine: engine, label: label)
+            try plan(run); try outputs(run, project: project)
+            run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+            versions.append(try await disk.snapshot(run, project: project))
+        }
+        let timeline = project.folder.appendingPathComponent("cuts/" + versions[0].folderName + "/exports/video.fcpxml")
+        let original = try Data(contentsOf: timeline)
+        let entries = try await disk.addFeedback("Shorten this pause", start: 0.25, end: 0.75, version: versions[0], project: project)
+        let entry = try #require(entries.first)
+        #expect(entry.versionID == versions[0].id && entry.versionNumber == 1)
+        #expect(entry.timelineSHA256 == SHA256.hash(data: original).map { String(format: "%02x", $0) }.joined())
+        #expect(entry.startSeconds == 0.25 && entry.endSeconds == 0.75)
+        #expect(try await WorkflowRepository().feedback(project: project).first?.text == "Shorten this pause")
+        #expect(try await disk.feedback(project: project).allSatisfy { $0.versionID != versions[1].id })
+        let resolved = try await disk.resolveFeedback(entry.id, resolved: true, project: project)
+        #expect(resolved[0].resolved && resolved[0].resolvedAt != nil)
+        #expect(try await disk.resolveFeedback(entry.id, resolved: false, project: project)[0].resolvedAt == nil)
+        #expect(try Data(contentsOf: timeline) == original)
+        #expect(try await disk.current(project: project)?.id == versions[1].id)
+    }
+
+    @Test func changedTimelineAndForgedLoadedRangesDisableFeedback() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Feedback provenance")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let version = try await disk.snapshot(run, project: project)
+        var entries = try await disk.addFeedback("Synthetic", start: 0.2, end: 0.8, version: version, project: project)
+        #expect(entries[0].attachment == .verified)
+        let timeline = project.folder.appendingPathComponent("cuts/" + version.folderName + "/exports/video.fcpxml")
+        let original = try Data(contentsOf: timeline)
+        try Data((String(decoding: original, as: UTF8.self) + "\n").utf8).write(to: timeline)
+        #expect(try await disk.feedback(project: project)[0].attachment == .changedOrMissingVersion)
+        await #expect(throws: WorkflowFailure.self) { try await disk.addFeedback("Edited timeline", start: 0, version: version, project: project) }
+        await #expect(throws: WorkflowFailure.self) { try await disk.resolveFeedback(entries[0].id, resolved: true, project: project) }
+        try original.write(to: timeline)
+        entries[0].endSeconds = 20; entries[0].attachment = .verified
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(entries).write(to: project.folder.appendingPathComponent("notes/cut-feedback.json"))
+        #expect(try await disk.feedback(project: project)[0].attachment == .invalidRange)
+        await #expect(throws: WorkflowFailure.self) { try await disk.resolveFeedback(entries[0].id, resolved: true, project: project) }
+        #expect(try Data(contentsOf: timeline) == original)
+    }
+
+    @Test func invalidFeedbackTimesIdentityAndEscapedNotesAreRefused() async throws {
+        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Feedback")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let version = try await disk.snapshot(run, project: project)
+        for start in [-0.1, 1.1, Double.nan, Double.infinity] {
+            await #expect(throws: WorkflowFailure.self) { try await disk.addFeedback("Synthetic", start: start, version: version, project: project) }
+        }
+        await #expect(throws: WorkflowFailure.self) { try await disk.addFeedback(" ", start: 0, version: version, project: project) }
+        await #expect(throws: WorkflowFailure.self) { try await disk.addFeedback("Synthetic", start: 0.7, end: 0.2, version: version, project: project) }
+        var unknown = version; unknown.id = UUID()
+        await #expect(throws: ProjectFailure.self) { try await disk.addFeedback("Wrong version", start: 0, version: unknown, project: project) }
+        let outside = root.appendingPathComponent("outside"); try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let notes = project.folder.appendingPathComponent("notes")
+        try FileManager.default.removeItem(at: notes); try FileManager.default.createSymbolicLink(at: notes, withDestinationURL: outside)
+        await #expect(throws: ProjectFailure.self) { try await disk.addFeedback("Escaped note", start: 0, version: version, project: project) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
     }
 
     @Test func stagedPipelineRequiresReviewAndKeepsNetworkOffline() async throws {

@@ -16,10 +16,15 @@ final class EditorStore {
     var checkSummaries: [UUID: String] = [:]
     var projectRoot: URL
     var engineRoot: URL
+    var defaultExportResolution: ExportResolution
     var runs: [UUID: EditRun] = [:]
     var cutVersions: [UUID: [CutVersion]] = [:]
     var currentCuts: [UUID: CutVersion] = [:]
     var conversations: [UUID: [LocalMessage]] = [:]
+    var cutFeedback: [UUID: [CutFeedback]] = [:]
+    var derivedCuts: [UUID: [DerivedCut]] = [:]
+    var exportingDerivativeProjectID: UUID?
+    var derivativeDetails: [UUID: String] = [:]
     var missingPieces: [UUID: [MissingPiece]] = [:]
     var planReviews: [UUID: String] = [:]
     var runningProjectID: UUID?
@@ -28,6 +33,7 @@ final class EditorStore {
     @ObservationIgnored private let runner = ProcessRunner()
     @ObservationIgnored private let workflow = WorkflowRepository()
     @ObservationIgnored private let exporter = HandoffExportService()
+    @ObservationIgnored private let derivativeRunner = ProcessRunner()
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
@@ -36,6 +42,7 @@ final class EditorStore {
         let env = ProcessInfo.processInfo.environment
         let preferences = env["CLAUTO_DEFAULTS_SUITE"].flatMap { UserDefaults(suiteName: $0) } ?? defaults
         self.defaults = preferences
+        defaultExportResolution = preferences.string(forKey: "ClautoDefaultExportResolution").flatMap(ExportResolution.init(rawValue:)) ?? .fullHD
         projectRoot = URL(fileURLWithPath: env["CLAUTO_PROJECTS_ROOT"] ?? preferences.string(forKey: "ClautoProjectsRoot") ?? Self.nasRoot.path, isDirectory: true)
         engineRoot = URL(fileURLWithPath: env["CLAUTO_ENGINE_ROOT"] ?? preferences.string(forKey: "ClautoEngineRoot") ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Clauto Editor/engine").path, isDirectory: true)
     }
@@ -55,7 +62,7 @@ final class EditorStore {
         working = true; defer { working = false }
         do {
             let version = (try? String(contentsOf: engineRoot.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? "development"
-            let project = try await repository.create(name: name, root: projectRoot, engine: engineRoot, engineVersion: version)
+            let project = try await repository.create(name: name, root: projectRoot, engine: engineRoot, engineVersion: version, resolution: defaultExportResolution)
             update(project); selectedID = project.id; remember()
             return true
         } catch { notice = error.localizedDescription; return false }
@@ -113,6 +120,25 @@ final class EditorStore {
         setupChecks = await SetupService(runner: runner).check(engine: engineRoot, projectsRoot: projectRoot)
     }
 
+    func durationBounds(_ bounds: VideoDurationBounds, project: Project) async {
+        guard !working, runningProjectID != project.id else { return }
+        working = true; defer { working = false }
+        do { update(try await repository.durationBounds(bounds, project: project)) }
+        catch { notice = error.localizedDescription }
+    }
+
+    func exportResolution(_ resolution: ExportResolution, project: Project) async {
+        guard !working, runningProjectID != project.id else { return }
+        working = true; defer { working = false }
+        do { update(try await repository.exportResolution(resolution, project: project)) }
+        catch { notice = error.localizedDescription }
+    }
+
+    func setDefaultExportResolution(_ resolution: ExportResolution) {
+        defaultExportResolution = resolution
+        defaults.set(resolution.rawValue, forKey: "ClautoDefaultExportResolution")
+    }
+
     func checkProject() async {
         guard let project = selected, !checking, runningProjectID == nil else { return }
         checking = true; checkSummaries[project.id] = nil; runDetails[project.id] = ""; defer { checking = false }
@@ -145,6 +171,8 @@ final class EditorStore {
         guard let project = selected else { return }
         do {
             conversations[project.id] = try await workflow.messages(project: project)
+            cutFeedback[project.id] = try await workflow.feedback(project: project)
+            derivedCuts[project.id] = try await workflow.derivatives(project: project)
             cutVersions[project.id] = try await workflow.versions(project: project)
             currentCuts[project.id] = try await workflow.current(project: project)
             if runningProjectID != project.id, var run = try await workflow.recentRun(project: project) {
@@ -166,6 +194,16 @@ final class EditorStore {
         catch { notice = error.localizedDescription; return false }
     }
 
+    func addFeedback(_ text: String, start: Double, end: Double?, version: CutVersion, project: Project) async -> Bool {
+        do { cutFeedback[project.id] = try await workflow.addFeedback(text, start: start, end: end, version: version, project: project); return true }
+        catch { notice = error.localizedDescription; return false }
+    }
+
+    func resolveFeedback(_ id: UUID, resolved: Bool, project: Project) async {
+        do { cutFeedback[project.id] = try await workflow.resolveFeedback(id, resolved: resolved, project: project) }
+        catch { notice = error.localizedDescription }
+    }
+
     func useProjectFolder(_ folder: URL, key: String) async {
         guard let project = selected, runningProjectID == nil else { return }
         do { update(try await repository.useFolder(folder, key: key, project: project)) }
@@ -182,7 +220,7 @@ final class EditorStore {
     }
 
     func beginCut(label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) async {
-        guard let chosen = selected, runningProjectID == nil, !checking else { return }
+        guard let chosen = selected, runningProjectID == nil, exportingDerivativeProjectID == nil, !checking else { return }
         runningProjectID = chosen.id; defer { runningProjectID = nil }
         do {
             if let save = saves[chosen.id] { await save.value }
@@ -255,6 +293,26 @@ final class EditorStore {
         if let projects { projectRoot = projects; defaults.set(projects.path, forKey: "ClautoProjectsRoot") }
         if let engine { engineRoot = engine; defaults.set(engine.path, forKey: "ClautoEngineRoot") }
         setupChecks = []
+    }
+
+    func exportDerivative(_ request: DerivativeRequest, version: CutVersion, project: Project) async {
+        guard exportingDerivativeProjectID == nil, runningProjectID == nil else { return }
+        exportingDerivativeProjectID = project.id; defer { exportingDerivativeProjectID = nil }
+        derivativeDetails[project.id] = "Preparing a local export from saved v\(version.number)…"
+        do {
+            _ = try await DerivativeService(runner: derivativeRunner, disk: workflow).export(request, version: version, project: project, engine: engineRoot) { [weak self] line in
+                guard let store = self else { return }
+                await store.appendDerivativeLine(line, projectID: project.id)
+            }
+            derivedCuts[project.id] = try await workflow.derivatives(project: project)
+        } catch { notice = error.localizedDescription }
+    }
+
+    func cancelDerivative() async { await derivativeRunner.cancel() }
+
+    private func appendDerivativeLine(_ line: ProcessLine, projectID: UUID) {
+        let previous = derivativeDetails[projectID] ?? ""
+        derivativeDetails[projectID] = String((previous + "\n" + line.text).suffix(20_000))
     }
 
     private func update(_ project: Project) {

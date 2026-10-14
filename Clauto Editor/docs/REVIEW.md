@@ -97,3 +97,21 @@ rejected by automatic approval review before execution. A later separately
 authorized CLI planning turn was allowed after the original direct-human approval
 was supplied. That private turn is outside this synthetic adapter review and does
 not verify the app's live integration.
+
+
+## Expanded-workflow independent review (14 October)
+
+The separate read-only reviewer checked duration gates, frozen output settings,
+raster resolution scaling and the selected-version derivative engine. Review found
+and reproduced missing-field bypasses, fixed pixel tokens, lost connected framing,
+filename quoting, malformed XML errors, parent hash drift, silent animated-volume
+flattening and a cross-language half-frame rounding mismatch. Each was corrected
+with a focused regression. The model fallback now uses saved legacy settings;
+new settings carry a paired schema marker and symmetric equality checks. Exact
+parent bytes are bound before parsing, unknown automation is refused, and captions
+use a fixed safe working-directory leaf. Native request/receipt verification and
+engine pinning were added; the final independent recheck found no remaining code blocker in this bounded
+increment. It passed 185 combined Python tests, a 54-test narrow recheck and
+29 routine native workflow tests, with two opt-ins skipped. Direct native SFX
+identity/timing/hash refusal regressions were subsequently added and passed locally.
+GUI and scientific/visual acceptance remain separate and pending. The review used synthetic media only.

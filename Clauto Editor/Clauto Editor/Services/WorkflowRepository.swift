@@ -14,6 +14,11 @@ struct EditRun: Codable, Identifiable, Sendable {
     var created = Date()
     var ownerProcessID = Int32(ProcessInfo.processInfo.processIdentifier)
     var narrationCount: Int? = nil
+    var durationBounds: VideoDurationBounds? = nil
+    var exportResolution: ExportResolution? = nil
+    var aspect: String? = nil
+    var whisperModel: String? = nil
+    var outputSettingsSchema: Int? = nil
 }
 
 struct StageEventRecord: Codable, Identifiable, Sendable {
@@ -46,6 +51,9 @@ struct CutVersion: Codable, Identifiable, Sendable {
     var briefHash: String? = nil
     var approvedScript: String? = nil
     var primaryOutputPrefix: String? = nil
+    var durationBounds: VideoDurationBounds? = nil
+    var exportResolution: ExportResolution? = nil
+    var aspect: String? = nil
     func preferredArtifact(_ suffix: String) -> String? {
         if let prefix = primaryOutputPrefix, [".heard.txt", ".edl.json", ".preview.mp4", ".mp4"].contains(suffix) {
             return artifacts.contains(prefix + suffix) ? prefix + suffix : nil
@@ -66,6 +74,22 @@ struct LocalMessage: Codable, Identifiable, Sendable {
     var state = "Saved locally; awaiting an authorized Claude session"
 }
 
+struct CutFeedback: Codable, Identifiable, Sendable {
+    enum Attachment: String, Codable, Sendable { case verified, changedOrMissingVersion, invalidRange }
+    var id = UUID()
+    var projectID: UUID
+    var versionID: UUID
+    var versionNumber: Int
+    var timelineSHA256: String
+    var startSeconds: Double
+    var endSeconds: Double?
+    var text: String
+    var created = Date()
+    var resolved = false
+    var resolvedAt: Date? = nil
+    var attachment: Attachment? = nil
+}
+
 enum WorkflowFailure: LocalizedError {
     case invalid(String)
     var errorDescription: String? { if case .invalid(let text) = self { text } else { nil } }
@@ -82,7 +106,14 @@ actor WorkflowRepository {
         try ProjectRepository.validateDrive(root)
         guard !path.hasPrefix("/"), !path.split(separator: "/").contains("..") else { throw ProjectFailure.invalidProject }
         let url = root.appendingPathComponent(path)
-        guard url.resolvingSymlinksInPath().path.hasPrefix(root.resolvingSymlinksInPath().path + "/") else { throw ProjectFailure.invalidProject }
+        let base = root.resolvingSymlinksInPath()
+        var ancestor = base
+        // Foundation may leave an absent leaf unresolved. Check each ancestor
+        // so an escaped notes directory cannot hide behind a new filename.
+        for component in path.split(separator: "/") {
+            ancestor = ancestor.appendingPathComponent(String(component)).resolvingSymlinksInPath()
+            guard ancestor.path.hasPrefix(base.path + "/") else { throw ProjectFailure.invalidProject }
+        }
         return url
     }
 
@@ -104,6 +135,10 @@ actor WorkflowRepository {
     func settings(_ run: EditRun, project: Project, engine: URL) throws -> [String: String] {
         try validate(run, project: project)
         let settings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+        try run.durationBounds?.validate()
+        let frozenBounds = try settings["duration_bounds"].map { try decoder.decode(VideoDurationBounds.self, from: Data($0.utf8)) }
+        guard frozenBounds == run.durationBounds else { throw WorkflowFailure.invalid("This run's duration limits changed. Start a new run with the intended limits.") }
+        try validateOutputSettings(run, settings: settings)
         guard ((run.narrationCount ?? 1) > 1) == (settings["assembly"] != nil) else { throw ProjectFailure.invalidProject }
         let expected = ["footage": try safe("inputs/footage", in: run.folder), "script": try safe("inputs/script", in: run.folder),
                         "assets": try safe("assets", in: project.folder), "build": run.folder, "cuts": try safe("cuts", in: project.folder),
@@ -141,6 +176,7 @@ actor WorkflowRepository {
     }
 
     func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) throws -> EditRun {
+        try project.manifest.durationBounds?.validate()
         let missing = project.manifest.files.filter { !fm.fileExists(atPath: project.folder.appendingPathComponent($0.relativePath).path) }
         guard missing.isEmpty else { throw ProjectFailure.missingFile(missing.map(\.name).joined(separator: ", ")) }
         let footage = project.manifest.files.filter { $0.group == .footage }
@@ -206,9 +242,19 @@ actor WorkflowRepository {
         paths["script"] = inputs.appendingPathComponent("script").path
         paths["build"] = folder.path
         paths["cuts"] = project.folder.appendingPathComponent("cuts").path
+        paths["duration_bounds"] = try project.manifest.durationBounds.map { String(decoding: try encoder.encode($0), as: UTF8.self) }
+        paths["export_resolution"] = project.manifest.outputResolution.rawValue
+        paths["aspect"] = project.manifest.aspect
+        paths["whisper_model"] = project.manifest.whisperModel
+        paths["output_settings_schema"] = "1"
         try encoder.encode(paths).write(to: folder.appendingPathComponent("paths.json"), options: .atomic)
         var run = EditRun(folder: folder, projectID: project.id, label: label)
         run.narrationCount = selected.count
+        run.durationBounds = project.manifest.durationBounds
+        run.exportResolution = project.manifest.outputResolution
+        run.aspect = project.manifest.aspect
+        run.whisperModel = project.manifest.whisperModel
+        run.outputSettingsSchema = 1
         try save(run)
         prepared = true
         return run
@@ -322,11 +368,35 @@ actor WorkflowRepository {
 
     func snapshot(_ run: EditRun, project: Project) throws -> CutVersion {
         try validate(run, project: project)
+        let settings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+        let frozenBounds = try settings["duration_bounds"].map { try decoder.decode(VideoDurationBounds.self, from: Data($0.utf8)) }
+        guard frozenBounds == run.durationBounds else { throw WorkflowFailure.invalid("This run's duration limits changed. Start a new run with the intended limits.") }
+        try validateOutputSettings(run, settings: settings)
         guard run.state == .complete, run.projectID == project.id,
               let approval = run.approvedPlanHash, try plan(run).hash == approval else { throw WorkflowFailure.invalid("Review the current graphic plan before saving a finished cut.") }
         let exports = try safe("exports", in: run.folder)
         let timelines = try fm.contentsOfDirectory(at: exports, includingPropertiesForKeys: nil).filter { $0.pathExtension == "fcpxml" }
         guard !timelines.isEmpty else { throw WorkflowFailure.invalid("The engine did not produce a timeline. The previous cut is still current.") }
+        if let resolution = run.exportResolution, let aspect = run.aspect {
+            let expected = resolution.dimensions(aspect: aspect)
+            for timeline in timelines {
+                let xml = try XMLDocument(contentsOf: safe(timeline.lastPathComponent, in: exports), options: .nodeLoadExternalEntitiesNever)
+                let sequences = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence")
+                guard sequences.count == 1, let sequence = sequences[0] as? XMLElement,
+                      let format = sequence.attribute(forName: "format")?.stringValue,
+                      let formats = try xml.nodes(forXPath: "/fcpxml/resources/format").compactMap({ $0 as? XMLElement }).first(where: { $0.attribute(forName: "id")?.stringValue == format }),
+                      Int(formats.attribute(forName: "width")?.stringValue ?? "") == expected.width,
+                      Int(formats.attribute(forName: "height")?.stringValue ?? "") == expected.height else {
+                    throw WorkflowFailure.invalid("The finished timeline does not match this run's chosen export dimensions. The previous cut stays current.")
+                }
+            }
+        }
+        if let bounds = run.durationBounds {
+            // Validate actual emitted bytes independently of runner success and the EDL.
+            guard timelines.count == 1 else { throw WorkflowFailure.invalid("A single finished timeline is required to verify duration limits.") }
+            let xml = try XMLDocument(contentsOf: safe(timelines[0].lastPathComponent, in: exports), options: .nodeLoadExternalEntitiesNever)
+            try bounds.check(try timelineDuration(xml))
+        }
         struct Validation: Decodable { var timeline: String; var sha256: String; var problems: [String]; var schemaChecked: Bool }
         var schemaChecked = true
         for timeline in timelines {
@@ -375,6 +445,9 @@ actor WorkflowRepository {
                             } else { src.stringValue = resolved.absoluteString }
                         }
                         let (saved, checkedSchema) = try serializedTimeline(xml)
+                        if relative.hasPrefix("exports/"), let bounds = run.durationBounds {
+                            try bounds.check(try timelineDuration(XMLDocument(data: saved, options: .nodeLoadExternalEntitiesNever)))
+                        }
                         savedSchemaChecked = savedSchemaChecked && checkedSchema
                         try saved.write(to: target, options: .atomic)
                         let record = relative.replacingOccurrences(of: ".fcpxml", with: ".snapshot.json")
@@ -409,7 +482,7 @@ actor WorkflowRepository {
             guard let script = planObject?["script"] as? String, script == URL(fileURLWithPath: script).lastPathComponent,
                   artifacts.contains("inputs/script/" + script) else { throw WorkflowFailure.invalid("The approved script is missing from the run snapshot.") }
             let prefix = assembled ? "roughcut/assembly/selected" : nil
-            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix)
+            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix, durationBounds: run.durationBounds, exportResolution: run.exportResolution, aspect: run.aspect)
             try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"), options: .atomic)
             try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
             return version
@@ -433,6 +506,42 @@ actor WorkflowRepository {
         do { try parsed.validate() }
         catch { throw WorkflowFailure.invalid("The saved timeline failed Final Cut's schema check. The previous cut is still current. " + error.localizedDescription) }
         return (saved, true)
+    }
+
+    private func timelineDuration(_ xml: XMLDocument) throws -> Double {
+        let sequences = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence")
+        guard sequences.count == 1, let sequence = sequences.first as? XMLElement,
+              let text = sequence.attribute(forName: "duration")?.stringValue, text.hasSuffix("s") else {
+            throw WorkflowFailure.invalid("A single finished sequence with a valid duration is required.")
+        }
+        let parts = text.dropLast().split(separator: "/", omittingEmptySubsequences: false)
+        let value: Double
+        if parts.count == 1, let n = Double(parts[0]) { value = n }
+        else if parts.count == 2, let n = Double(parts[0]), let d = Double(parts[1]), d.isFinite, d > 0 { value = n / d }
+        else { throw WorkflowFailure.invalid("The finished sequence duration is unreadable.") }
+        guard value.isFinite, value > 0 else { throw WorkflowFailure.invalid("The finished sequence duration is invalid.") }
+        return value
+    }
+
+    private func validateOutputSettings(_ run: EditRun, settings: [String: String]) throws {
+        guard settings["export_resolution"] == run.exportResolution?.rawValue,
+              settings["aspect"] == run.aspect,
+              settings["output_settings_schema"] == run.outputSettingsSchema.map({ String($0) }) else {
+            throw WorkflowFailure.invalid("This run's output settings are missing or changed. Start a new run with the intended settings.")
+        }
+        if run.outputSettingsSchema != nil {
+            guard run.outputSettingsSchema == 1, run.exportResolution != nil,
+                  ["16:9", "9:16"].contains(run.aspect ?? ""),
+                  settings["whisper_model"] == run.whisperModel,
+                  ["small", "medium", "large-v3"].contains(run.whisperModel ?? "") else {
+                throw WorkflowFailure.invalid("This run's frozen output settings are incomplete. Start a new run.")
+            }
+        } else {
+            guard run.exportResolution == nil, run.aspect == nil,
+                  ["small", "medium", "large-v3"].contains(settings["whisper_model"] ?? "") else {
+                throw WorkflowFailure.invalid("This older run's model settings are unavailable. Start a new run.")
+            }
+        }
     }
 
     func messages(project: Project) throws -> [LocalMessage] {
@@ -536,6 +645,152 @@ actor WorkflowRepository {
         return HandoffReport(title: project.manifest.name + " - " + version.folderName,
             subtitle: version.label + " | Engine " + version.engineVersion + " | This report uses the saved version's inputs and read-back.", sections: sections)
     }
+    func feedback(project: Project) throws -> [CutFeedback] {
+        let file = try safe("notes/cut-feedback.json", in: project.folder)
+        guard fm.fileExists(atPath: file.path) else { return [] }
+        var entries = try decoder.decode([CutFeedback].self, from: Data(contentsOf: file))
+        guard entries.allSatisfy({ $0.projectID == project.id }) else { throw ProjectFailure.invalidProject }
+        var targets: [UUID: FeedbackTarget] = [:]
+        for index in entries.indices {
+            let entry = entries[index]
+            if targets[entry.versionID] == nil { targets[entry.versionID] = try? feedbackTarget(entry.versionID, project: project) }
+            guard let target = targets[entry.versionID], entry.timelineSHA256 == target.sha,
+                  entry.versionNumber == target.version.number else { entries[index].attachment = .changedOrMissingVersion; continue }
+            entries[index].attachment = validFeedbackRange(start: entry.startSeconds, end: entry.endSeconds, duration: target.duration) ? .verified : .invalidRange
+        }
+        return entries
+    }
+
+    func derivativeSource(_ requested: CutVersion, project: Project) throws -> SavedCutSource {
+        let target = try feedbackTarget(requested.id, project: project)
+        guard let timeline = target.version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }) else { throw ProjectFailure.invalidProject }
+        let folder = try safe("cuts/" + target.version.folderName, in: project.folder)
+        let captions = try target.version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".itt") }).map { try safe($0, in: folder) }
+        return SavedCutSource(timeline: try safe(timeline, in: folder), captions: captions, timelineSHA256: target.sha, duration: target.duration, engineVersion: target.version.engineVersion)
+    }
+
+    func derivativeFolder(_ id: UUID, project: Project) throws -> URL {
+        let root = try safe("build/derivatives", in: project.folder)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        return try safe("build/derivatives/" + id.uuidString, in: project.folder)
+    }
+
+    func verifyDerivative(folder: URL, parentVersionID: UUID, parentHash: String, request: DerivativeRequest, project: Project) throws -> String {
+        guard let id = UUID(uuidString: folder.lastPathComponent),
+              folder.resolvingSymlinksInPath().path == (try derivativeFolder(id, project: project)).resolvingSymlinksInPath().path else { throw ProjectFailure.invalidProject }
+        let recipeURL = try safe("derivative.json", in: folder)
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: recipeURL)) as? [String: Any]
+        let target = try feedbackTarget(parentVersionID, project: project)
+        try request.validate(duration: target.duration)
+        let range = object?["selected_range_seconds"] as? [Double]
+        let framing = object?["framing"] as? [String: Any]
+        let effectsObject = object?["audio_effects"]
+        let actualEffects: LocalAudioEffects?
+        if effectsObject == nil || effectsObject is NSNull { actualEffects = nil }
+        else { actualEffects = try decoder.decode(LocalAudioEffects.self, from: JSONSerialization.data(withJSONObject: effectsObject!)) }
+        guard object?["state"] as? String == "complete", object?["parent_sha256"] as? String == parentHash,
+              target.sha == parentHash, range?.count == 2,
+              abs(range![0] - DerivativeRequest.snapped(request.start)) < 1e-9,
+              abs(range![1] - DerivativeRequest.snapped(request.end ?? target.duration)) < 1e-9,
+              framing?["conform"] as? String == request.framing,
+              framing?["position_percent_of_height"] as? [Double] == [request.x, request.y], actualEffects == request.effects,
+              object?["aspect"] as? String == request.aspect, object?["resolution"] as? String == request.resolution.rawValue,
+              object?["full_decode_passed"] as? Bool == true, let hashes = object?["output_sha256"] as? [String: String],
+              hashes["review.mp4"] != nil, hashes["timeline.fcpxml"] != nil else {
+            throw WorkflowFailure.invalid("The export receipt does not match this saved version and its selected output settings.")
+        }
+        for (leaf, hash) in hashes {
+            guard URL(fileURLWithPath: leaf).lastPathComponent == leaf,
+                  try DerivativeService.digest(safe(leaf, in: folder)) == hash else { throw WorkflowFailure.invalid("An exported file changed. Create a new verified export.") }
+        }
+        let sound = object?["sound_effect"] as? [String: Any]
+        if let soundID = request.soundFileID {
+            let manifest = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: safe("clauto-project.json", in: project.folder)))
+            guard manifest.id == project.id, let file = manifest.files.first(where: { $0.id == soundID && [.audio, .music].contains($0.group) }),
+                  !file.relativePath.hasPrefix("/"), !file.relativePath.split(separator: "/").contains("..") else { throw ProjectFailure.invalidProject }
+            let soundURL = project.folder.appendingPathComponent(file.relativePath)
+            guard soundURL.deletingLastPathComponent().resolvingSymlinksInPath().path.hasPrefix(project.folder.resolvingSymlinksInPath().path + "/") else { throw ProjectFailure.invalidProject }
+            let path = soundURL.resolvingSymlinksInPath().path
+            let sourceHashes = object?["source_sha256"] as? [String: String]
+            guard sound?["source"] as? String == path, sound?["at"] as? Double == DerivativeRequest.snapped(request.soundAt),
+                  sound?["gain_db"] as? Double == request.soundGainDB, sourceHashes?[path] == (try DerivativeService.digest(soundURL)) else {
+                throw WorkflowFailure.invalid("The sound-effect export does not match the selected local sound and its timing.")
+            }
+        } else if sound != nil { throw WorkflowFailure.invalid("The export added an unexpected sound effect.") }
+        return try DerivativeService.digest(recipeURL)
+    }
+
+    func saveDerivative(_ record: DerivedCut, project: Project) throws {
+        guard record.projectID == project.id else { throw ProjectFailure.invalidProject }
+        let folder = try derivativeFolder(record.id, project: project)
+        guard try verifyDerivative(folder: folder, parentVersionID: record.parentVersionID, parentHash: record.parentTimelineSHA256, request: record.request, project: project) == record.recipeSHA256 else { throw ProjectFailure.invalidProject }
+        try encoder.encode(record).write(to: safe("clauto-derivative.json", in: folder), options: .atomic)
+    }
+
+    func derivatives(project: Project) throws -> [DerivedCut] {
+        let root = try safe("build/derivatives", in: project.folder)
+        guard fm.fileExists(atPath: root.path) else { return [] }
+        return try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).compactMap { folder in
+            guard UUID(uuidString: folder.lastPathComponent) != nil,
+                  let data = try? Data(contentsOf: safe("clauto-derivative.json", in: folder)),
+                  let record = try? decoder.decode(DerivedCut.self, from: data), record.id.uuidString == folder.lastPathComponent,
+                  record.projectID == project.id,
+                  (try? verifyDerivative(folder: folder, parentVersionID: record.parentVersionID, parentHash: record.parentTimelineSHA256, request: record.request, project: project)) == record.recipeSHA256 else { return nil }
+            return record
+        }.sorted { $0.created > $1.created }
+    }
+
+    private struct FeedbackTarget { var version: CutVersion; var duration: Double; var sha: String }
+    private func validFeedbackRange(start: Double, end: Double?, duration: Double) -> Bool {
+        start.isFinite && start >= 0 && start <= duration && (end == nil || (end!.isFinite && end! >= start && end! <= duration))
+    }
+    private func feedbackTarget(_ id: UUID, project: Project) throws -> FeedbackTarget {
+        guard let version = try versions(project: project).first(where: { $0.id == id }),
+              let artifact = version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }) else { throw ProjectFailure.invalidProject }
+        let relative = "cuts/" + version.folderName + "/" + artifact
+        let file = try safe(relative, in: project.folder)
+        let data = try Data(contentsOf: file)
+        let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let receiptPath = String(relative.dropLast(".fcpxml".count)) + ".snapshot.json"
+        let receipt = try decoder.decode([String: String].self, from: Data(contentsOf: safe(receiptPath, in: project.folder)))
+        guard receipt["saved_sha256"] == sha else { throw WorkflowFailure.invalid("The saved timeline changed. Restore a verified version before attaching feedback.") }
+        let xml = try XMLDocument(data: data, options: .nodeLoadExternalEntitiesNever)
+        guard let sequence = try xml.nodes(forXPath: "//sequence").first as? XMLElement,
+              let value = sequence.attribute(forName: "duration")?.stringValue, value.hasSuffix("s") else { throw ProjectFailure.invalidProject }
+        let parts = value.dropLast().split(separator: "/")
+        let duration: Double
+        if parts.count == 1, let n = Double(parts[0]) { duration = n }
+        else if parts.count == 2, let n = Double(parts[0]), let d = Double(parts[1]), d > 0 { duration = n / d }
+        else { throw ProjectFailure.invalidProject }
+        guard duration.isFinite, duration > 0 else { throw ProjectFailure.invalidProject }
+        return FeedbackTarget(version: version, duration: duration, sha: sha)
+    }
+
+    func addFeedback(_ text: String, start: Double, end: Double? = nil,
+                     version requested: CutVersion, project: Project) throws -> [CutFeedback] {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 20_000, start.isFinite, start >= 0,
+              end == nil || (end!.isFinite && end! >= start) else { throw WorkflowFailure.invalid("Enter a comment and valid time range.") }
+        let target = try feedbackTarget(requested.id, project: project), version = target.version
+        guard validFeedbackRange(start: start, end: end, duration: target.duration) else {
+            throw WorkflowFailure.invalid("The feedback time is outside this saved version.")
+        }
+        var entries = try feedback(project: project)
+        entries.append(CutFeedback(projectID: project.id, versionID: version.id, versionNumber: version.number,
+            timelineSHA256: target.sha, startSeconds: start, endSeconds: end, text: text, attachment: .verified))
+        try encoder.encode(entries).write(to: safe("notes/cut-feedback.json", in: project.folder), options: .atomic)
+        return entries
+    }
+
+    func resolveFeedback(_ id: UUID, resolved: Bool, project: Project) throws -> [CutFeedback] {
+        var entries = try feedback(project: project)
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { throw ProjectFailure.invalidProject }
+        guard entries[index].attachment == .verified else { throw WorkflowFailure.invalid("This feedback's saved version or time range changed. Restore its verified cut before resolving it.") }
+        entries[index].resolved = resolved; entries[index].resolvedAt = resolved ? Date() : nil
+        try encoder.encode(entries).write(to: safe("notes/cut-feedback.json", in: project.folder), options: .atomic)
+        return entries
+    }
+
     func queue(_ text: String, project: Project) throws -> [LocalMessage] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowFailure.invalid("Write a change request first.") }
         var messages = try messages(project: project)
