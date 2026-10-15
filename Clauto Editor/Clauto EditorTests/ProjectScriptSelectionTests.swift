@@ -12,6 +12,25 @@ private actor ScriptMutationProbeState {
 }
 
 struct ProjectScriptSelectionTests {
+    @Test func simultaneousFirstBriefAndScriptSaveCreateOneSharedLockAndKeepBothInputs() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-first-save-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at: root,withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for index in 0..<8 {
+            let first = ProjectRepository(), second = ProjectRepository()
+            let project = try await first.create(name: "First-save fixture",root: root.appendingPathComponent(String(index)),engine: root,engineVersion: "synthetic")
+            #expect(!FileManager.default.fileExists(atPath: project.folder.appendingPathComponent(".clauto/project-mutation.lock").path))
+            var draft = project.brief; draft.about = "New project's first typed words"
+            let words = draft
+            async let brief = first.saveBrief(words,project: project)
+            async let script = second.approveScript("Exact first script",project: project)
+            _ = try await (brief,script)
+            let saved = try await first.open(project.folder)
+            #expect(saved.brief == words && saved.manifest.mutationRevision == 3)
+            #expect(try ProjectScriptSelectionStore.read(project: saved)?.bytes == Data("Exact first script".utf8))
+        }
+    }
+
     private struct Fixture {
         let root: URL
         let engine: URL

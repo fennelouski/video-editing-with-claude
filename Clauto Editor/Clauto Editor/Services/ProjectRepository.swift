@@ -426,12 +426,25 @@ final class ProjectMutationLease {
     }
     static func acquire(_ project: Project) throws -> ProjectMutationLease {
         let root = try checkedRoot(project), state = try root.child(".clauto",create: true)
-        let fd = openat(state.descriptor,"project-mutation.lock",O_CREAT | O_RDWR | O_NOFOLLOW,S_IRUSR | S_IWUSR)
-        guard fd >= 0 else { throw ProjectFailure.invalidProject }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        var fd: Int32 = -1
+        while fd < 0 {
+            try Task.checkCancellation(); try root.checkPath(); try state.checkPath()
+            fd = openat(state.descriptor,"project-mutation.lock",O_RDWR | O_NOFOLLOW)
+            if fd >= 0 { break }
+            var failure = errno
+            if failure == ENOENT {
+                fd = openat(state.descriptor,"project-mutation.lock",O_CREAT | O_EXCL | O_RDWR | O_NOFOLLOW,S_IRUSR | S_IWUSR)
+                if fd >= 0 { break }
+                failure = errno
+            }
+            guard failure == EEXIST || failure == ENOENT || failure == EINTR else { throw ProjectFailure.invalidProject }
+            guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Another window is updating this project. Your change was not saved; retry after it finishes.") }
+            usleep(10_000)
+        }
         let lease = ProjectMutationLease(root: root,descriptor: fd,projectID: project.id)
         var info = stat()
         guard fstat(fd,&info) == 0, info.st_mode & S_IFMT == S_IFREG else { throw ProjectFailure.invalidProject }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while flock(fd,LOCK_EX | LOCK_NB) != 0 {
             guard errno == EWOULDBLOCK || errno == EINTR else { throw ProjectFailure.invalidProject }
             try Task.checkCancellation()

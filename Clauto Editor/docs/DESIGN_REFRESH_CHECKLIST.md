@@ -408,3 +408,17 @@ M13 v2 corrections: preserve closed freehand loops, pin frame-comment I/O to the
 original physical project root, and retain immutable save attempts across failure.
 Late region edits cannot reuse a committed record ID; retries preserve the earlier
 revision and then save newer words. Native interaction acceptance remains held.
+
+## Concurrent first project saves
+
+A synthetic negative control on unchanged M13 reproduced a first-use race:
+concurrent Brief and script writes can fail to open their not-yet-created shared
+lock. Existing local draft ownership preserves the words, but the operation
+requires retry. The correction opens an existing lock or creates it exclusively,
+then retries only bounded creation/interruption conflicts while checking the
+pinned root. The same two-second budget covers creation and lock contention;
+symlinks, wrong file types, cancellation and replaced roots still refuse. A
+regression starts both first writes on eight fresh projects and verifies the
+latest Brief, exact selected script and manifest revision. The independent people
+prototype is excluded from this correction. Native first-use interaction remains
+unobserved during the foreground hold.
