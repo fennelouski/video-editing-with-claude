@@ -350,3 +350,17 @@ core cases pass; 91 routine cases pass with five opt-ins skipped. Actual saved
 catalog mapping passed separately in a new NAS QA project without media reads,
 Sheet access or rendering. Native playback/seek/drift-pause and broader graphical
 accessibility acceptance remain pending.
+
+
+## Synthetic native source-span rendering (15 October)
+
+The native renderer now integrates a separate deterministic engine worker for
+factory-issued synthetic QA projects. It freezes stable-ID source spans and exact
+review acknowledgment bytes, verifies originals, renders fixed-grid ProRes/PCM,
+validates actual decoded counts/timing/FCPXML and publishes only a synthetic review
+pointer under the review lock. Destination descriptors, exclusive files, a
+no-replace bundle rename and final directory/hash checks protect failure cases.
+Production gates and existing cuts remain untouched. Exact supported behavior,
+synthetic decoded-output tests, storage-failure simulations and the check-time
+identity limitation are in `SOURCE_SPAN_RENDERING.md`. Native GUI production
+application and actual editorial/fact approval remain pending.

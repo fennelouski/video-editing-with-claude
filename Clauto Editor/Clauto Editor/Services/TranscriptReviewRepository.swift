@@ -257,6 +257,84 @@ actor TranscriptReviewRepository {
         return url
     }
 
+    func syntheticRenderSnapshot(expectedRevision: UUID, expectedAcknowledgementID: UUID, project: Project) throws -> SourceSpanRenderSnapshot {
+        try locked(project: project) {
+            let map = try TranscriptSourceMap.compile(bound(expectedRevision: expectedRevision, project: project))
+            guard let acknowledgement = try currentSourceAcknowledgement(expectedRevision: expectedRevision, project: project),
+                  acknowledgement.id == expectedAcknowledgementID else {
+                throw WorkflowFailure.invalid("The exact local source-review acknowledgment is missing or stale. A review export alone cannot start even a synthetic assembly.")
+            }
+            let pointer = try decode(SourceReviewPointer.self, data: boundedData(safe(base(map.reviewID) + "/source-review-current.json", project: project)))
+            let receipt = try boundedData(safe(pointer.receiptPath, project: project))
+            guard Self.sha(receipt) == pointer.receiptSHA256,
+                  try decode(LocalSourceReviewAcknowledgement.self, data: receipt).id == expectedAcknowledgementID else { throw ProjectFailure.invalidProject }
+            return .init(map: map, acknowledgement: acknowledgement, acknowledgementSHA256: pointer.receiptSHA256)
+        }
+    }
+
+    func commitSyntheticRender(_ snapshot: SourceSpanRenderSnapshot, project: Project, fixture: SyntheticSourceSpanFixture,
+        root: SourceRenderDirectory, metadata: SourceRenderDirectory, outputRoot: SourceRenderDirectory,
+        staging: SourceRenderDirectory, pendingName: String, runID: UUID, inputSHA256: String,
+        proof: SourceSpanWorkerReceipt, proofSHA256: String) throws -> SyntheticSourceSpanRenderResult {
+        try locked(project: project) {
+            // Re-read the exact head AND acknowledgment pointer under the review lock.
+            let map = try TranscriptSourceMap.compile(bound(expectedRevision: snapshot.map.revisionID, project: project))
+            guard map == snapshot.map,
+                  let ack = try currentSourceAcknowledgement(expectedRevision: map.revisionID, project: project), ack.id == snapshot.acknowledgement.id else {
+                throw WorkflowFailure.invalid("The source review or its exact acknowledgment changed before publication.")
+            }
+            let pointer = try decode(SourceReviewPointer.self, data: boundedData(safe(base(map.reviewID) + "/source-review-current.json", project: project)))
+            guard pointer.receiptSHA256 == snapshot.acknowledgementSHA256 else { throw ProjectFailure.invalidProject }
+            _ = try fixture.validate(map: map, catalog: read(project: project).0.catalog)
+            try root.checkPath(); try metadata.checkPath(); try outputRoot.checkPath(); try staging.checkPath()
+            for (name, expected) in proof.artifactsSHA256 {
+                guard Self.sha(try staging.read(name)) == expected else { throw WorkflowFailure.invalid("Rendered output changed before publication.") }
+            }
+            guard Self.sha(try staging.read("input.json")) == inputSHA256,
+                  Self.sha(try staging.read("source-map.json")) == (try map.sha256()),
+                  Self.sha(try staging.read("render-proof.json")) == proofSHA256 else { throw ProjectFailure.invalidProject }
+            try Task.checkCancellation()
+            let (final, publication) = try outputRoot.materializeBundle(pendingName, to: runID.uuidString, expected: staging.identity)
+            // Copying on SMB can take time. Recheck the exact review, receipt and
+            // source signatures after materialization as well as before it.
+            let afterCopy = try TranscriptSourceMap.compile(bound(expectedRevision: snapshot.map.revisionID, project: project))
+            guard afterCopy == snapshot.map,
+                  let afterAck = try currentSourceAcknowledgement(expectedRevision: afterCopy.revisionID, project: project), afterAck.id == snapshot.acknowledgement.id else {
+                throw WorkflowFailure.invalid("The exact source review changed while its synthetic bundle was being materialized.")
+            }
+            let afterPointer = try decode(SourceReviewPointer.self, data: boundedData(safe(base(map.reviewID) + "/source-review-current.json", project: project)))
+            guard afterPointer.receiptSHA256 == snapshot.acknowledgementSHA256 else { throw ProjectFailure.invalidProject }
+            try Task.checkCancellation()
+            let result = SyntheticSourceSpanRenderResult(id: runID, projectID: project.id, reviewID: map.reviewID,
+                revisionID: map.revisionID, acknowledgementID: ack.id, mapSHA256: try map.sha256(),
+                acknowledgementSHA256: pointer.receiptSHA256, inputSHA256: inputSHA256, workerReceiptSHA256: proofSHA256,
+                purpose: "synthetic_source_span_acceptance", productionAuthorized: false, appliedToCut: false,
+                folder: outputRoot.url.appendingPathComponent(runID.uuidString), bundlePublication: publication, folderIdentity: final.identity,
+                artifactsSHA256: proof.artifactsSHA256, totalFrames: proof.totalFrames,
+                audioSamples: proof.audioSamples, schemaChecked: proof.schemaChecked)
+            let data = try encoder.encode(result)
+            func verifyFinalFiles() throws {
+                try root.checkPath(); try metadata.checkPath(); try outputRoot.checkPath(); try final.checkPath()
+                guard try outputRoot.child(runID.uuidString).identity == final.identity,
+                      Self.sha(try final.read("input.json")) == inputSHA256,
+                      Self.sha(try final.read("source-map.json")) == (try map.sha256()),
+                      Self.sha(try final.read("render-proof.json")) == proofSHA256 else { throw ProjectFailure.invalidProject }
+                for (name, expected) in proof.artifactsSHA256 {
+                    guard Self.sha(try final.read(name)) == expected else { throw ProjectFailure.invalidProject }
+                }
+            }
+            // Incomplete targets are never current. Check the complete fixed copied
+            // set both before completion and immediately before pointer publication.
+            try verifyFinalFiles(); try Task.checkCancellation()
+            try final.writeNew(data, name: "completion.json")
+            try verifyFinalFiles()
+            guard Self.sha(try final.read("completion.json")) == Self.sha(data) else { throw ProjectFailure.invalidProject }
+            try Task.checkCancellation()
+            try metadata.replacePointer(data, name: "source-span-synthetic-current.json")
+            return result
+        }
+    }
+
     func saveDraftCopy(_ draft: TranscriptReviewSession, project: Project) throws -> URL {
         try locked(project: project) {
             let (current, _) = try read(project: project)

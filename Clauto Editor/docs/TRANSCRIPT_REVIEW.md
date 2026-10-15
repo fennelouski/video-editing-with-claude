@@ -53,6 +53,15 @@ source-span ordering. The review export therefore stays independent of `narratio
 Saving or exporting choices never updates `script.md`, begins a cut, changes a
 saved version, or asserts final human/independent-ledger approval.
 
+## Synthetic rendering integration
+
+`SourceSpanRenderService` now renders factory-issued synthetic fixtures through a
+separate descriptor-anchored worker, with exact stable-ID source slices, strict
+decoding and a synthetic-only current pointer. This does not unlock production or
+change the local acknowledgment's approval scope. See
+[SOURCE_SPAN_RENDERING.md](SOURCE_SPAN_RENDERING.md) for supported ranges, failure
+acceptance and remaining identity/NAS limits.
+
 ## Source map and playback identity limits
 
 A map uses `source-map-<UUID>.json` in the review exports directory. Local review
@@ -88,7 +97,7 @@ implementation is implied. The older Brief/graphic-plan approvals remain separat
   containment, competing writers, filtered identity, delayed project-bound edits,
   oversized-write refusal, backwards timing, edits during actual I/O, and pending
   saves/Undo during exit.
-- The latest full core checkpoint passes 91 routine tests; five opt-ins are skipped
+- The source-map checkpoint passes 91 routine tests; five opt-ins are skipped
   (96 registered cases). Fourteen source-map regressions add actual synthetic PCM
   and delayed-audio probes, A→B→A and half-open boundaries, duplicate identities,
   interior-word overruns, empty choices, missing/replaced/changed-during-hash media,

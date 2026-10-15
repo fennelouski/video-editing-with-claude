@@ -480,7 +480,7 @@ struct WorkflowTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let marker = root.appendingPathComponent("child-pid")
-        let child = "import os,signal,sys,time; signal.signal(signal.SIGINT,signal.SIG_IGN); signal.signal(signal.SIGTERM,signal.SIG_IGN); open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(30)"
+        let child = "import os,signal,sys,time; signal.signal(signal.SIGINT,signal.SIG_IGN); signal.signal(signal.SIGTERM,signal.SIG_IGN); open(sys.argv[1]+'.pending','w').write(str(os.getpid())); os.replace(sys.argv[1]+'.pending',sys.argv[1]); time.sleep(30)"
         let script = "import subprocess,sys,time,os; p=subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); time.sleep(30)"
         let result = try await ProcessRunner().run(ProcessCommand(executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: ["-c", script, child, marker.path], timeout: .seconds(1)))
         #expect(result.cancelled)
@@ -494,7 +494,7 @@ struct WorkflowTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let marker = root.appendingPathComponent("child-pid")
-        let child = "import os,signal,sys,time; signal.signal(signal.SIGINT,signal.SIG_IGN); signal.signal(signal.SIGTERM,signal.SIG_IGN); open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(30)"
+        let child = "import os,signal,sys,time; signal.signal(signal.SIGINT,signal.SIG_IGN); signal.signal(signal.SIGTERM,signal.SIG_IGN); open(sys.argv[1]+'.pending','w').write(str(os.getpid())); os.replace(sys.argv[1]+'.pending',sys.argv[1]); time.sleep(30)"
         let parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]])"
         let runner = ProcessRunner()
         let task = Task { try await runner.run(ProcessCommand(executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: ["-c", parent, child, marker.path], timeout: .seconds(10))) }
