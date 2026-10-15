@@ -463,3 +463,13 @@ Claude transport, signed public distribution and update delivery also need their
 appropriate runtime/environment checks; no external private context or publication
 is authorized by the local development work. The requirements table above records
 individual implementation and acceptance limits rather than claiming completion.
+
+## One-action candidate preview (15 October)
+
+After continuous steering has prepared a resolved concrete edit plan, Approve and
+create preview saves its exact approval and immediately starts the verified local
+renderer. The former second Render action is no longer needed. Duplicate clicks
+join one task and durable same-plan approvals are idempotent. Quit joins approval
+writes and prevents a render starting after exit has begun. Rendering remains
+separate from applying/publishing a production edit, with the existing source,
+frame/audio and storage checks; private-media runtime acceptance is deferred.

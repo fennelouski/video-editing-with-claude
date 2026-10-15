@@ -493,6 +493,14 @@ extension VoiceReviewRepository {
                   let sha = document.candidates[i].editPlanSHA256, sha == expectedSHA, plan.issues.isEmpty,
                   try VoiceReviewProvenance.inspect(path,project: project).sha256 == sha,
                   TranscriptSourceMap.sha(try encoder.encode(plan)) == sha else { throw WorkflowFailure.invalid("Resolve and review the exact candidate plan before approval.") }
+            if let approval = document.candidates[i].editApproval {
+                guard approval.planID == plan.id, approval.planSHA256 == sha,
+                      approval.scope == VoiceCandidateEditPlan.mode, !approval.productionAuthorized,
+                      let path = document.candidates[i].editApprovalRelativePath, let savedSHA = document.candidates[i].editApprovalSHA256,
+                      try VoiceReviewProvenance.inspect(path,project: project).sha256 == savedSHA,
+                      TranscriptSourceMap.sha(try encoder.encode(approval)) == savedSHA else { throw WorkflowFailure.invalid("The saved preview approval changed. Preserve it before retrying.") }
+                return document
+            }
             let approval = VoiceCandidateEditApproval(id: UUID(),planID: plan.id,planSHA256: sha,created: Date(),scope: VoiceCandidateEditPlan.mode,productionAuthorized: false)
             let bytes = try encoder.encode(approval), name = approval.id.uuidString+".json"
             try directory.child("edit-approvals",create: true).writeNew(bytes,name: name)

@@ -340,12 +340,15 @@ private struct VoiceCandidateActions: View {
                     if plan.issues.isEmpty, let sha = candidate.editPlanSHA256 {
                         Text("Plan "+sha.prefix(12)).font(ClautoDesign.caption)
                         if candidate.editApproval == nil {
-                            Button("Approve these review-movie cuts") { Task { await controller.approveEditPlan(candidate) } }
+                            Button(controller.approvingCandidateIDs.contains(candidate.id) ? "Preparing preview…":"Approve and create preview") { Task { await controller.approveEditPlan(candidate,engine: engine) } }
+                                .disabled(!controller.approvingCandidateIDs.isEmpty || controller.renderingCandidateID != nil)
                                 .accessibilityIdentifier("voiceApproveCandidatePlan")
                         } else {
                             Text("Rendering uses one private temporary local copy, up to 1 GiB; the completed candidate stays in this project on your drive.").font(ClautoDesign.caption)
-                            Button(candidate.renderedPreview == nil ? "Render separate review candidate" : "Render another verified candidate") { controller.renderPreview(candidate,engine: engine) }
-                                .disabled(controller.renderingCandidateID != nil).accessibilityIdentifier("voiceRenderCandidate")
+                            if controller.renderingCandidateID != candidate.id {
+                                Button(candidate.renderedPreview == nil ? "Retry preview" : "Create another preview") { controller.renderPreview(candidate,engine: engine) }
+                                    .disabled(!controller.approvingCandidateIDs.isEmpty || controller.renderingCandidateID != nil).accessibilityIdentifier("voiceRenderCandidate")
+                            }
                         }
                     }
                 } else {

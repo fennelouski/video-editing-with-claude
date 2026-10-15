@@ -1,10 +1,23 @@
 import Foundation
+import Darwin
 import Testing
 #if canImport(ClautoCore)
 @testable import ClautoCore
 #else
 @testable import Clauto_Editor
 #endif
+
+private actor CancellablePreviewRunner: CommandRunning {
+    var started = false
+    private var cancelled = false
+    func run(_ command: ProcessCommand,onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
+        started = true
+        await onLine?(.init(text: "{\"phase\":\"render_fragment\"}",isError: false))
+        while !cancelled { try? await Task.sleep(for: .milliseconds(5)); await Task.yield() }
+        return .init(exitCode: 130,output: "",error: "Synthetic worker cancelled",cancelled: true)
+    }
+    func cancel() { cancelled = true }
+}
 
 struct VoiceCandidateTests {
     private struct Fixture { let root: URL; let project: Project; let target: VoiceReviewTarget; let repository: VoiceReviewRepository; let engine: URL }
@@ -39,6 +52,125 @@ struct VoiceCandidateTests {
         _ = try await f.repository.approveEditPlan(candidate.id,expectedSHA: try #require(candidate.editPlanSHA256))
         return try #require(try await f.repository.load().candidates.last)
     }
+    @Test func repeatedExactApprovalIsIdempotentAcrossRepositories() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let candidate = try await prepare(f), other = try VoiceReviewRepository(project: f.project), sha = try #require(candidate.editPlanSHA256)
+        async let first = f.repository.approveEditPlan(candidate.id,expectedSHA: sha)
+        async let second = other.approveEditPlan(candidate.id,expectedSHA: sha)
+        let (a,b) = try await (first,second)
+        #expect(a.candidates.last?.editApproval?.id == b.candidates.last?.editApproval?.id)
+        let path = f.project.folder.appendingPathComponent("notes/voice-review/edit-approvals")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: path.path).count == 1)
+    }
+
+    @MainActor @Test func oneApprovalCreatesVerifiedPreviewWithoutASeparateRenderAction() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let pointer = f.project.folder.appendingPathComponent("cuts/current.json"), sentinel = Data("Keep the watched version".utf8)
+        try sentinel.write(to: pointer)
+        _ = try await note(f,action: .protect,start: 0,end: 12); _ = try await note(f,action: .remove,start: 12,end: 24)
+        let candidate = try await prepare(f), controller = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider())
+        await controller.load()
+        async let a: Void = controller.approveEditPlan(candidate,engine: f.engine)
+        async let b: Void = controller.approveEditPlan(candidate,engine: f.engine)
+        _ = await (a,b)
+        let deadline = ContinuousClock.now + .seconds(20)
+        while controller.renderingCandidateID != nil {
+            guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Synthetic automatic preview did not finish") }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let rendered = try #require(controller.document.candidates.last?.renderedPreview)
+        #expect(rendered.frames == 24 && !rendered.appliedToWatchedVersion && !rendered.productionAuthorized)
+        #expect(try await f.repository.verifiedPreview(candidate.id).lastPathComponent == "review.mov")
+        #expect(try Data(contentsOf: pointer) == sentinel)
+        #expect(controller.approvingCandidateIDs.isEmpty && controller.error == nil)
+        await controller.approveEditPlan(candidate,engine: f.engine) // Delayed retry must reuse the completed preview.
+        #expect(controller.renderingCandidateID == nil)
+        let approvals = f.project.folder.appendingPathComponent("notes/voice-review/edit-approvals")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: approvals.path).count == 1)
+        let outputs = f.project.folder.appendingPathComponent("build/voice-candidates")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outputs.path).filter { UUID(uuidString: $0) != nil }.count == 1)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func quitWaitsForPendingApprovalAndDoesNotStartALatePreview() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let candidate = try await prepare(f), controller = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider())
+        await controller.load()
+        let fd = open(f.project.folder.appendingPathComponent("notes/voice-review/ledger.lock").path,O_RDWR)
+        guard fd >= 0, flock(fd,LOCK_EX) == 0 else { throw WorkflowFailure.invalid("Synthetic approval lock unavailable") }
+        defer { _ = flock(fd,LOCK_UN); close(fd) }
+        let approval = Task { await controller.approveEditPlan(candidate,engine: f.engine) }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while controller.approvingCandidateIDs.isEmpty {
+            guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Synthetic approval did not reserve its task") }
+            await Task.yield()
+        }
+        #expect(controller.hasPendingWork)
+        let exit = Task { await controller.flushForExit() }
+        try await Task.sleep(for: .milliseconds(30))
+        _ = flock(fd,LOCK_UN)
+        await approval.value; #expect(await exit.value)
+        #expect(controller.document.candidates.last?.editApproval != nil)
+        #expect(controller.document.candidates.last?.renderedPreview == nil && controller.renderingCandidateID == nil)
+        #expect(controller.approvingCandidateIDs.isEmpty && !controller.hasPendingWork)
+        #expect(!FileManager.default.fileExists(atPath: f.project.folder.appendingPathComponent("build/voice-candidates").path))
+    }
+
+    @MainActor @Test func manualRetryCannotStealTheSlotFromAnApprovalWaitingForStorage() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let base = "cuts/v002/"
+        try FileManager.default.copyItem(at: f.project.folder.appendingPathComponent("cuts/v001"),to: f.project.folder.appendingPathComponent("cuts/v002"))
+        func inspect(_ path: String) throws -> VoiceArtifact { try VoiceReviewProvenance.inspect(base+path,project: f.project) }
+        let bTarget = try VoiceReviewTarget(id: UUID(),projectID: f.project.id,versionID: UUID(),versionNumber: 2,versionMetadataSHA256: inspect("clauto-version.json").sha256,
+            timeline: inspect("exports/cut.fcpxml"),preview: inspect("exports/review.mp4"),approvedPlanSHA256: inspect("plan/cut.plan.json").sha256,approvedPlanPath: base+"plan/cut.plan.json",
+            approvedScriptSHA256: inspect("inputs/script/approved.md").sha256,approvedScriptPath: base+"inputs/script/approved.md",approvedBriefSHA256: inspect("inputs/brief.md").sha256,engineVersion: "synthetic",duration: f.target.duration)
+        _ = try await f.repository.register(bTarget)
+        _ = try await f.repository.addTyped(text: "Remove B range",action: .remove,anchor: .init(targetID: bTarget.id,seconds: 12*1001/24000.0,endSeconds: 24*1001/24000.0))
+        let b = try await approve(f)
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let a = try await prepare(f), controller = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider())
+        #expect(a.parent.id == f.target.id && b.parent.id == bTarget.id)
+        await controller.load()
+        let fd = open(f.project.folder.appendingPathComponent("notes/voice-review/ledger.lock").path,O_RDWR)
+        guard fd >= 0, flock(fd,LOCK_EX) == 0 else { throw WorkflowFailure.invalid("Synthetic render slot lock unavailable") }
+        defer { _ = flock(fd,LOCK_UN); close(fd) }
+        let pending = Task { await controller.approveEditPlan(a,engine: f.engine) }
+        let admissionDeadline = ContinuousClock.now + .seconds(3)
+        while !controller.approvingCandidateIDs.contains(a.id) {
+            guard ContinuousClock.now < admissionDeadline else { throw WorkflowFailure.invalid("Synthetic approval did not reserve slot") }; await Task.yield()
+        }
+        controller.renderPreview(b,engine: f.engine)
+        #expect(controller.renderingCandidateID == nil)
+        _ = flock(fd,LOCK_UN); await pending.value
+        let renderDeadline = ContinuousClock.now + .seconds(20)
+        while controller.renderingCandidateID != nil {
+            guard ContinuousClock.now < renderDeadline else { throw WorkflowFailure.invalid("Synthetic reserved preview did not finish") }; try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(controller.document.candidates.first(where: { $0.id == a.id })?.renderedPreview != nil)
+        #expect(controller.document.candidates.first(where: { $0.id == b.id })?.renderedPreview == nil)
+        #expect(controller.error == nil && controller.approvingCandidateIDs.isEmpty)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func cancellingAnActiveWorkerResultDoesNotShowAFailureBanner() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let candidate = try await prepare(f), runner = CancellablePreviewRunner()
+        let controller = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider(),previewRunner: runner)
+        await controller.load(); await controller.approveEditPlan(candidate,engine: f.engine)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !(await runner.started) || controller.renderProgress != "Rendering approved movie ranges" {
+            guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Synthetic worker did not start") }; try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(controller.renderingCandidateID == candidate.id)
+        await controller.cancelRender()
+        #expect(controller.error == nil && controller.renderingCandidateID == nil)
+        #expect(controller.document.candidates.last?.editApproval != nil && controller.document.candidates.last?.renderedPreview == nil)
+        #expect(await controller.flushForExit())
+    }
+
     @Test func structuredRemoveProtectAndHalfOpenBoundariesProduceExactParentFrameFragments() async throws {
         let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
         _ = try await note(f,action: .protect,start: 0,end: 12)

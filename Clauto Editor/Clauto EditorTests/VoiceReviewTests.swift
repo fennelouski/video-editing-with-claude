@@ -7,6 +7,14 @@ import Observation
 @testable import Clauto_Editor
 #endif
 
+private actor VoiceDraftAutosaveGate {
+    private var held = true
+    func wait() async throws {
+        while held { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(5)) }
+    }
+    func release() { held = false }
+}
+
 private actor PausedVoiceProcessor: VoiceCandidateProcessing {
     var calls = 0
     var waiting: CheckedContinuation<Void, Never>?
@@ -818,7 +826,8 @@ struct VoiceReviewTests {
 
     @MainActor @Test func pendingTypingCannotBeBypassedByClockWritesOrAnOldIdleTimer() async throws {
         let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0.04)
+        let provider = MockVoiceProvider(), gate = VoiceDraftAutosaveGate()
+        let controller = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0.04,draftAutosaveWait: { try await gate.wait() })
         await controller.load(); let token = UUID(); controller.willAttach(token)
         await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
         controller.chooseDevice("mock-device"); controller.start(); try await waitFor { controller.mode == .recording }
@@ -829,6 +838,7 @@ struct VoiceReviewTests {
         try await waitFor { controller.document.notes.count == 1 }
         try await Task.sleep(for: .milliseconds(70))
         #expect(controller.document.feedbackPackets == nil && controller.document.candidates.isEmpty)
+        await gate.release()
         try await waitFor { controller.document.feedbackPackets?.count == 1 }
         #expect(controller.document.feedbackPackets?.first?.typedDrafts.first?.text == "Unfinished steering remains a draft")
         #expect(controller.document.candidates.isEmpty && controller.active)

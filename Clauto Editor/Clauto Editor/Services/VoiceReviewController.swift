@@ -64,6 +64,7 @@ final class VoiceReviewController {
     private(set) var unsavedActions = 0
     private(set) var renderingCandidateID: UUID?
     private(set) var renderProgress = ""
+    private(set) var approvingCandidateIDs: Set<UUID> = []
     private(set) var candidatePlaybackID: UUID?
     private(set) var frameCommentLease: UUID?
     private(set) var playbackAvailable = false
@@ -105,8 +106,9 @@ final class VoiceReviewController {
     var selectedDeviceUID: String
     var locale: String
     @ObservationIgnored let repository: VoiceReviewRepository
-    @ObservationIgnored private let previewService = VoiceCandidatePreviewService()
+    @ObservationIgnored private let previewService: VoiceCandidatePreviewService
     @ObservationIgnored private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private var approvalTasks: [UUID:Task<Void,Never>] = [:]
     @ObservationIgnored private let worker: VoiceCandidateWorker
     @ObservationIgnored private let provider: any VoiceReviewDictating
     @ObservationIgnored private let defaults: UserDefaults
@@ -131,6 +133,7 @@ final class VoiceReviewController {
     @ObservationIgnored private var packetTaskID: UUID?
     @ObservationIgnored private var flushing = false
     @ObservationIgnored private let steeringIdleInterval: TimeInterval
+    @ObservationIgnored private let draftAutosaveWait: @Sendable () async throws -> Void
     private(set) var nextPacketAt: Date?
     private(set) var waitingForPreparation = false
     @ObservationIgnored private var leaseWatchTask: Task<Void,Never>?
@@ -145,9 +148,10 @@ final class VoiceReviewController {
     @ObservationIgnored private var clockSampler: (@MainActor () -> VoiceLivePlayhead)?
 
     init(project: Project, provider: any VoiceReviewDictating = DictateReviewAdapter(), defaults: UserDefaults = .standard,
-         processor: any VoiceCandidateProcessing = LocalVoiceCandidateProcessor(), steeringIdleInterval: TimeInterval = 120) throws {
+         processor: any VoiceCandidateProcessing = LocalVoiceCandidateProcessor(), steeringIdleInterval: TimeInterval = 120, draftAutosaveWait: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .milliseconds(250)) }, previewRunner: any CommandRunning = ProcessRunner()) throws {
         guard steeringIdleInterval.isFinite, steeringIdleInterval >= 0, steeringIdleInterval <= 86_400 else { throw ProjectFailure.invalidProject }
-        self.steeringIdleInterval = steeringIdleInterval
+        self.steeringIdleInterval = steeringIdleInterval; self.draftAutosaveWait = draftAutosaveWait
+        self.previewService = VoiceCandidatePreviewService(runner: previewRunner)
         self.project = project; self.provider = provider; self.defaults = defaults
         selectedDeviceUID = defaults.string(forKey: "ClautoVoiceReviewMicrophoneUID") ?? ""
         locale = defaults.string(forKey: "ClautoVoiceReviewLocale") ?? Locale.current.identifier
@@ -156,7 +160,7 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { waitingForPreparation || voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var hasPendingWork: Bool { waitingForPreparation || !approvingCandidateIDs.isEmpty || voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
     var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
@@ -525,7 +529,7 @@ final class VoiceReviewController {
         feedbackDraftChanged(reserve: true)
         drafts[draft.noteID] = draft; draftTasks[draft.noteID]?.cancel()
         draftTasks[draft.noteID] = Task {
-            do { try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation() }
+            do { try await draftAutosaveWait(); try Task.checkCancellation() }
             catch { return }
             _ = await enqueue { try await $0.saveDraft(draft) }.value
             if drafts[draft.noteID] == draft { draftTasks[draft.noteID] = nil; kickPreparation() }
@@ -557,7 +561,7 @@ final class VoiceReviewController {
         dirtyTypedVersions.insert(version); typedDraftTasks[version]?.cancel()
         let snapshot = composer.snapshot
         typedDraftTasks[version] = Task { @MainActor in
-            do { try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation() } catch { return }
+            do { try await draftAutosaveWait(); try Task.checkCancellation() } catch { return }
             _ = await persistTypedComposer(snapshot,composer: composer)
             if composer.snapshot == snapshot { typedDraftTasks[version] = nil; kickPreparation() }
         }
@@ -634,12 +638,25 @@ final class VoiceReviewController {
         typedSaveTasks[version] = task
     }
     func prepareEditPlan(_ candidate: VoiceRevisionCandidate) async { _ = await enqueue(retainFailure: false) { try await $0.prepareEditPlan(candidate.id) }.value }
-    func approveEditPlan(_ candidate: VoiceRevisionCandidate) async {
-        guard let sha = candidate.editPlanSHA256 else { return }
-        _ = await enqueue(retainFailure: false) { try await $0.approveEditPlan(candidate.id,expectedSHA: sha) }.value
+    func approveEditPlan(_ candidate: VoiceRevisionCandidate, engine: URL? = nil) async {
+        if let existing = approvalTasks[candidate.id] { await existing.value; return }
+        guard !flushing, approvalTasks.isEmpty, renderTask == nil, let sha = candidate.editPlanSHA256 else { return }
+        approvingCandidateIDs.insert(candidate.id)
+        let task = Task { @MainActor in
+            defer { approvalTasks[candidate.id] = nil; approvingCandidateIDs.remove(candidate.id) }
+            let saved = await enqueue(retainFailure: false) { try await $0.approveEditPlan(candidate.id,expectedSHA: sha) }.value
+            guard saved, !flushing, !Task.isCancelled, let engine,
+                  let current = document.candidates.first(where: { $0.id == candidate.id && $0.state == .prepared && $0.editPlanSHA256 == sha && $0.renderedPreview == nil }) else { return }
+            startPreviewRender(current,engine: engine)
+        }
+        approvalTasks[candidate.id] = task; await task.value
     }
     func renderPreview(_ candidate: VoiceRevisionCandidate, engine: URL) {
-        guard renderTask == nil else { return }; renderingCandidateID = candidate.id; renderProgress = "Waiting for a render slot"
+        guard approvalTasks.isEmpty else { return }
+        startPreviewRender(candidate,engine: engine)
+    }
+    private func startPreviewRender(_ candidate: VoiceRevisionCandidate, engine: URL) {
+        guard !flushing, renderTask == nil else { return }; renderingCandidateID = candidate.id; renderProgress = "Waiting for a render slot"
         renderTask = Task {
             do {
                 apply(try await previewService.render(repository: repository,candidateID: candidate.id,engine: engine,onLine: { [self] line in
@@ -654,7 +671,7 @@ final class VoiceReviewController {
                     }
                     await self.showRenderProgress(label,candidate: candidate.id)
                 }))
-            } catch { self.error = error.localizedDescription }
+            } catch is CancellationError {} catch { if !Task.isCancelled { self.error = error.localizedDescription } }
             renderingCandidateID = nil; renderTask = nil
         }
     }
@@ -682,6 +699,7 @@ final class VoiceReviewController {
         leaseWatchTask?.cancel(); await leaseWatchTask?.value; leaseWatchTask = nil; leaseWatchID = nil; waitingForPreparation = false
         packetTask?.cancel(); await packetTask?.value; packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
         voiceSetupTask?.cancel(); await voiceSetupTask?.value
+        for task in Array(approvalTasks.values) { await task.value }
         await cancelRender()
         _ = await stop()
         for task in Array(cardTasks.values) { await task.value }
@@ -694,6 +712,6 @@ final class VoiceReviewController {
         _ = await writes?.value
         await retryStorage()
         prepareTask?.cancel(); await prepareTask?.value; debounceTask?.cancel()
-        return sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty && restructuringCards.isEmpty && cardTasks.isEmpty && dirtyTypedVersions.isEmpty && typedDraftTasks.isEmpty && typedSaveTasks.isEmpty
+        return approvalTasks.isEmpty && approvingCandidateIDs.isEmpty && sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty && restructuringCards.isEmpty && cardTasks.isEmpty && dirtyTypedVersions.isEmpty && typedDraftTasks.isEmpty && typedSaveTasks.isEmpty
     }
 }

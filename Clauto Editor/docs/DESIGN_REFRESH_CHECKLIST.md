@@ -220,3 +220,43 @@ saved text. Truly empty typed context no longer blocks a proposal. Superseding a
 prepared packet returns unowned unchanged notes to ready, allowing a replacement
 after temporary draft context is cleared. The busy-lease watcher retries temporary
 read failures at its bounded interval and clears its matching generation on exit.
+
+## Milestone 9 — one approval creates the preview
+
+- Reviewing the concrete frame plan now offers Approve and create preview. That
+  single explicit action persists the exact plan approval and starts the existing
+  verified local renderer automatically. It no longer requires a separate Render
+  click. Voice feedback and new packet capture can continue during rendering.
+- Duplicate approval clicks join one owned task. Identical durable approvals are
+  idempotent across repositories, preserving one receipt. Failed/changed approvals
+  cannot start rendering. Existing local snapshot, source/provenance, frame/audio,
+  storage, and unchanged watched-version gates remain in force.
+- Approval tasks participate in quit flushing. If quitting begins while approval
+  waits for storage, it can finish saving without launching a late render. An
+  interrupted preview has an explicit retry control; active rendering shows its
+  progress/cancel controls instead. Cancellation is handled without a failure banner.
+- Synthetic integration verifies one action produces one complete 24-frame movie,
+  one approval/preview bundle, exact decoded output and unchanged watched-version
+  pointer; concurrent approval and quit/storage waiting have dedicated coverage.
+  No private footage, NAS, app launch, native speech or foreground test was used.
+- This is explicit review-plan approval, not automatic interpretation of arbitrary
+  speech, production fact approval, automatic version promotion, or recognition
+  while watching a candidate. Those broader workflows and native acceptance remain.
+
+M9 verification correction: draft-autosave waiting is injectable for deterministic
+concurrency tests; production still waits 250ms. The pending-draft regression now
+holds/releases a synthetic gate rather than assuming a wall-clock sleep is shorter
+than autosave during parallel renders. A delayed same-plan approval replay after
+completion reuses the existing preview; explicitly Create another preview remains
+a separate user action. The initial full-suite timing failure is retained locally.
+
+M9 approval owns the project slot through the synchronous handoff to rendering.
+Manual Retry/Create controls are disabled and their controller entry is guarded
+while approval is pending; a two-version storage-lock regression verifies another
+already-approved candidate cannot take that slot. Quit and delayed-replay checks
+remain in place. Earlier frozen M9 builds are superseded by this corrected pin.
+
+An active renderer may report cancellation as a cancelled process result wrapped
+in a workflow error. The controller also checks its task cancellation state in the
+general catch, preventing a failure banner for an ordinary Cancel. A synthetic
+runner test waits for actual render progress before cancelling and verifies cleanup.
