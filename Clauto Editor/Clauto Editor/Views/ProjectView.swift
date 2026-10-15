@@ -8,8 +8,6 @@ struct ProjectView: View {
     private var tab: String { playbackRouter.tab }
     // Intentional one-time seed; parent keys this view by project ID when switching projects.
     @State private var draft: Brief
-    @State private var message = ""
-    @State private var compactHistoryExpanded = false
 
     let initialTranscriptReviewGates: Bool
     init(store: EditorStore, project: Project, playbackRouter: ReviewWindowRouter, initialTab: String = "Brief", initialTranscriptReviewGates: Bool = false) {
@@ -60,60 +58,7 @@ struct ProjectView: View {
             .task { await store.loadWorkflow() }
     }
     @ViewBuilder private func conversation(compact: Bool) -> some View {
-        let entries = (store.conversations[project.id] ?? []).suffix(3)
-        VStack(alignment: .leading, spacing: compact ? 10 : 16) {
-            HStack(spacing: 9) {
-                ClautoIcon(.conversation, size: compact ? 17 : 20)
-                Text("Work with Claude").font(ClautoDesign.type(compact ? 14 : 18, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                if compact, !entries.isEmpty {
-                    Spacer(minLength: 12)
-                    Button { compactHistoryExpanded.toggle() } label: {
-                        HStack(spacing: 8) { Text("Recent requests · \(entries.count)"); ClautoIcon(.arrow, size: 13).rotationEffect(.degrees(compactHistoryExpanded ? 90 : 0)) }
-                            .font(ClautoDesign.caption).padding(.vertical, 5)
-                    }.buttonStyle(ClautoInlineButtonStyle()).accessibilityValue(compactHistoryExpanded ? "Expanded" : "Collapsed")
-                }
-            }
-            if !entries.isEmpty {
-                if compact {
-                    if compactHistoryExpanded { requestHistory(entries).frame(height: 100) }
-                } else { requestHistory(entries).frame(maxHeight: .infinity, alignment: .top) }
-            } else if !compact {
-                Text("Save the change you want to make. Requests remain part of this project.")
-                    .font(ClautoDesign.body).foregroundStyle(ClautoDesign.quiet)
-                Spacer(minLength: 16)
-            }
-            if compact {
-                HStack(alignment: .bottom, spacing: 12) {
-                    requestField
-                    saveRequest.fixedSize()
-                }
-            } else { requestField; saveRequest }
-            Text("Claude is offline in this build. Requests stay saved with this project; no media or message is sent.")
-                .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).fixedSize(horizontal: false, vertical: true)
-        }.padding(compact ? 18 : 22).frame(maxWidth: .infinity, alignment: .leading)
-    }
-    private var requestField: some View {
-        ClautoField(label: "Change request", text: $message, placeholder: "What should change in this cut?")
-            .accessibilityIdentifier("changeRequest")
-    }
-    private var saveRequest: some View {
-        ClautoAction("Save request", icon: .conversation, kind: .primary) {
-            let submitted = message
-            Task { if await store.queueRequest(submitted), message == submitted { message = "" } }
-        }.disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
-    private func requestHistory(_ entries: ArraySlice<LocalMessage>) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(entries) { entry in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(entry.text).font(ClautoDesign.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                        Text(entry.state).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).fixedSize(horizontal: false, vertical: true)
-                    }
-                    ClautoRule()
-                }
-            }
-        }.scrollIndicators(.hidden)
+        LiveConversationView(controller: store.liveConversation(for: project),legacyRequests: store.conversations[project.id] ?? [],compact: compact)
     }
 
 }

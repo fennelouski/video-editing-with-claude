@@ -12,6 +12,7 @@ struct ProcessCommand: Sendable {
 struct ProcessLine: Sendable {
     var text: String
     var isError: Bool
+    var truncated = false
 }
 
 struct ProcessResult: Sendable {
@@ -156,7 +157,7 @@ actor ProcessRunner: CommandRunning {
     private nonisolated static func drain(_ handle: FileHandle, isError: Bool,
                                          onLine: (@Sendable (ProcessLine) async -> Void)?) async -> String {
         defer { try? handle.close() }
-        var captured = Data(), pending = Data()
+        var captured = Data(), pending = Data(), pendingTruncated = false
         while true {
             let chunk: Data = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async { continuation.resume(returning: handle.availableData) }
@@ -168,12 +169,13 @@ actor ProcessRunner: CommandRunning {
             while let end = pending.firstIndex(of: 10) {
                 let line = String(decoding: pending[..<end], as: UTF8.self)
                 pending.removeSubrange(...end)
-                await onLine?(ProcessLine(text: line, isError: isError))
+                await onLine?(ProcessLine(text: line, isError: isError,truncated: pendingTruncated))
+                pendingTruncated = false
             }
             // A tool emitting a giant unterminated line must not grow memory without limit.
-            if pending.count > 262_144 { pending.removeFirst(pending.count - 262_144) }
+            if pending.count > 262_144 { pending.removeFirst(pending.count - 262_144); pendingTruncated = true }
         }
-        if !pending.isEmpty { await onLine?(ProcessLine(text: String(decoding: pending, as: UTF8.self), isError: isError)) }
+        if !pending.isEmpty { await onLine?(ProcessLine(text: String(decoding: pending, as: UTF8.self), isError: isError,truncated: pendingTruncated)) }
         return String(decoding: captured, as: UTF8.self)
     }
 }

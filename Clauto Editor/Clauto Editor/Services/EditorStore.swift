@@ -32,6 +32,11 @@ final class EditorStore {
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var liveConversations: [UUID: LiveConversationController] = [:]
+    func liveConversation(for project: Project) -> LiveConversationController {
+        if let current = liveConversations[project.id] { return current }
+        let next = LiveConversationController(project: project); liveConversations[project.id] = next; return next
+    }
     var reviewPlayers: [UUID: ReviewPlayerSession] = [:]
     func reviewPlayer(project: Project,version: CutVersion,url: URL,ownerID: UUID) -> ReviewPlayerSession {
         if let session = reviewPlayers.values.first(where: { $0.ownerID == ownerID && $0.version.id == version.id && $0.project.id == project.id && $0.url == url }) { return session }
@@ -116,7 +121,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
@@ -125,6 +130,7 @@ final class EditorStore {
         }
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
+        for controller in liveConversations.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         return await flushTranscriptReviewsForExit() && voicesSaved && !presentationState.hasUnsavedBriefs && !working

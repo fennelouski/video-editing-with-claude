@@ -152,12 +152,13 @@ struct ClautoField: View {
     var label: String
     @Binding var text: String
     var placeholder = ""
+    var axis: Axis = .horizontal
     @FocusState private var focused: Bool
     @Environment(\.isEnabled) private var enabled
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !label.isEmpty { Text(label).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet) }
-            TextField(label, text: $text, prompt: Text(placeholder).foregroundStyle(ClautoDesign.quiet))
+            TextField(label, text: $text, prompt: Text(placeholder).foregroundStyle(ClautoDesign.quiet),axis: axis)
                 .textFieldStyle(.plain).font(ClautoDesign.body).foregroundStyle(enabled ? ClautoDesign.ink : ClautoDesign.quiet)
                 .tint(ClautoDesign.ink).padding(11).background(enabled ? ClautoDesign.sheet : ClautoDesign.soft)
                 .overlay(Rectangle().stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? 2 : 1))

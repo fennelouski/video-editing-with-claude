@@ -1,5 +1,15 @@
 # Implementation checklist
 
+## Continuous conversation transport
+
+The composer has a durable explicit-text transport, streamed replies, interruption
+by newer feedback, guided existing-account connection, draft/reply recovery, linked
+retry history and automatic idle review packets. Legacy fixture histories and old
+local requests remain separate. See [LIVE_CONVERSATION.md](LIVE_CONVERSATION.md)
+for limits. Local cut/job integration, automatic client installation and actual
+native/provider runtime acceptance remain unfinished. Source presence alone is
+not acceptance of this increment or the full product.
+
 Baseline: upstream `556b0ae` (13 October 2026), reconfirmed against public main
 before the later local increment was saved. Work lives on local branch
 `codex/clauto-native-foundation` in a separate clone. Nothing is pushed.

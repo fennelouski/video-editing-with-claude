@@ -12,10 +12,13 @@ a timeline editor.
 The implemented app owns project selection and creation, the brief, file intake and
 roles, local pipeline progress, graphic-plan approval, saved cuts, time-bound feedback,
 and separate derivative exports. Existing model and service callbacks remain the
-source of truth. Requests are saved locally; live Claude turns are disabled in this
-development build. Workspace setup checks installed tools and folders. Automatic
-installation and model downloads remain future work. Debug builds do not start
-Sparkle update checks.
+source of truth. The conversation composer saves and streams explicitly submitted
+text through an existing client, with guided account connection and queued steering.
+Media, transcripts, frame notes and earlier local requests are not automatically
+sent. Conversational cut changes and longer idle-packet jobs remain unfinished.
+Workspace setup checks installed tools and folders; complete engine/client
+installation remains future work. Voice feedback and region dictation guide their
+embedded local speech setup. Debug builds do not start Sparkle checks.
 
 Original media is referenced or copied according to the user's choice and is never
 modified. Scientific claims and graphic plans require human review. A failed run

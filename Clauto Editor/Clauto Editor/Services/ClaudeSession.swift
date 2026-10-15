@@ -1,8 +1,8 @@
 import Foundation
 
-// Provisional adapter: fixtures follow Anthropic's documented headless events.
-// No live transport exists in this build. A real, authorized CLI capture must
-// verify these shapes and permission boundaries before enabling external turns.
+// Shared provisional headless-event parser. The legacy ClaudeSession below is
+// fixture-only; the separate live composer uses a text-only transport and its
+// own durable repository. Real client/runtime acceptance remains separate.
 enum ClaudeEvent: Codable, Equatable, Sendable {
     case session(UUID)
     case textDelta(String)
@@ -87,6 +87,9 @@ struct ClaudeTurnRequest: Sendable {
     var prompt: String
     var project: URL
     var engine: URL
+    var projectID: UUID? = nil
+    var textOnlyWorkspace: URL? = nil
+    var textAuthorization: ClaudeTextAuthorization? = nil
 }
 
 protocol ClaudeTurnTransport: Sendable {
@@ -141,8 +144,8 @@ actor ClaudeSession {
 
     func send(_ prompt: String, project: Project, engine: URL,
               onEvent: @escaping @Sendable (ClaudeEvent) async -> Void = { _ in }) async throws -> ClaudeConversation {
-        // A Boolean UI preference can never enable the network: there is no live
-        // transport implementation, and non-fixture transports are refused here.
+        // Legacy fixture histories cannot enable live turns or be silently
+        // transferred to the separately authorized text-only conversation.
         guard transport.isSyntheticFixture else { throw ClaudeFailure.disabled }
         guard activeTurn == nil else { throw ClaudeFailure.busy }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ClaudeFailure.incomplete }

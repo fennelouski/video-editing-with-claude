@@ -39,6 +39,16 @@ struct ProcessRunnerTests {
         #expect(await lines.values.map(\.text) == ["pizza 🍕", "done"])
     }
 
+    @Test func streamedLineTruncationIsReportedWithoutContaminatingTheFollowingLine() async throws {
+        let lines = Lines()
+        let result = try await ProcessRunner().run(.init(executable: URL(fileURLWithPath: "/usr/bin/python3"),
+            arguments: ["-c","import sys,time; sys.stdout.write('x'*350000); sys.stdout.flush(); time.sleep(0.05); sys.stdout.write('\\ncomplete 🥖\\n')"]),onLine: { await lines.append($0) })
+        let received = await lines.values
+        #expect(result.succeeded && received.count == 2)
+        #expect(received.first?.truncated == true && received.last?.truncated == false)
+        #expect(received.last?.text == "complete 🥖")
+    }
+
     @Test func timeoutCancelsWithoutHanging() async throws {
         let result = try await ProcessRunner().run(ProcessCommand(executable: URL(fileURLWithPath: "/bin/sleep"),
             arguments: ["30"], timeout: .milliseconds(100)))

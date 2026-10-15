@@ -30,7 +30,7 @@ struct SetupService: Sendable {
         for (name, title, arguments) in [("brew", "Homebrew", ["--version"]), ("ffmpeg", "Video tools", ["-version"]),
                                           ("git", "Git", ["--version"]), ("python3.11", "Python 3.11", ["--version"]),
                                           ("claude", "Claude Code", ["--version"])] {
-            guard let executable = ProcessRunner.executable(name) else {
+            guard let executable = name == "claude" ? ClaudeClientContract.locate():ProcessRunner.executable(name) else {
                 checks.append(SetupCheck(id: name, title: title, state: .needsAttention, detail: "\(title) is missing. Installation is a later setup milestone.")); continue
             }
             do {
@@ -47,8 +47,8 @@ struct SetupService: Sendable {
             try ProjectRepository.validateDrive(projectsRoot)
             checks.append(SetupCheck(id: "folders", title: "Project drive", state: .ready, detail: projectsRoot.path))
         } catch { checks.append(SetupCheck(id: "folders", title: "Project drive", state: .needsAttention, detail: error.localizedDescription)) }
-        checks.append(SetupCheck(id: "signin", title: "Claude sign-in", state: .notChecked, detail: "External AI is disabled for this development build. No account check or sign-in was attempted."))
-        checks.append(SetupCheck(id: "model", title: "Speech model", state: .notChecked, detail: "Model preference is saved per project. Model download and cache verification are pending."))
+        checks.append(SetupCheck(id: "signin", title: "Claude sign-in", state: .notChecked, detail: "Send a message in your project to connect. Sign-in is guided there; this check does not contact your account."))
+        checks.append(SetupCheck(id: "model", title: "Speech model", state: .notChecked, detail: "Voice feedback and region dictation guide local speech setup when you start. Pipeline transcription uses the project's separately installed model."))
         return checks
     }
 }

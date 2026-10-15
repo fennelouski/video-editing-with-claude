@@ -1,5 +1,10 @@
 # Architecture
 
+Current bounded conversation implementation: [LIVE_CONVERSATION.md](LIVE_CONVERSATION.md)
+describes explicit-text transport, durable steering, guided account connection and
+remaining local job integration. Broader project/engine tool access in the original
+target architecture below is not enabled by this increment.
+
 ## Shape
 
 ```
