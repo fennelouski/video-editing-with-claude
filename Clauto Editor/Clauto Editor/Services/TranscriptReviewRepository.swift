@@ -308,6 +308,7 @@ actor TranscriptReviewRepository {
             let result = SyntheticSourceSpanRenderResult(id: runID, projectID: project.id, reviewID: map.reviewID,
                 revisionID: map.revisionID, acknowledgementID: ack.id, mapSHA256: try map.sha256(),
                 acknowledgementSHA256: pointer.receiptSHA256, inputSHA256: inputSHA256, workerReceiptSHA256: proofSHA256,
+                sourceByteStrategy: proof.sourceByteStrategy, sourceBytes: proof.sourceBytes,
                 purpose: "synthetic_source_span_acceptance", productionAuthorized: false, appliedToCut: false,
                 folder: outputRoot.url.appendingPathComponent(runID.uuidString), bundlePublication: publication, folderIdentity: final.identity,
                 artifactsSHA256: proof.artifactsSHA256, totalFrames: proof.totalFrames,

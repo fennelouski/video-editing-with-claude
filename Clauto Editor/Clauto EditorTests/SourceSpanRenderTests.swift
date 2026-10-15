@@ -13,6 +13,21 @@ private actor FailingSourceRenderRunner: CommandRunning {
     }
 }
 
+private actor SnapshotCancellingRunner: CommandRunning {
+    private let base = ProcessRunner()
+    private(set) var reachedSnapshot = false
+    func cancel() async { await base.cancel() }
+    private func observed(_ line: ProcessLine) async {
+        if line.text.contains("source_snapshot_ready") {
+            reachedSnapshot = true
+            await base.cancel()
+        }
+    }
+    func run(_ command: ProcessCommand, onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
+        try await base.run(command) { line in await self.observed(line); await onLine?(line) }
+    }
+}
+
 struct SourceSpanRenderTests {
     private struct Fixture {
         let root: URL; let engine: URL; let permit: SyntheticSourceSpanFixture
@@ -53,6 +68,8 @@ struct SourceSpanRenderTests {
         let result = try await render(f)
         #expect(result.totalFrames == 36 && result.audioSamples == 72_072 && result.schemaChecked)
         #expect(!result.productionAuthorized && !result.appliedToCut)
+        #expect(result.sourceByteStrategy == SyntheticSourceByteContract.strategy)
+        #expect(result.sourceBytes.count == 2 && result.sourceBytes.values.allSatisfy { $0.readOnly && $0.unlinked && $0.byteCount <= SyntheticSourceByteContract.sourceLimit })
         let proof = try JSONDecoder().decode(SourceSpanWorkerReceipt.self, from: Data(contentsOf: result.folder.appendingPathComponent("render-proof.json")))
         #expect(proof.spans.map(\.sourceID) == ["a", "b", "a"])
         #expect(proof.spans.map(\.startFrame) == [6,24,42]); #expect(proof.spans.map(\.endFrame) == [18,36,54])
@@ -99,6 +116,60 @@ struct SourceSpanRenderTests {
             }
         }
         #expect(try Data(contentsOf: pointer(f)) == before)
+    }
+
+    @Test func concurrentSyntheticRendersKeepDistinctBundlesAndExactSourceByteReceipts() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        async let first = render(f)
+        async let second = render(f)
+        let (a, b) = try await (first, second)
+        #expect(a.id != b.id && a.folder != b.folder)
+        #expect(a.sourceBytes == b.sourceBytes && a.sourceByteStrategy == SyntheticSourceByteContract.strategy)
+        #expect(a.artifactsSHA256["review.mov"] == b.artifactsSHA256["review.mov"])
+        let current = try JSONDecoder().decode(SyntheticSourceSpanRenderResult.self, from: Data(contentsOf: pointer(f)))
+        #expect([a.id,b.id].contains(current.id))
+        #expect(try pcm(a.folder.appendingPathComponent("review.mov")) == pcm(b.folder.appendingPathComponent("review.mov")))
+    }
+
+    @Test func cancellationDuringPrivateSnapshotWorkerPreservesPriorCurrent() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await render(f); let before = try Data(contentsOf: pointer(f))
+        let runner = SnapshotCancellingRunner()
+        await #expect(throws: WorkflowFailure.self) {
+            try await SourceSpanRenderService(runner: runner, reviews: f.repo).renderSyntheticReview(fixture: f.permit,
+                expectedRevision: f.review.state.revisionID, expectedAcknowledgementID: f.ack.id, engine: f.engine)
+        }
+        #expect(await runner.reachedSnapshot)
+        #expect(try Data(contentsOf: pointer(f)) == before)
+        let build = f.permit.project.folder.appendingPathComponent("build/source-span-reviews")
+        let files = FileManager.default.enumerator(at: build, includingPropertiesForKeys: nil)!
+        #expect(!files.compactMap { $0 as? URL }.contains { $0.lastPathComponent.hasPrefix(".source-snapshot-") })
+    }
+
+    @Test func missingOrRehashedWrongSnapshotReceiptCannotReplaceCurrent() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await render(f); let before = try Data(contentsOf: pointer(f))
+        for mode in 0..<5 {
+            await #expect(throws: (any Error).self) {
+                try await render(f) { phase, stage in
+                    if case .workerFinished = phase {
+                        let url = stage.appendingPathComponent("render-proof.json")
+                        var proof = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+                        if mode == 0 { proof.removeValue(forKey: "sourceBytes") }
+                        else {
+                            var sources = proof["sourceBytes"] as! [String: [String: Any]]
+                            if mode == 1 { sources["a"]!["sha256"] = String(repeating: "0", count: 64) }
+                            if mode == 2 { sources["a"]!["byteCount"] = SyntheticSourceByteContract.sourceLimit + 1 }
+                            if mode == 3 { sources["a"]!["unlinked"] = false }
+                            if mode == 4 { sources["a"]!["readOnly"] = false }
+                            proof["sourceBytes"] = sources
+                        }
+                        try JSONSerialization.data(withJSONObject: proof).write(to: url)
+                    }
+                }
+            }
+            #expect(try Data(contentsOf: pointer(f)) == before)
+        }
     }
 
     @Test func missingChangedSourcesAndUnacknowledgedReviewCannotRender() async throws {
@@ -234,7 +305,31 @@ struct SourceSpanRenderTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_SOURCE_RENDER_ACCEPTANCE_ROOT"] != nil))
     func durableSyntheticNASSourceSpanAcceptance() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["CLAUTO_SOURCE_RENDER_ACCEPTANCE_ROOT"]))
-        let f = try await fixture(root: root), result = try await render(f)
+        let f = try await fixture(root: root)
+        if ProcessInfo.processInfo.environment["CLAUTO_SOURCE_BYTE_EXPECT_ISOLATION_BLOCK"] == "1" {
+            let prior = Data("Prior-synthetic-current-sentinel".utf8), cut = Data("Prior-production-cut-sentinel".utf8)
+            let cutURL = f.permit.project.folder.appendingPathComponent("cuts/current.json")
+            try prior.write(to: pointer(f), options: .withoutOverwriting)
+            try cut.write(to: cutURL, options: .withoutOverwriting)
+            do {
+                _ = try await render(f)
+                throw WorkflowFailure.invalid("The expected NAS isolation refusal did not occur.")
+            } catch {
+                guard error.localizedDescription.contains("Filesystem cannot isolate an unlinked source snapshot") else { throw error }
+            }
+            let currentAfter = try Data(contentsOf: pointer(f)), cutAfter = try Data(contentsOf: cutURL)
+            try #require(currentAfter == prior && cutAfter == cut)
+            let preserved = f.review.catalog.sources.allSatisfy { source in (try? TranscriptSourceMap.sha(Data(contentsOf: URL(fileURLWithPath: source.path)))) == source.sourceSHA256 }
+            try #require(preserved)
+            let report: [String: Any] = ["synthetic_only": true, "project": f.permit.project.folder.path,
+                "nas_rendering_blocked": true, "reason": "zero-link snapshot attestation unsupported",
+                "source_snapshot_media_bytes_copied": 0, "prior_current_preserved": true, "prior_production_cut_preserved": true,
+                "source_hashes_unchanged": preserved, "production_authorized": false, "applied_to_cut": false]
+            try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: f.permit.project.folder.appendingPathComponent("SOURCE_BYTE_CAPABILITY_BLOCK.json"), options: .withoutOverwriting)
+            print("SYNTHETIC_SOURCE_BYTE_CAPABILITY_BLOCK=" + f.permit.project.folder.path)
+            return
+        }
+        let result = try await render(f)
         let proof = try JSONDecoder().decode(SourceSpanWorkerReceipt.self, from: Data(contentsOf: result.folder.appendingPathComponent("render-proof.json")))
         let output = try pcm(result.folder.appendingPathComponent("review.mov"))
         let originals = try Dictionary(uniqueKeysWithValues: f.review.catalog.sources.map { ($0.id, try pcm(URL(fileURLWithPath: $0.path))) })
@@ -242,6 +337,9 @@ struct SourceSpanRenderTests {
         for span in proof.spans { expected.append(originals[span.sourceID]!.subdata(in: span.startSample*2..<span.endSample*2)) }
         try #require(output == expected)
         try #require(result.totalFrames == 36 && result.audioSamples == 72072 && result.schemaChecked)
+        try #require(result.sourceByteStrategy == SyntheticSourceByteContract.strategy && result.sourceBytes.count == 2)
+        let sourceByteCount = result.sourceBytes.values.reduce(0) { $0 + $1.byteCount }
+        try #require(sourceByteCount <= SyntheticSourceByteContract.jobLimit && result.sourceBytes.values.allSatisfy { $0.readOnly && $0.unlinked })
         let sourcePreserved = f.review.catalog.sources.allSatisfy { source in (try? TranscriptSourceMap.sha(Data(contentsOf: URL(fileURLWithPath: source.path)))) == source.sourceSHA256 }
         try #require(sourcePreserved)
         let currentBeforeCollision = try Data(contentsOf: pointer(f))
@@ -260,6 +358,8 @@ struct SourceSpanRenderTests {
             "source_in_frames": proof.spans.map(\.startFrame), "source_out_frames_exclusive": proof.spans.map(\.endFrame),
             "frames": result.totalFrames, "audio_samples": result.audioSamples, "actual_pcm_equals_selected_original_slices": true,
             "source_hashes_unchanged": sourcePreserved,
+            "source_byte_strategy": result.sourceByteStrategy, "source_snapshot_total_bytes": sourceByteCount,
+            "snapshot_handles_readonly_and_unlinked": true,
             "installed_fcpxml_schema_passed": result.schemaChecked, "native_current_pointer_published": true, "bundle_publication": result.bundlePublication, "existing_target_collision_preserved_current": true,
             "production_authorized": false, "applied_to_cut": false, "private_footage_used": false, "live_sheet_accessed": false,
             "fcpxml_sha256": proof.artifactsSHA256["timeline.fcpxml"]!, "review_movie_sha256": proof.artifactsSHA256["review.mov"]!]

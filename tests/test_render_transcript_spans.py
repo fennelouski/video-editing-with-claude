@@ -1,6 +1,8 @@
 """Real local synthetic color/tone media; no footage, AI, app or current-cut access."""
 import copy
 import errno
+import concurrent.futures
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -67,6 +69,10 @@ def test_decoded_output_has_exact_A_B_A_samples_frames_and_source_timeline(fixtu
     root,stage,request=fixture;before={p.name:R.digest(p.read_bytes()) for p in (root/'synthetic-originals').iterdir()}
     receipt=render(fixture)
     assert receipt['totalFrames']==36 and receipt['audioSamples']==72072 and receipt['fullDecodePassed']
+    assert receipt['sourceByteStrategy']==R.SOURCE_BYTE_STRATEGY
+    assert set(receipt['sourceBytes'])=={'a','b'}
+    assert all(v['readOnly'] and v['unlinked'] and 0<v['byteCount']<=R.SOURCE_MAX_BYTES for v in receipt['sourceBytes'].values())
+    assert not list(stage.glob('.source-snapshot-*'))
     def pcm(path): return R.run(['ffmpeg','-v','error','-nostdin','-i',str(path),'-map','0:a:0','-f','s16le','-'])
     originals={sid:pcm(root/'synthetic-originals'/f'{sid}.mov') for sid in ['a','b']}
     expected=b''.join(originals[s['sourceID']][s['startSample']*2:s['endSample']*2] for s in request['spans'])
@@ -133,3 +139,117 @@ def test_source_in_place_mutation_during_encode_refuses_success(fixture):
             with path.open('r+b') as stream: stream.seek(-1,os.SEEK_END);value=stream.read(1);stream.seek(-1,os.SEEK_END);stream.write(bytes([value[0]^1]))
     with pytest.raises((ValueError,OSError)): render(fixture,progress=mutate)
     assert ran and not (stage/'render-proof.json').exists()
+
+
+@pytest.mark.parametrize('fault',['replace','truncate','restore'])
+def test_concurrent_original_changes_cannot_change_validated_render_bytes(fixture,monkeypatch,fault):
+    root,stage,request=fixture;path=root/'synthetic-originals'/'a.mov';original=path.read_bytes()
+    prior=root/'.clauto'/'source-span-synthetic-current.json';prior.write_bytes(b'prior immutable current')
+    checked=[];real_info=R.media_info;ran=False
+    def inspect(fd):
+        # Every source media validation receives an unlinked O_RDONLY inode.
+        if os.fstat(fd).st_nlink==0:
+            assert fcntl.fcntl(fd,fcntl.F_GETFL)&os.O_ACCMODE==os.O_RDONLY
+            assert R.hash_fd(fd) in {s['sourceSHA256'] for s in request['spans']}
+            with pytest.raises(OSError): os.write(fd,b'forbidden')
+            with pytest.raises(OSError): os.ftruncate(fd,0)
+            checked.append(fd)
+        return real_info(fd)
+    monkeypatch.setattr(R,'media_info',inspect)
+    def progress(event):
+        nonlocal ran
+        if event['phase']=='before_encode' and not ran:
+            ran=True
+            def mutate():
+                if fault=='replace':
+                    replacement=path.with_suffix('.replacement');replacement.write_bytes(original);os.replace(replacement,path)
+                else:
+                    with path.open('r+b') as stream:
+                        stream.truncate(0);stream.flush();os.fsync(stream.fileno())
+                        if fault=='restore': stream.write(original);stream.flush();os.fsync(stream.fileno())
+            with concurrent.futures.ThreadPoolExecutor() as pool: pool.submit(mutate).result(timeout=5)
+    with pytest.raises((ValueError,OSError)): render(fixture,progress)
+    assert ran and len(checked)==2 and not (stage/'render-proof.json').exists()
+    # Even truncating the original before encoding cannot alter this retained part.
+    assert (stage/'part-00000.mov').is_file()
+    decoded=R.run(['ffmpeg','-v','error','-i',str(stage/'part-00000.mov'),'-map','0:a:0','-f','s16le','-'])
+    restored=stage/'expected-original.mov';restored.write_bytes(original)
+    expected=R.run(['ffmpeg','-v','error','-i',str(restored),'-map','0:a:0','-f','s16le','-'])
+    assert decoded==expected[6*R.SPF*2:18*R.SPF*2]
+    assert prior.read_bytes()==b'prior immutable current' and not list(stage.glob('.source-snapshot-*'))
+
+
+@pytest.mark.parametrize('fault',['read_error','early_eof','growth','cancel','cancel_after_ready','snapshot_write_error','snapshot_short_write','unlink_error','reader_open_error','validation_read_error'])
+def test_snapshot_capture_failures_close_handles_and_preserve_current(fixture,monkeypatch,fault):
+    root,stage,_=fixture;prior=root/'.clauto'/'source-span-synthetic-current.json';prior.write_bytes(b'prior')
+    original=root/'synthetic-originals'/'a.mov';inode=original.stat().st_ino
+    real_read,real_write,real_open,real_create,real_unlink,real_info=R.os.read,R.os.write,R.Directory.open,R.Directory.create,R.os.unlink,R.media_info
+    descriptors=[];copied=False
+    def track_open(self,name):
+        if fault=='reader_open_error' and name.startswith('.source-snapshot-'): raise OSError(errno.EIO,'Simulated snapshot open failure')
+        fd=real_open(self,name)
+        if name=='a.mov' or name.startswith('.source-snapshot-'): descriptors.append(fd)
+        return fd
+    def track_create(self,name):
+        fd=real_create(self,name)
+        if name.startswith('.source-snapshot-'): descriptors.append(fd)
+        return fd
+    def read(fd,size):
+        if os.fstat(fd).st_ino==inode and fault=='read_error': raise OSError(errno.EIO,'Simulated NAS read failure')
+        return real_read(fd,size)
+    def write(fd,data):
+        if os.fstat(fd).st_nlink==0:
+            if fault=='snapshot_write_error': raise OSError(errno.ENOSPC,'Simulated private snapshot write failure')
+            if fault=='snapshot_short_write': return 0
+        return real_write(fd,data)
+    def progress(event):
+        nonlocal copied
+        if fault=='cancel_after_ready' and event['phase']=='source_snapshot_ready': raise concurrent.futures.CancelledError('Synthetic ready cancelled')
+        if event['phase']=='source_snapshot_chunk' and not copied:
+            copied=True
+            if fault=='early_eof':
+                with original.open('r+b') as stream: stream.truncate(event['bytes'])
+            if fault=='growth':
+                with original.open('ab') as stream: stream.write(b'growth')
+            if fault=='cancel': raise concurrent.futures.CancelledError('Synthetic capture cancelled')
+    def unlink(name,**kw):
+        if fault=='unlink_error' and str(name).startswith('.source-snapshot-'): raise OSError(errno.ENOTSUP,'Simulated unsupported unlink-open semantics')
+        return real_unlink(name,**kw)
+    def info(fd):
+        if fault=='validation_read_error' and os.fstat(fd).st_nlink==0: raise OSError(errno.EIO,'Simulated private snapshot read failure')
+        return real_info(fd)
+    monkeypatch.setattr(R.Directory,'open',track_open);monkeypatch.setattr(R.Directory,'create',track_create)
+    monkeypatch.setattr(R.os,'read',read);monkeypatch.setattr(R.os,'write',write)
+    monkeypatch.setattr(R.os,'unlink',unlink);monkeypatch.setattr(R,'media_info',info)
+    with pytest.raises((ValueError,OSError,concurrent.futures.CancelledError)): render(fixture,progress)
+    assert prior.read_bytes()==b'prior' and not (stage/'render-proof.json').exists()
+    remaining=list(stage.glob('.source-snapshot-*'))
+    assert all(p.stat().st_size==0 for p in remaining)
+    assert bool(remaining)==(fault in ['unlink_error','reader_open_error'])
+    for fd in set(descriptors):
+        with pytest.raises(OSError): os.fstat(fd)
+
+
+def test_snapshot_limits_precede_copy_and_write_capability_is_not_retained(tmp_path):
+    folder=tmp_path.resolve();source=folder/'source';source.write_bytes(b'x'*20)
+    with R.Directory(folder) as stage:
+        fd=stage.open('source')
+        try:
+            budget=R.SnapshotBudget();budget.used=R.JOB_MAX_BYTES-10
+            with pytest.raises(ValueError,match='budget'): R.ReadonlySourceSnapshot.capture(fd,R.digest(source.read_bytes()),stage,budget,'a',lambda _:None)
+            with source.open('r+b') as stream: stream.truncate(R.SOURCE_MAX_BYTES+1)
+            with pytest.raises(ValueError,match='budget'): R.ReadonlySourceSnapshot.capture(fd,'0'*64,stage,R.SnapshotBudget(),'a',lambda _:None)
+            assert not list(folder.glob('.source-snapshot-*'))
+        finally: os.close(fd)
+
+
+def test_two_concurrent_renders_use_independent_private_snapshot_descriptors(fixture):
+    root,stage,request=fixture
+    second=stage.with_name('.pending-'+str(uuid.uuid4()));second.mkdir();(second/'source-map.json').write_bytes((stage/'source-map.json').read_bytes())
+    other=copy.deepcopy(request);other['stagingPath']=str(second);other['stagingIdentity']=R.identity(second.stat())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        jobs=[pool.submit(render,fixture),pool.submit(render,(root,second,other))]
+        proofs=[job.result(timeout=30) for job in jobs]
+    assert proofs[0]['sourceBytes']==proofs[1]['sourceBytes']
+    assert proofs[0]['artifactsSHA256']['review.mov']==proofs[1]['artifactsSHA256']['review.mov']
+    assert not list(root.rglob('.source-snapshot-*'))

@@ -22,6 +22,8 @@ struct SourceSpanRenderService: Sendable {
         do {
             var media: [VerifiedSourceMedia] = []
             for source in bound.session.catalog.sources {
+                // Early refusal only: the worker's actual media validation and
+                // rendering both consume its bounded private byte snapshot.
                 let verified = try await SourceMediaVerifier().verify(source)
                 try verified.validate(source: source); media.append(verified)
             }
@@ -62,6 +64,20 @@ struct SourceSpanRenderService: Sendable {
                 proof.spans == spans, proof.totalFrames == frames, proof.audioSamples == frames * SourceSpanFrameGrid.samplesPerFrame,
                 proof.fullDecodePassed, Set(proof.artifactsSHA256.keys) == ["review.mov", "timeline.fcpxml"] else {
                 throw WorkflowFailure.invalid("The synthetic render receipt does not match the frozen stable-ID selections.")
+            }
+            guard proof.sourceByteStrategy == SyntheticSourceByteContract.strategy,
+                proof.sourceBytes.count == 2,
+                Set(proof.sourceBytes.keys) == Set(fixture.manifest.sources.map(\.sourceID)),
+                proof.sourceBytes.values.allSatisfy({ $0.byteCount > 0 && $0.byteCount <= SyntheticSourceByteContract.sourceLimit }),
+                proof.sourceBytes.values.reduce(0, { $0 + $1.byteCount }) <= SyntheticSourceByteContract.jobLimit else {
+                throw WorkflowFailure.invalid("The synthetic source-byte transport is missing or exceeds its job limit.")
+            }
+            for source in fixture.manifest.sources {
+                guard let bytes = proof.sourceBytes[source.sourceID], let checked = media.first(where: { $0.sourceID == source.sourceID }),
+                    bytes.sha256 == source.sourceSHA256, bytes.byteCount > 0, bytes.byteCount <= SyntheticSourceByteContract.sourceLimit,
+                    Int64(bytes.byteCount) == checked.signature.size, bytes.readOnly, bytes.unlinked else {
+                    throw WorkflowFailure.invalid("The render did not validate and consume the exact private synthetic source bytes.")
+                }
             }
             for name in ["review.mov", "timeline.fcpxml"] {
                 guard TranscriptSourceMap.sha(try staging.read(name)) == proof.artifactsSHA256[name] else { throw WorkflowFailure.invalid("A required rendered artifact is missing or changed.") }

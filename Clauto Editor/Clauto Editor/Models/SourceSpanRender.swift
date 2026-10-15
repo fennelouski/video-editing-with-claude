@@ -90,6 +90,18 @@ struct SourceSpanRenderInput: Encodable, Sendable {
     let spans: [RenderedSourceSpan]
 }
 
+enum SyntheticSourceByteContract {
+    static let strategy = "private_unlinked_readonly_v1"
+    static let sourceLimit = 1_024 * 1_024, jobLimit = 2 * sourceLimit
+}
+
+struct SyntheticSourceByteProof: Codable, Equatable, Sendable {
+    let sha256: String
+    let byteCount: Int
+    let readOnly: Bool
+    let unlinked: Bool
+}
+
 struct SourceSpanWorkerReceipt: Codable, Sendable {
     let schemaVersion: Int
     let purpose: String
@@ -99,6 +111,8 @@ struct SourceSpanWorkerReceipt: Codable, Sendable {
     let mapSHA256: String
     let acknowledgementID: UUID
     let acknowledgementSHA256: String
+    let sourceByteStrategy: String
+    let sourceBytes: [String: SyntheticSourceByteProof]
     let spans: [RenderedSourceSpan]
     let totalFrames: Int
     let audioSamples: Int
@@ -117,6 +131,8 @@ struct SyntheticSourceSpanRenderResult: Codable, Sendable {
     let acknowledgementSHA256: String
     let inputSHA256: String
     let workerReceiptSHA256: String
+    let sourceByteStrategy: String
+    let sourceBytes: [String: SyntheticSourceByteProof]
     let purpose: String
     let productionAuthorized: Bool
     let appliedToCut: Bool

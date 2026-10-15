@@ -15,6 +15,7 @@ not render Katie's selections or write `cuts/current.json`.
 | Real local render | `scripts/render_transcript_spans.py` trims each selected source to those frames/samples, encodes ProRes/PCM parts, and assembles `review.mov` plus an editable original-source `timeline.fcpxml`. The MOV movie timescale is 48000, avoiding millisecond header rounding. |
 | Decode and timing proof | Strict FFmpeg decoding uses `-xerror -err_detect explode`. Exact frame/sample counts and packet timestamp continuity refuse gaps, overlaps and retiming. Native validation checks actual AVFoundation duration, fixed artifact hashes, ordered spans and the exact deterministic FCPXML shape/format/source whitelist. Installed Final Cut DTD validation is recorded separately. |
 | Source preservation | All original media/transcript bytes are read-only, hash checked, and checked for path/signature drift before/after. The factory's source paths must match the exact generated manifest and catalog. No source is rewritten to satisfy a selection. |
+| Shared verified bytes | Actual worker source validation and rendering use the same private, unlinked, read-only descriptor. A snapshot is limited to 1 MiB per source and 2 MiB per job; the sole writable handle closes before trusted SHA verification or media probing. Originals remain open only for drift checks. See [the bounded byte contract](IMMUTABLE_SOURCE_BYTES.md). |
 | Destination ownership | Directory handles anchor exclusive, no-follow file creation. FFmpeg uses inherited seekable `fd` protocol descriptors, rather than reopening destination paths. Failed work remains in its owned staging directory; there is no recursive pathname cleanup. |
 | Publication | A unique bundle uses a no-replace rename where supported. Only an explicit ENOTSUP uses exclusive UUID-directory creation plus descriptor-relative exclusive copies. The final directory identity and strategy are recorded; current remains the sole commit point. Under the transcript-review lock, native code rechecks head/map, exact acknowledgment ID/bytes, cancellation, directory identities and final artifact hashes before atomically replacing only `.clauto/source-span-synthetic-current.json`. |
 | Failure preservation | Missing/changed originals, stale choices or a replaced acknowledgment, cancellation, output collisions, malformed/rehashed timeline proofs and simulated storage failures refuse publication. The previous synthetic-current bytes and production cut pointer remain unchanged. |
@@ -54,8 +55,8 @@ permission comes separately from the in-memory generator permit.
 
 ## Deterministic acceptance
 
-The full native core suite passes 99 routine cases, with six opt-ins skipped
-(105 registered). Fourteen Python worker cases and eight routine native integration cases use actual
+The full native core suite passes 102 routine cases, with six opt-ins skipped
+(108 registered). Twenty-nine Python worker cases and eleven routine native integration cases use actual
 local generated media. The source A changes from red/220 Hz to blue/660 Hz; source B
 is green/440 Hz. A→B→A selects source frames 6–18, 24–36 and 42–54. The output is
 36 frames and 72072 audio samples (1.5015 seconds). Acceptance compares every decoded
@@ -86,11 +87,11 @@ It never consumes private footage, the live Sheet, v7 or the expansion proposal.
   dimensions and mono audio, no mixed/VFR sources, nested timelines, transitions,
   graphics, grade, music, natural breath assembly or final horizontal tail. The QA
   assembly is not a finished video or evidence of finished-duration requirements.
-- Descriptor inheritance pins file identity during worker I/O, **not immutable
-  bytes**. Before/after SHA and signature checks detect observed mutation; in-place
-  writes can still occur between checks. AVPlayer also reopens URLs. A production
-  immutable-byte transport and revalidation before later playback/import remain
-  separate work.
+- This synthetic worker isolates validated bytes using private unlinked read-only
+  snapshots, not OS sealing against hostile local code or filesystem servers.
+  Native AV preflight and interactive AVPlayer still reopen original URLs. FCPXML
+  also references originals for later editing. Production immutable transport and
+  revalidation before later playback/import remain separate work.
 - Destination handles prevent pathname swaps from redirecting file writes. Final
   path/identity/hash checks protect publication, but arbitrary changes after
   publication can make a saved artifact unavailable. Consumers must validate the

@@ -2,11 +2,13 @@
 
 This worker is not an approval authority. It never publishes a current pointer or
 production cut. All writes use anchored directory descriptors and exclusive files.
-Input descriptors pin inodes, not immutable bytes: in-place changes are checked
-before/after; a general immutable-byte production transport remains future work.
+Only small factory-generated sources are admitted. Media validation and rendering
+share private unlinked read-only snapshots; originals are checked again before
+success. This lifecycle isolation is not an OS seal against arbitrary local code.
 """
 from __future__ import annotations
 import argparse
+import fcntl
 import hashlib
 import json
 import math
@@ -22,6 +24,9 @@ from xml.etree import ElementTree as ET
 FPS_N, FPS_D, SAMPLE_RATE, SPF = 24000, 1001, 48000, 2002
 GENERATOR = 'clauto-color-tone-v1'
 ARTIFACTS = ('review.mov', 'timeline.fcpxml')
+SOURCE_MAX_BYTES = 1024 * 1024
+JOB_MAX_BYTES = 2 * SOURCE_MAX_BYTES
+SOURCE_BYTE_STRATEGY = 'private_unlinked_readonly_v1'
 DTD = Path('/Applications/Final Cut Pro.app/Contents/Frameworks/Interchange.framework/Versions/A/Resources/FCPXMLv1_13.dtd')
 
 
@@ -101,6 +106,65 @@ def hash_fd(fd):
     os.lseek(fd, 0, os.SEEK_SET)
     if signature(os.fstat(fd)) != before: raise ValueError('Source changed during full byte verification')
     return sha.hexdigest()
+
+
+class SnapshotBudget:
+    def __init__(self): self.used = 0
+    def reserve(self, size):
+        if size <= 0 or size > SOURCE_MAX_BYTES or self.used + size > JOB_MAX_BYTES:
+            raise ValueError('Synthetic source snapshot exceeds the bounded byte budget')
+        self.used += size
+
+
+class ReadonlySourceSnapshot:
+    """A job-owned unlinked inode with no retained writable capability.
+
+    The name is removed before media is copied. Only the independent O_RDONLY
+    descriptor survives copying, and subprocesses inherit that descriptor alone.
+    This is not a security boundary against same-user FD/memory injection or a
+    hostile filesystem server; original and snapshot hashes remain checked.
+    """
+    def __init__(self, fd, size, sha): self.fd, self.size, self.sha = fd, size, sha
+    def close(self):
+        if self.fd is not None: os.close(self.fd); self.fd = None
+    def check(self):
+        info = os.fstat(self.fd)
+        if fcntl.fcntl(self.fd, fcntl.F_GETFL) & os.O_ACCMODE != os.O_RDONLY or info.st_nlink != 0 or info.st_size != self.size:
+            raise ValueError('Private source snapshot lost its read-only unlinked identity')
+        if hash_fd(self.fd) != self.sha: raise ValueError('Private source snapshot bytes changed')
+    @classmethod
+    def capture(cls, source, expected, stage, budget, sid, progress):
+        before = signature(os.fstat(source)); budget.reserve(before[2])
+        name = '.source-snapshot-' + uuid.uuid4().hex
+        writer = reader = None
+        try:
+            writer = stage.create(name)
+            reader = stage.open(name)
+            if identity(os.fstat(writer)) != identity(os.fstat(reader)):
+                raise ValueError('Snapshot descriptor identity differs')
+            os.unlink(name, dir_fd=stage.fd)
+            if os.fstat(reader).st_nlink != 0: raise ValueError('Filesystem cannot isolate an unlinked source snapshot')
+            os.lseek(source, 0, os.SEEK_SET); copied = 0
+            while copied < before[2]:
+                data = os.read(source, min(64 * 1024, before[2] - copied))
+                if not data: raise ValueError('Original source truncated during snapshot capture')
+                at = 0
+                while at < len(data):
+                    count = os.write(writer, data[at:])
+                    if count <= 0: raise OSError('Incomplete private source snapshot write')
+                    at += count
+                copied += len(data)
+                progress({'phase':'source_snapshot_chunk', 'sourceID':sid, 'bytes':copied})
+            if os.read(source, 1) or signature(os.fstat(source)) != before:
+                raise ValueError('Original source changed during snapshot capture')
+            os.fsync(writer); os.close(writer); writer = None
+            result = cls(reader, copied, expected); result.check()
+            progress({'phase':'source_snapshot_ready', 'sourceID':sid, 'bytes':copied})
+            reader = None
+            return result
+        finally:
+            if writer is not None: os.close(writer)
+            if reader is not None: os.close(reader)
 
 
 def run(args, fds=()):
@@ -242,7 +306,7 @@ def timeline(request, source_info, sources):
 
 
 def render(request, input_sha, progress=emit):
-    opened={};source_signatures={}
+    opened={};source_signatures={};snapshots={};budget=SnapshotBudget()
     with Directory(request['projectPath'],request['projectIdentity']) as root, Directory(request['stagingPath'],request['stagingIdentity'],anchor=root) as stage:
         if stage.path.parent!=root.path/'build'/'source-span-reviews' or not stage.path.name.startswith('.pending-'): raise ValueError('Wrong synthetic staging namespace')
         manifest_path=Path(request['fixtureManifestPath'])
@@ -251,6 +315,8 @@ def render(request, input_sha, progress=emit):
             manifest_bytes=metadata.read(manifest_path.name)
             if digest(manifest_bytes)!=request['fixtureManifestSHA256']: raise ValueError('Generated fixture manifest bytes changed')
             manifest=strict_json(manifest_bytes);sources,total=validate_input(request,manifest)
+            if set(sources) != {'a','b'} or any(s['frames'] != 72 for s in sources.values()):
+                raise ValueError('Only the bounded native color-tone fixture is supported')
             map_bytes=stage.read('source-map.json')
             if digest(map_bytes)!=request['mapSHA256'] or strict_json(map_bytes)!=request['map']: raise ValueError('Frozen native source-map bytes changed')
             catalog_bytes=originals.read('catalog.json')
@@ -276,12 +342,14 @@ def render(request, input_sha, progress=emit):
                     snapshot=originals.read(sid+'.words.json')
                     if digest(snapshot)!=source['transcriptSHA256'] or strict_json(snapshot)['words']!=cat['words']: raise ValueError('Original transcript changed')
                     fd=originals.open(sid+'.mov');opened[sid]=fd;source_signatures[sid]=signature(os.fstat(fd))
-                    if hash_fd(fd)!=source['sourceSHA256']: raise ValueError('Original source bytes changed')
-                    info[sid]=media_info(fd)
+                    snapshot=ReadonlySourceSnapshot.capture(fd,source['sourceSHA256'],stage,budget,sid,progress)
+                    snapshots[sid]=snapshot
+                    info[sid]=media_info(snapshot.fd)
                     if info[sid]['frames']!=source['frames']: raise ValueError('Source coverage differs from fixture')
+                    if (info[sid]['width'],info[sid]['height'])!=(160,90): raise ValueError('Wrong generated source dimensions')
                 if len({(s['width'],s['height']) for s in info.values()})!=1: raise ValueError('Mixed source dimensions are not supported in this increment')
                 for index,span in enumerate(request['spans']):
-                    root.check();stage.check();out=stage.create(f'part-{index:05d}.mov');src=opened[span['sourceID']]
+                    root.check();stage.check();out=stage.create(f'part-{index:05d}.mov');src=snapshots[span['sourceID']].fd
                     try:
                         progress({'phase':'before_encode','id':span['id']})
                         run(['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-xerror','-err_detect','explode','-y','-protocol_whitelist','fd','-fd',str(src),'-i','fd:',
@@ -323,6 +391,7 @@ def render(request, input_sha, progress=emit):
                     try:
                         if signature(os.fstat(path))!=source_signatures[sid]: raise ValueError('Original source path was replaced during rendering')
                     finally: os.close(path)
+                    snapshots[sid].check()
                 root.check();stage.check();originals.check();metadata.check()
                 hashes={}
                 for name in ARTIFACTS:
@@ -333,10 +402,13 @@ def render(request, input_sha, progress=emit):
                 receipt={'schemaVersion':1,'purpose':'synthetic_source_span_acceptance','productionAuthorized':False,
                     'inputSHA256':input_sha,'fixtureID':request['fixtureID'],'mapSHA256':request['mapSHA256'],
                     'acknowledgementID':request['acknowledgementID'],'acknowledgementSHA256':request['acknowledgementSHA256'],
+                    'sourceByteStrategy':SOURCE_BYTE_STRATEGY,
+                    'sourceBytes':{sid:{'sha256':snap.sha,'byteCount':snap.size,'readOnly':True,'unlinked':True} for sid,snap in snapshots.items()},
                     'spans':request['spans'],'totalFrames':total,'audioSamples':total*SPF,'fullDecodePassed':True,'schemaChecked':checked,'artifactsSHA256':hashes}
                 stage.write('render-proof.json',encode_json(receipt));progress({'phase':'worker_complete','frames':total})
                 return receipt
             finally:
+                for snapshot in snapshots.values(): snapshot.close()
                 for fd in opened.values(): os.close(fd)
 
 
