@@ -603,6 +603,25 @@ final class VoiceReviewController {
             if composer.snapshot == snapshot { typedDraftTasks[version] = nil; kickPreparation() }
         }
     }
+    /// A deliberate convenience action fills the visible fields before Save.
+    /// Relative commands freeze the selected player's clock at this click.
+    @discardableResult func useTypedCommandRange(_ version: UUID) -> Bool {
+        let composer = typedComposer(for: version)
+        guard !composer.saving, let target, target.versionID == version,
+              composer.snapshot.target == nil || composer.snapshot.target == target,
+              let sample = clockSampler?(), sample.available, sample.seconds.isFinite,
+              sample.seconds >= 0, sample.seconds <= target.duration else {
+            error = "Select this draft's video and wait for playback to be ready."; return false
+        }
+        let directive = VoiceCandidateDirective(noteID: composer.snapshot.id,revision: composer.snapshot.revision,
+            intent: VoiceIntent.infer(composer.text),anchor: .init(targetID: target.id,seconds: sample.seconds),text: composer.text)
+        guard let proposal = VoiceSemanticEditInterpreter.propose(directive,parent: target) else {
+            error = "Try ‘remove from 0:12 to 0:15’ or ‘keep the next five seconds’, or enter the range below."; return false
+        }
+        composer.pin(target); composer.action = proposal.action
+        composer.start = String(proposal.start); composer.end = String(proposal.end); error = nil
+        return true
+    }
     private func persistTypedComposer(_ snapshot: VoiceTypedDraft, composer: VoiceTypedComposer) async -> Bool {
         let saved = await enqueue(retainFailure: false) { repository in
             let base = await MainActor.run { composer.persisted }

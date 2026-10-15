@@ -300,3 +300,28 @@ candidate's history row by its own presentation token, alongside the newest eigh
 entries. New feedback packets cannot evict the row that owns a candidate sheet or
 retarget its clock. Failure, navigation or closing releases only that opening's
 retention. Pure rolling-history regression supplements the source lifecycle review.
+
+## Local spoken range proposals (15 October, M11)
+
+- [x] Interpret complete English timed commands locally: remove/cut/delete or
+  keep/protect/preserve, absolute clocks/seconds/minutes, next/previous seconds,
+  and from here for a stated duration. Common number words and decimal seconds
+  are supported. Relative ranges use original onset, never ASR completion time.
+- [x] Keep original transcript, onset, target, revision and saved directives intact.
+  Separate plan proposals explain their source and proposed times; frame rounding,
+  inherited protections, source checks and existing approval remain mandatory.
+- [x] Refuse negated, conditional, compound, unsupported or out-of-movie commands
+  rather than guessing/clamping. Explicitly selected action plus complete range
+  remains authoritative; mismatched partial selections ask for clarification.
+- [x] Offer Use times from comment for typed feedback. This deliberate action
+  fills visible range/action controls at the selected player's current clock; the
+  original typed comment stays unchanged, and Save/plan approval remain separate.
+- [x] Global capture status identifies the actual candidate, with Mic Off labeled
+  as a privacy control. No stop/finalize prerequisite was added.
+- [ ] Broader semantic editing of arbitrary language, source sentences, camera or
+  graphics layers and script application remain. This bounded local interpreter
+  is not a live external conversation provider or unrestricted AI editor.
+
+Synthetic acceptance exercises raw final speech -> exact proposed range -> existing
+approval -> verified local movie, preserving original feedback and source identity.
+Native recognition/player/VoiceOver acceptance remains held with the foreground.

@@ -22,9 +22,9 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 ForEach(Array(store.voiceReviews.values.filter(\.active)), id: \.project.id) { controller in
                     HStack {
-                        Text("Microphone active · \(controller.project.manifest.name) · v\(controller.target?.versionNumber ?? 0) · \(controller.mode.rawValue)").font(ClautoDesign.caption)
+                        Text("Microphone active · \(controller.project.manifest.name) · \(controller.target?.reviewLabel ?? "Switching video") · \(controller.mode.rawValue)").font(ClautoDesign.caption)
                         Spacer()
-                        Button("Stop Voice Review") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
+                        Button("Mic Off") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
                             .accessibilityIdentifier("voiceReviewGlobalStop")
                     }.padding(12).background(ClautoDesign.soft).accessibilityElement(children: .contain)
                 }

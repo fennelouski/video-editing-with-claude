@@ -45,6 +45,7 @@ enum VoiceNoteState: String, Codable, Sendable { case provisional, ready, needsR
 enum VoiceIntent: String, Codable, CaseIterable, Sendable {
     case protect, change, unclear
     static func infer(_ text: String) -> Self {
+        if let intent = VoiceSemanticEditInterpreter.intent(text) { return intent }
         let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if lower.range(of: #"^(i\s+)?(really\s+)?(like|love|keep|protect)\b|^don.t change\b"#, options: .regularExpression) != nil { return .protect }
         if lower.range(of: #"^(i\s+)?(don.t like|dislike|hate|remove|cut|change)\b"#, options: .regularExpression) != nil { return .change }

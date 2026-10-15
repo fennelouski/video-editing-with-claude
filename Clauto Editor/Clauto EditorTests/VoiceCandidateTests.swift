@@ -307,6 +307,27 @@ struct VoiceCandidateTests {
         let document = try await f.repository.load(), retained = try #require(document.notes.first { $0.id == original.id })
         #expect(retained.onset == original.onset && retained.effectiveAnchor == original.effectiveAnchor && retained.transcript == original.transcript)
     }
+    @Test func aSpokenRangePreparesAnApprovedVerifiedMovieWithoutManualRangeEdits() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let session = UUID(), attempt = UUID(), epoch = UUID()
+        _ = try await f.repository.begin(id: session,attempt: attempt,deviceUID: "synthetic",locale: "en-US")
+        _ = try await f.repository.observe(session: session,host: 100,seconds: 0.25,rate: 0,target: f.target.id,epoch: epoch,kind: .versionChanged)
+        _ = try await f.repository.observe(session: session,host: 101,seconds: 0.25,rate: 0,target: f.target.id,epoch: epoch,kind: .sample)
+        _ = try await f.repository.captured(session: session,attempt: attempt,audioStart: 0,duration: 1,hostStart: 100)
+        let text = "Please remove from 0.5005 seconds to 1.001 seconds"
+        let saved = try await f.repository.speech(.init(segmentID: "exact-command",text: text,isFinal: true,audioStart: 0.1,audioEnd: 0.2),session: session,attempt: attempt)
+        let original = try #require(saved.notes.last)
+        #expect(original.action == nil && original.effectiveAnchor?.seconds == 0.25 && original.effectiveAnchor?.endSeconds == nil)
+        let candidate = try await approve(f), plan = try #require(candidate.editPlan)
+        #expect(plan.issues.isEmpty && plan.operations.first?.startFrame == 12 && plan.operations.first?.endFrame == 24)
+        #expect(plan.semanticProposals?.first?.originalAnchor == original.effectiveAnchor)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: candidate.id,engine: f.engine)
+        let document = try await f.repository.load()
+        #expect(document.candidates.last?.renderedPreview?.frames == 24)
+        let note = try #require(document.notes.first { $0.id == original.id })
+        #expect(note.transcript == text && note.text == text && note.onset == original.onset && note.revision == original.revision)
+        #expect(!candidate.productionAuthorized && !candidate.appliedToCut)
+    }
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_VOICE_CANDIDATE_ACCEPTANCE_ROOT"] != nil))
     func durableNASMasterCandidateUsesStrictLocalSnapshotAndKeepsOutputsOnNAS() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CLAUTO_VOICE_CANDIDATE_ACCEPTANCE_ROOT"]!)

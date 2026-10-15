@@ -422,6 +422,24 @@ struct VoiceReviewTests {
         #expect(retained.dropFirst().map(\.id) == document.candidates.suffix(8).map(\.id))
         #expect(document.candidateHistory(retaining: [],limit: 0).isEmpty)
     }
+    @Test @MainActor func typedCommandConvenienceShowsItsRangeAndKeepsTheOriginalComment() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try await controller(project: project,provider: provider,target: target,seconds: 20)
+        let composer = controller.typedComposer(for: target.versionID)
+        composer.text = "Keep the previous five seconds"
+        #expect(controller.useTypedCommandRange(target.versionID))
+        #expect(composer.start == "15.0" && composer.end == "20.0" && composer.action == .protect)
+        #expect(composer.text == "Keep the previous five seconds")
+        let submitted = try #require(controller.submitTypedComposer(target.versionID)); #expect(await submitted.value)
+        let note = try #require(try await repository.load().notes.last)
+        #expect(note.text == "Keep the previous five seconds" && note.effectiveAnchor?.seconds == 15 && note.effectiveAnchor?.endSeconds == 20)
+        #expect(note.action == .protect)
+        #expect(await provider.starts == 0)
+        composer.text = "Remove next ten seconds"; let before = composer.snapshot
+        controller.willAttach(UUID())
+        #expect(!controller.useTypedCommandRange(target.versionID) && composer.snapshot == before)
+        #expect(await controller.flushForExit())
+    }
 
     @Test @MainActor func openingAndReloadingNeverRecordOrRequestPermissionAndDeviceIsExplicit() async throws {
         let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }

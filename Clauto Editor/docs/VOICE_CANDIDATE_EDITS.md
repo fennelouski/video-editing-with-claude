@@ -10,17 +10,21 @@ bounded review mode, not production authorization or a camera-layer editor.
 2. Enter a typed review note with start/end seconds and **Remove range** or
    **Protect range**, or choose **Start listening**. Clauto guides permission,
    input and on-device speech setup inside the app. Reopening never records.
-3. Keep steering while playback or local work continues. Cards and original speech
+3. Complete commands such as **cut from 1:12 to 1:16**, **keep the previous five
+   seconds**, or **remove from here for two seconds** can propose a range locally.
+   The proposal is separate from your original comment and timestamp. For typed
+   feedback, **Use times from comment** fills the visible fields for review.
+4. Keep steering while playback or local work continues. Cards and original speech
    timing save continuously. After 120 seconds without new feedback, an immutable
    packet starts local proposal preparation. **Mic Off** is a privacy control;
    stopping is not a processing prerequisite. Resolve unclear meaning or timing.
-4. Review the exact proposed frame ranges. Removals round inward and protections
+5. Review the exact proposed frame ranges. Removals round inward and protections
    outward to full 24000/1001 frames. Half-open ranges use the watched version
    before ripple edits; protections and conflicting requests block approval.
-5. **Approve and create preview** saves the exact plan approval and starts one
+6. **Approve and create preview** saves the exact plan approval and starts one
    verified local render. Subsequent feedback invalidates stale proposals. Rendering
    never replaces a saved cut or changes its current pointer.
-6. **Play verified review candidate** opens the candidate with its own Feedback
+7. **Play verified review candidate** opens the candidate with its own Feedback
    panel. Listening may continue through the switch; a hard clock boundary marks
    the transition. New speech and typed notes retain the candidate's identity and
    candidate-local time, rather than being reassigned to its original parent.
@@ -112,3 +116,14 @@ source candidate to change it. Native provenance recomputes the projection, and
 the renderer separately checks inherited constraints against parent lineage.
 Each opening is cancellation/generation owned, so navigation during verification
 cannot seize a feedback clock after its surface has closed.
+
+## Spoken command interpretation
+
+The local English interpreter accepts a complete timed remove/protect command,
+including numeric clocks, seconds/minutes, common zero-to-ninety-nine number words
+and decimal seconds. Previous/next ranges measure from original speech onset.
+It does not interpret vague phrases, negations, alternatives, compound commands,
+quotes of source narration, speed, camera, graphics or science edits. Unsupported
+requests stay available for clarification. No range is clamped into the movie.
+Manually selected complete ranges/actions override the command interpretation.
+An exact plan approval remains required before producing a separate preview.

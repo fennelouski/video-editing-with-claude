@@ -59,6 +59,8 @@ struct VoiceReviewView: View {
                 }
                 Text("Keep steering. Feedback saves as you speak.")
                     .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                Text("Try ‘cut from 0:12 to 0:15’ or ‘keep the previous five seconds’. You’ll review the proposed cuts before a preview is made.")
+                    .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
                 if controller.nextPacketAt != nil {
                     Text("Next update after two quiet minutes.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                         .accessibilityIdentifier("voiceSteeringWaiting")
@@ -82,6 +84,9 @@ struct VoiceReviewView: View {
                 }
                 ClautoDisclosure("Typed feedback") {
                     TextField("Feedback", text: $composer.text).accessibilityIdentifier("voiceTypedFeedback")
+                    Button("Use times from comment") { controller.useTypedCommandRange(versionID) }
+                        .disabled(!selected || composer.saving || composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("voiceTypedCommandRange")
                     Picker("Explicit review action", selection: $composer.action) {
                         Text("Protect this range").tag(VoiceRangeAction.protect)
                         Text("Remove this range").tag(VoiceRangeAction.remove)
@@ -339,6 +344,10 @@ private struct VoiceCandidateActions: View {
                         .font(ClautoDesign.caption)
                     ForEach(Array(plan.operations.enumerated()),id: \.offset) { _, operation in
                         Text("\(operation.action == .protect ? "Protect" : "Remove") watched frames \(operation.startFrame)..<\(operation.endFrame) · note \(operation.noteID.uuidString.prefix(8))")
+                            .font(ClautoDesign.caption).textSelection(.enabled)
+                    }
+                    ForEach(Array((plan.semanticProposals ?? []).enumerated()),id: \.offset) { _, proposal in
+                        Text(String(format: "From your comment: %@ %.3f–%.3fs · %@. Original feedback at %.3fs.",proposal.action == .protect ? "keep":"remove",proposal.start,proposal.end,proposal.explanation,proposal.originalAnchor.seconds))
                             .font(ClautoDesign.caption).textSelection(.enabled)
                     }
                     ForEach(Array((plan.inheritedProtections ?? []).enumerated()),id: \.offset) { _, protection in
