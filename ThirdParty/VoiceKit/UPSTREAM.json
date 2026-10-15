@@ -23,7 +23,8 @@
   "clauto_changes": [
     "Explicit no-prompt/no-download/no-device-fallback policy; installed on-device models only",
     "Time-indexed transcription and authoritative converted analyzer-frame / tap-host capture stamps",
-    "Owned converted analyzer inputs with explicit bufferStartTime and discontinuity signaling"
+    "Owned converted analyzer inputs with explicit bufferStartTime and discontinuity signaling",
+    "Retain bounded exact attributed text/audio-time runs for local final idea grouping; do not infer interior word times"
   ],
   "vendored_file_sha256": {
     "Sources/VKObjC/VKObjC.m": "fe9eaef938db8522aed34a2ec7f7d4c46291b7c5b92049aab8b0244e7cb76f18",
@@ -39,7 +40,7 @@
     "Sources/VoiceKit/Recognition/FileTranscriber.swift": "91ef8aa48776564d5913dce96f15fa7eb5d39bec824ca096c9343fc5bc513c92",
     "Sources/VoiceKit/Recognition/RecognitionError.swift": "65adabf80bd6ab50661db70474226a1de6ca4ebc2af034e26f2044e8db3fad5d",
     "Sources/VoiceKit/Recognition/RecognitionSession.swift": "65621a8c6ba83890677d14313bde5ccdbb3b2764b08bc3086267ec8ff63b4307",
-    "Sources/VoiceKit/Recognition/SpeechRecognitionService.swift": "ea95f2653c7bb85123d09810ed5b097071a0560d9ec54b869e4f6dad65c0bce6",
-    "Sources/VoiceKit/Recognition/TranscriptionResult.swift": "1165a59a73013d2cfd6ffb9777f5e691bfb8af19ec159a6e9f818f7f58a14ee4"
+    "Sources/VoiceKit/Recognition/SpeechRecognitionService.swift": "e77d9f7976ea78e958b665dc8965b6a8c51dbbeb43d0e7e20c5a04e11c249141",
+    "Sources/VoiceKit/Recognition/TranscriptionResult.swift": "d3f90ef597bb2ab4c905d0b2bee055fea6b9f310a708da20195379232157c461"
   }
 }

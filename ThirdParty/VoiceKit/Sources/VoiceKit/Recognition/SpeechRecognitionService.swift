@@ -238,10 +238,17 @@ public actor SpeechRecognitionService: TranscriptionProvider {
                         guard !text.isEmpty else { continue }
                         Self.logger.debug("segment: \"\(text, privacy: .private)\" isFinal: \(isFinal)")
                         let range = result.range
+                        var utf16Offset = 0
+                        let runs = result.text.runs.prefix(4_097).map { run -> TranscriptionRun in
+                            let length = String(result.text[run.range].characters).utf16.count
+                            defer { utf16Offset += length }
+                            return .init(utf16Start: utf16Offset,utf16Length: length,
+                                start: run.audioTimeRange?.start.seconds,end: run.audioTimeRange?.end.seconds)
+                        }
                         capturedTranscriptCont?.yield(TranscriptionResult(
                             text: text, isFinal: isFinal,
                             start: range.start.seconds.isFinite ? range.start.seconds : nil,
-                            end: range.end.seconds.isFinite ? range.end.seconds : nil))
+                            end: range.end.seconds.isFinite ? range.end.seconds : nil,runs: runs))
                     }
                 } catch {
                     Self.logger.error("results stream error: \(error)")

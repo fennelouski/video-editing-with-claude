@@ -57,6 +57,7 @@ actor VoiceReviewRepository {
 
     private func validate(_ document: VoiceReviewDocument) throws {
         try document.validateCardLineage()
+        try document.validateSpeechSources()
         guard document.schemaVersion == 1, document.projectID == project.id, document.sequence >= 0,
               (document.cardOperations ?? []).count <= 10_000,
               Set((document.cardOperations ?? []).map(\.id)).count == (document.cardOperations ?? []).count,

@@ -102,13 +102,26 @@ extension VoiceReviewDocument {
         guard notes.count+texts.count <= 10_000, (cardOperations ?? []).count < 10_000,
               texts.allSatisfy({ $0.count <= 20_000 }), parents.allSatisfy({ $0.history.count < 512 }),
               !request.childIDs.contains(where: { id in notes.contains(where: { $0.id == id }) }) else { throw WorkflowFailure.invalid("This review reached its card/history limit. The original cards remain unchanged.") }
+        // Deduplicate shared utterance evidence by identity, never by words:
+        // two separate utterances may legitimately say exactly the same thing.
+        var originals: [String] = [], seen: Set<UUID> = []
+        var evidence = parents.reversed().map(\.id)
+        while let id = evidence.popLast() {
+            guard seen.insert(id).inserted else { continue }
+            guard let original = notes.first(where: { $0.id == id }) else { throw ProjectFailure.invalidProject }
+            if let source = original.speechSourceID { evidence.append(source) }
+            else if let lineage = original.lineage { evidence.append(contentsOf: lineage.operation.parents.reversed().map(\.id)) }
+            else { originals.append(original.transcript) }
+        }
+        let rawTranscript = originals.joined(separator: "\n")
+        guard rawTranscript.count <= 20_000 else { throw WorkflowFailure.invalid("The combined original transcript exceeds this card's limit. Original cards remain unchanged.") }
         let first = parents[0], anchors = parents.compactMap(\.effectiveAnchor)
         let ordinal = captureOrder(first,fallback: notes.firstIndex(where: { $0.id == first.id })!)
         let parentPath = first.capturePath ?? []
         guard parentPath.count < 64 else { throw WorkflowFailure.invalid("This card reached its structure-depth limit. Original cards are retained.") }
         for (part,text) in texts.enumerated() {
             var child = VoiceReviewNote(id: request.childIDs[part],sessionID: first.sessionID,segmentID: "card-"+request.childIDs[part].uuidString,
-                audioStart: nil,audioEnd: nil,created: now,transcript: parents.map(\.transcript).joined(separator: "\n"),text: text,isFinal: true,intent: .infer(text))
+                audioStart: nil,audioEnd: nil,created: now,transcript: rawTranscript,text: text,isFinal: true,intent: .infer(text))
             child.manuallyEdited = true; child.onset = first.onset
             child.lineage = .init(operation: request,part: part,parentAnchors: anchors); child.captureOrdinal = ordinal
             child.capturePath = parentPath+(request.kind == .split ? [part]:[])

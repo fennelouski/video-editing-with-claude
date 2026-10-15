@@ -95,7 +95,7 @@ actor DictateReviewAdapter: VoiceReviewDictating {
                         let segment: String
                         if let start = result.start, start.isFinite, start >= 0, start < 86_400 { segment = "audio-\(Int64((start * 1_000_000).rounded()))" }
                         else { segment = "untimed-" + UUID().uuidString }
-                        await self?.emit(.speech(.init(segmentID: segment, text: result.text, isFinal: result.isFinal, audioStart: result.start, audioEnd: result.end)), owner: id)
+                        await self?.emit(.speech(.init(segmentID: segment, text: result.text, isFinal: result.isFinal, audioStart: result.start, audioEnd: result.end,runs: result.runs?.map { .init(utf16Start: $0.utf16Start,utf16Length: $0.utf16Length,audioStart: $0.start,audioEnd: $0.end) })), owner: id)
                     }
                     await self?.transcriptEnded(owner: id)
                 },

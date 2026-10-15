@@ -158,6 +158,9 @@ struct VoiceReviewNote: Codable, Identifiable, Sendable {
     var state: VoiceNoteState = .provisional
     var issues: [String] = []
     var history: [VoiceNoteHistory] = []
+    var speechSource: VoiceSpeechSource?
+    var speechSourceID: UUID?
+    var speechTimingIssue: String?
     var lineage: VoiceCardLineage?
     var supersededBy: [UUID]?
     var captureOrdinal: Int64?
@@ -227,6 +230,7 @@ struct VoiceSpeechResult: Sendable {
     let isFinal: Bool
     let audioStart: Double?
     let audioEnd: Double?
+    var runs: [VoiceSpeechRun]? = nil
 }
 
 struct VoiceReviewDocument: Codable, Sendable {
@@ -242,7 +246,7 @@ struct VoiceReviewDocument: Codable, Sendable {
     var cardOperations: [VoiceCardRequest]?
     var drafts: [VoiceTranscriptDraft]? // Optional for ledgers created before draft retention.
 
-    mutating func speech(_ result: VoiceSpeechResult, sessionID: UUID, attemptID: UUID, now: Date) throws {
+    mutating func storeSpeech(_ result: VoiceSpeechResult, sessionID: UUID, attemptID: UUID, now: Date, refreshNow: Bool = true) throws {
         guard let session = sessions.first(where: { $0.id == sessionID && $0.attemptID == attemptID }),
               [.recording,.finishing,.retrying].contains(session.state) else { return }
         guard !result.segmentID.isEmpty, result.segmentID.count < 256, result.text.count <= 20_000 else { throw ProjectFailure.invalidProject }
@@ -269,12 +273,17 @@ struct VoiceReviewDocument: Codable, Sendable {
             note.captureOrdinal = captureOrder(note,fallback: notes.count)
             note.history.append(.init(date: now, source: result.isFinal ? "Final ASR" : "Partial ASR", text: result.text, revision: 1)); notes.append(note)
         }
-        refresh()
+        if refreshNow { refresh() }
     }
 
     mutating func refresh() {
+        resolveSpeechIdeas()
         for i in notes.indices where notes[i].state != .cancelled {
             var issues: [String] = []
+            if notes[i].resolvedAnchor == nil {
+                if notes[i].speechSource?.pending == true { issues.append("Waiting for captured audio and playback timing before grouping this final transcript.") }
+                if let issue = notes[i].speechTimingIssue { issues.append(issue) }
+            }
             if notes[i].lineage != nil {
                 if notes[i].resolvedAnchor == nil { issues.append("Confirm the new card's exact saved version and range; original anchors are retained in history.") }
                 if notes[i].action == nil { issues.append("Choose Protect or Remove for this new card. Parent actions were not expanded.") }
