@@ -473,3 +473,45 @@ join one task and durable same-plan approvals are idempotent. Quit joins approva
 writes and prevents a render starting after exit has begun. Rendering remains
 separate from applying/publishing a production edit, with the existing source,
 frame/audio and storage checks; private-media runtime acceptance is deferred.
+
+## Candidate playback feedback (15 October, M10)
+
+- [x] Give each verified rendered preview a separate durable review identity and
+  candidate-local clock, preserving the original comment/onset and parent lineage.
+- [x] Permit ongoing capture through source/candidate transitions with explicit
+  version boundaries, no nested candidate ownership, and safe return to the paused
+  source. Unavailable/boundary-spanning speech needs clarification.
+- [x] Reuse the continuous feedback panel and typed drafts during candidate playback.
+  Further exact plans still need the existing approval before rendering; they
+  never apply themselves to a production cut or overwrite a source version.
+- [x] Verify root inputs and each candidate's completion, plan, approval, proof,
+  movie/timeline identity and bounded lineage before attaching feedback.
+- [ ] Native candidate-player/microphone timing and VoiceOver acceptance, held
+  during foreground work. Broader semantic editing and original product gaps remain.
+
+Earlier milestones' candidate-capture restriction describes their historical scope;
+this increment replaces it. Background synthetic checks do not imply native UI
+acceptance, private-project rendering, publication, or full app completion.
+
+M10 inherited-protection correction: earlier protected original frames project
+through each candidate's verified retained fragments as separate constraints.
+Original note text, onset, target and revision are untouched. A child removal
+cannot overlap these constraints; revise the source protection and create a new
+source candidate to change it. Native provenance recomputes the projection, and
+the renderer separately checks inherited constraints against parent lineage.
+Each opening is cancellation/generation owned, so navigation during verification
+cannot seize a feedback clock after its surface has closed.
+
+M10 history ownership correction: the controller retains each opening/playing
+candidate's history row by its own presentation token, alongside the newest eight
+entries. New feedback packets cannot evict the row that owns a candidate sheet or
+retarget its clock. Failure, navigation or closing releases only that opening's
+retention. Pure rolling-history regression supplements the source lifecycle review.
+
+M10 test scheduling correction: historical full runs exposed timing assumptions
+under concurrent native builds and synthetic renders. Transcript checkpoint tests
+now hold an injected default-no-op async gate after capturing the submitted draft;
+frame capture tests await the actual preparation state, and real synthetic render
+tests allow a bounded 90-second completion window. Existing write/revision/output
+assertions remain. Historical failures remain in their original logs; only final
+frozen-source results support acceptance. Production autosave remains 250ms.

@@ -18,6 +18,41 @@ struct VoiceCandidateFragment: Codable, Equatable, Sendable {
     let candidateStartFrame: Int
     var frames: Int { parentEndFrame - parentStartFrame }
 }
+/// Derived constraints follow retained frames; original comments never move.
+struct VoiceProtectionConstraint: Codable, Equatable, Sendable {
+    let noteID: UUID
+    let revision: Int
+    let originTargetID: UUID
+    let originStartFrame: Int
+    let originEndFrame: Int
+    let startFrame: Int
+    let endFrame: Int
+    static func projected(through plan: VoiceCandidateEditPlan) throws -> [Self] {
+        let inherited = plan.parent.candidateOrigin?.protections ?? []
+        let local = plan.operations.filter { $0.action == .protect }.map {
+            Self(noteID: $0.noteID,revision: $0.revision,originTargetID: plan.parent.id,
+                originStartFrame: $0.startFrame,originEndFrame: $0.endFrame,startFrame: $0.startFrame,endFrame: $0.endFrame)
+        }
+        var result: [Self] = []
+        for protection in inherited + local {
+            guard protection.revision > 0, protection.originStartFrame >= 0, protection.originEndFrame > protection.originStartFrame,
+                  protection.startFrame >= 0, protection.endFrame > protection.startFrame, protection.endFrame <= plan.parentFrames else { throw ProjectFailure.invalidProject }
+            var retained = 0
+            for fragment in plan.fragments {
+                let start = max(protection.startFrame,fragment.parentStartFrame), end = min(protection.endFrame,fragment.parentEndFrame)
+                guard end > start else { continue }
+                retained += end-start
+                result.append(.init(noteID: protection.noteID,revision: protection.revision,originTargetID: protection.originTargetID,
+                    originStartFrame: protection.originStartFrame,originEndFrame: protection.originEndFrame,
+                    startFrame: fragment.candidateStartFrame+start-fragment.parentStartFrame,
+                    endFrame: fragment.candidateStartFrame+end-fragment.parentStartFrame))
+            }
+            guard retained == protection.endFrame-protection.startFrame else { throw WorkflowFailure.invalid("A candidate cannot discard previously protected frames.") }
+        }
+        guard result.count <= 1_024 else { throw WorkflowFailure.invalid("This review has too many inherited protected ranges. Keep its history and start a new saved version.") }
+        return result
+    }
+}
 struct VoiceCandidateEditPlan: Codable, Equatable, Identifiable, Sendable {
     let schemaVersion: Int
     let id: UUID
@@ -30,6 +65,7 @@ struct VoiceCandidateEditPlan: Codable, Equatable, Identifiable, Sendable {
     let issues: [String]
     let mode: String
     let productionAuthorized: Bool
+    var inheritedProtections: [VoiceProtectionConstraint]? = nil
     static let mode = "watched_master_review_candidate_v1"
     static func compile(_ candidate: VoiceRevisionCandidate) throws -> Self {
         guard let instructions = candidate.instructionsSHA256 else { throw ProjectFailure.invalidProject }
@@ -58,9 +94,14 @@ struct VoiceCandidateEditPlan: Codable, Equatable, Identifiable, Sendable {
         }
         guard operations.count <= 64 else { throw WorkflowFailure.invalid("A candidate supports at most 64 reviewed ranges.") }
         let removals = operations.filter { $0.action == .remove }.sorted { ($0.startFrame,$0.endFrame) < ($1.startFrame,$1.endFrame) }
+        let inherited = candidate.parent.candidateOrigin?.protections ?? []
+        guard inherited.count <= 1_024, inherited.allSatisfy({ $0.startFrame >= 0 && $0.endFrame > $0.startFrame && $0.endFrame <= frames }) else { throw ProjectFailure.invalidProject }
         for removal in removals {
             for protection in operations where protection.action == .protect && max(removal.startFrame,protection.startFrame) < min(removal.endFrame,protection.endFrame) {
                 issues.append("Removal \(removal.noteID) overlaps protected frames from \(protection.noteID). Resolve this conflict before approval.")
+            }
+            for protection in inherited where max(removal.startFrame,protection.startFrame) < min(removal.endFrame,protection.endFrame) {
+                issues.append("This removal overlaps an earlier protection from note \(protection.noteID). Revise that source feedback and create a new source candidate to change the protection.")
             }
         }
         var union: [(Int,Int)] = []
@@ -82,7 +123,7 @@ struct VoiceCandidateEditPlan: Codable, Equatable, Identifiable, Sendable {
         if fragments.count > 32 { issues.append("Reduce this candidate to at most 32 retained ranges.") }
         return .init(schemaVersion: 1, id: UUID(), candidateID: candidate.id, parent: candidate.parent,
             instructionsSHA256: instructions, parentFrames: frames, operations: operations, fragments: fragments,
-            issues: issues, mode: Self.mode, productionAuthorized: false)
+            issues: issues, mode: Self.mode, productionAuthorized: false,inheritedProtections: inherited.isEmpty ? nil:inherited)
     }
 }
 struct VoiceCandidateEditApproval: Codable, Sendable {

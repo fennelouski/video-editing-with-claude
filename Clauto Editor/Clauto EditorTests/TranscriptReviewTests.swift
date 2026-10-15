@@ -7,6 +7,17 @@ import CryptoKit
 @testable import Clauto_Editor
 #endif
 
+private actor TranscriptCheckpointGate {
+    private var held = true
+    private(set) var started = false
+    private var waiter: CheckedContinuation<Void,Never>?
+    func wait() async {
+        guard held else { return }; started = true
+        await withCheckedContinuation { waiter = $0 }
+    }
+    func release() { held = false; waiter?.resume(); waiter = nil }
+}
+
 struct TranscriptReviewTests {
     private func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     private func fixture() async throws -> (URL, Project, URL, TranscriptCatalog) {
@@ -304,13 +315,16 @@ struct TranscriptReviewTests {
     @Test @MainActor func actualInFlightAutosaveRetainsLaterCommentKeepAndGraphicRequest() async throws {
         let (root, project, input, catalog) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
         try largeSyntheticCatalog(input)
-        let controller = TranscriptReviewController(project: project)
+        let gate = TranscriptCheckpointGate()
+        defer { Task { await gate.release() } }
+        let controller = TranscriptReviewController(project: project,beforeCheckpointSave: { await gate.wait() })
         await controller.importCatalog(input)
         controller.change(catalog.rows[0].id) { $0.comment = "Submitted first" }
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !controller.saving && ContinuousClock.now < deadline { await Task.yield() }
+        let deadline = ContinuousClock.now + .seconds(20)
+        while !(await gate.started) && ContinuousClock.now < deadline { await Task.yield() }
         try #require(controller.saving)
         controller.change(catalog.rows[0].id) { $0.comment = "Arrived during I/O"; $0.keep = false; $0.graphicRequest = "Later graphic request" }
+        await gate.release()
         #expect(await controller.flush())
         let saved = try #require(try await TranscriptReviewRepository().load(project: project))
         #expect(saved.state.decisions[catalog.rows[0].id]?.comment == "Arrived during I/O")

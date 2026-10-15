@@ -18,13 +18,14 @@ import Observation
     private(set) var sourceAcknowledgement: LocalSourceReviewAcknowledgement?
     private(set) var sourceAcknowledgementURL: URL?
     @ObservationIgnored private let repository: TranscriptReviewRepository
+    @ObservationIgnored private let beforeCheckpointSave: @Sendable () async -> Void
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var generation = 0
     var generationForDisplay: Int { generation }
 
-    init(project: Project, repository: TranscriptReviewRepository = TranscriptReviewRepository()) {
-        self.project = project; self.repository = repository
+    init(project: Project, repository: TranscriptReviewRepository = TranscriptReviewRepository(),beforeCheckpointSave: @escaping @Sendable () async -> Void = {}) {
+        self.project = project; self.repository = repository; self.beforeCheckpointSave = beforeCheckpointSave
     }
 
     func load() async {
@@ -83,6 +84,7 @@ import Observation
         while dirty, let draft = session {
             let submitted = generation
             do {
+                await beforeCheckpointSave()
                 let saved = try await repository.save(draft, expectedRevision: draft.state.revisionID, project: project)
                 if generation == submitted { session = saved; dirty = false }
                 else if var newer = session {

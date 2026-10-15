@@ -66,6 +66,13 @@ final class VoiceReviewController {
     private(set) var renderProgress = ""
     private(set) var approvingCandidateIDs: Set<UUID> = []
     private(set) var candidatePlaybackID: UUID?
+    private(set) var candidatePresentations: [UUID:UUID] = [:]
+    var candidateHistory: [VoiceRevisionCandidate] { document.candidateHistory(retaining: Set(candidatePresentations.values)) }
+    func retainCandidatePresentation(_ candidate: UUID,token: UUID) {
+        guard document.candidates.contains(where: { $0.id == candidate }), candidatePresentations[token] == nil else { return }
+        candidatePresentations[token] = candidate
+    }
+    func releaseCandidatePresentation(_ token: UUID) { candidatePresentations.removeValue(forKey: token) }
     private(set) var frameCommentLease: UUID?
     private(set) var playbackAvailable = false
     private(set) var voiceSetupPhase: VoiceSetupPhase = .idle
@@ -142,6 +149,8 @@ final class VoiceReviewController {
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var attemptID: UUID?
     private var viewToken: UUID?
+    @ObservationIgnored private var bindingGeneration = UUID()
+    @ObservationIgnored private var candidateReturnBinding: (token: UUID,target: VoiceReviewTarget,sampler: @MainActor () -> VoiceLivePlayhead)?
     @ObservationIgnored private var epoch = UUID()
     @ObservationIgnored private var latest: VoiceLivePlayhead?
     @ObservationIgnored private var clockWasLost = false
@@ -161,20 +170,45 @@ final class VoiceReviewController {
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
     var hasPendingWork: Bool { waitingForPreparation || !approvingCandidateIDs.isEmpty || voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
-    var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
+    private var candidateBindingReady: Bool { candidatePlaybackID == nil || (viewToken == candidatePlaybackID && target?.candidateOrigin != nil) }
+    var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidateBindingReady && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
-    var canPresentCandidate: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
+    var canPresentCandidate: Bool { !flushing && frameCommentLease == nil && candidatePlaybackID == nil && !voiceSetupPhase.working && (!active || mode == .recording) && startTask == nil && stopTask == nil }
     func beginCandidatePlayback(_ token: UUID) -> Bool {
-        guard canPresentCandidate else { error = "Candidate playback is unavailable while this review owns the microphone or an open frame. Feedback continues saving."; return false }
-        candidatePlaybackID = token; return true
+        guard canPresentCandidate else { error = "Wait for voice setup or the open frame to finish before switching videos. Feedback continues saving."; return false }
+        if let viewToken, let target, let clockSampler { candidateReturnBinding = (viewToken,target,clockSampler) }
+        else { candidateReturnBinding = nil }
+        candidatePlaybackID = token
+        // Stop parent-clock coverage immediately, including the await before
+        // the new decoder becomes ready. The microphone itself may continue.
+        willAttach(token)
+        return true
     }
     func beginFrameComment(_ token: UUID) -> Bool {
         guard frameCommentLease == nil, candidatePlaybackID == nil else { error = "Close the open frame or candidate review before adding another frame comment."; return false }
         frameCommentLease = token; return true
     }
     func endFrameComment(_ token: UUID) { if frameCommentLease == token { frameCommentLease = nil } }
-    func endCandidatePlayback(_ token: UUID) { if candidatePlaybackID == token { candidatePlaybackID = nil } }
+    func attachCandidate(_ value: VoiceReviewTarget,token: UUID,sampler: @escaping @MainActor () -> VoiceLivePlayhead) async {
+        guard candidatePlaybackID == token, viewToken == token, value.candidateOrigin != nil else { return }
+        await attach(value,token: token,sampler: sampler)
+    }
+    func endCandidatePlayback(_ token: UUID) {
+        releaseCandidatePresentation(token)
+        guard candidatePlaybackID == token else { return }
+        let returning = candidateReturnBinding
+        candidatePlaybackID = nil; candidateReturnBinding = nil
+        guard viewToken == token else { return }
+        if let returning {
+            willAttach(returning.token)
+            do {
+                try VoiceReviewProvenance.check(returning.target,project: project)
+                target = returning.target; clockSampler = returning.sampler; epoch = UUID()
+                record(returning.sampler(),kind: .versionChanged,token: returning.token)
+            } catch { self.error = error.localizedDescription; detach(returning.token) }
+        } else { detach(token) }
+    }
 
     func isAttached(to token: UUID) -> Bool { viewToken == token }
 
@@ -213,7 +247,7 @@ final class VoiceReviewController {
     /// Called only by the explicit in-app Get started / Try again control.
     /// Reading a project or starting ordinary capture never installs assets.
     func setUpVoiceReview(for version: UUID) {
-        guard voiceSetupTask == nil, !active, frameCommentLease == nil, candidatePlaybackID == nil else { return }
+        guard voiceSetupTask == nil, !active, frameCommentLease == nil, candidateBindingReady else { return }
         let generation = UUID(), binding = viewToken
         voiceSetupGeneration = generation; voiceSetupPhase = .microphone
         voiceSetupProgress = nil; voiceSetupIssue = nil; voiceSetupPermission = nil
@@ -276,24 +310,27 @@ final class VoiceReviewController {
     func cancelVoiceSetup() { voiceSetupTask?.cancel() }
 
     func willAttach(_ token: UUID) {
+        guard candidatePlaybackID == nil || candidatePlaybackID == token else { return }
         if let old = clockSampler?() { record(old, token: viewToken) }
-        viewToken = token; target = nil; epoch = UUID(); clockSampler = nil
+        viewToken = token; bindingGeneration = UUID(); target = nil; epoch = UUID(); clockSampler = nil
         record(.init(host: VoiceLivePlayhead.now, seconds: 0, rate: 0, available: false), kind: .versionChanged, token: token)
     }
     func attach(_ value: VoiceReviewTarget, token: UUID, sampler: @escaping @MainActor () -> VoiceLivePlayhead) async {
         guard viewToken == token else { return }
+        let generation = bindingGeneration
         do {
             let registered = try await repository.register(value)
-            guard viewToken == token else { return }
+            guard viewToken == token, bindingGeneration == generation else { return }
             target = registered; clockSampler = sampler; epoch = UUID()
             record(sampler(), kind: .versionChanged, token: token)
-        } catch { self.error = error.localizedDescription }
+        } catch { if viewToken == token, bindingGeneration == generation { self.error = error.localizedDescription } }
     }
     func detach(_ token: UUID) {
+        if candidateReturnBinding?.token == token { candidateReturnBinding = nil }
         guard viewToken == token else { return }
         let sample = clockSampler?() ?? .init(host: VoiceLivePlayhead.now, seconds: 0, rate: 0, available: false)
         record(sample, kind: .unavailable, token: token)
-        viewToken = nil; target = nil; clockSampler = nil
+        viewToken = nil; bindingGeneration = UUID(); target = nil; clockSampler = nil
         Task {
             try? await Task.sleep(for: .milliseconds(150))
             if viewToken == nil { _ = await stop() }

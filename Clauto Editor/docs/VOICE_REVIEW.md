@@ -19,14 +19,14 @@ fixed; no repository relocation or second writer is part of this feature.
    candidate preparation and debounced render intent. Persist finalized notes
    before dispatch. Never overwrite a reviewed cut or change cuts/current.
 4. Add `Services/DictateReviewAdapter.swift`: explicit permission/device preflight,
-   installed on-device assets only, no model download or remote cleanup. Bind
+   guided explicit in-app preparation of on-device assets, no remote cleanup. Bind
    recognition timestamps to authoritative converted audio frame offsets and
    source host times at the audio callback. Do not count asynchronously delivered
    raw buffers or assign timestamps at ASR completion.
 5. Integrate `Views/VoiceReviewView.swift` into the existing VersionReview player
    in `Views/ProjectView.swift`. Project-owned controller ownership outlives version-view
    replacement; an explicit player selection prevents comparison players from
-   competing for the review clock. Expose microphone Start/Stop/device, live/final/edit history,
+   competing for the review clock. Expose microphone Start listening/Mic Off/device, live/final/edit history,
    anchor resolution, processing status/cancel/retry and candidate review.
 6. Test mocked races and persistence with no microphone activation. Independently
    review exact sources and build the native app before handoff.
@@ -40,7 +40,7 @@ fixed; no repository relocation or second writer is part of this feature.
 | Speech-onset anchor | Map ASR audio start through synchronously captured converted-frame/host-time spans into confirmed playhead history for the exact saved version. No completion-time fallback, clamping missing data or guessed host epoch. |
 | Free transport | Record seek request/completion, play/pause, version attach/detach and capture gaps. Speech crossing a seek, uncertain gap or version switch needs explicit anchor resolution. A delayed result cannot follow the newly selected version. |
 | Durable notes | Stable session/segment/note IDs; immutable onset provenance; separate original ASR, user text and edit/history revisions. Persist before processing. Recover interrupted sessions without restarting a microphone. |
-| Fast preparation | Finalized anchored notes enter local candidate preparation immediately while capture continues. Serialize conflicting feedback, protect likes, expose unclear/conflicting requests, and debounce costly render intents. Candidate work checks note revision and cancellation before commit. |
+| Fast preparation | Cards save immediately while capture continues; 120 quiet seconds seal the exact feedback packet for local preparation. Serialize conflicting feedback, protect likes, expose unclear/conflicting requests, and debounce costly render intents. Candidate work checks note revision and cancellation before commit. |
 | Parent protection | Candidate instructions have a new identity and exact parent hashes/approved craft inputs. They never overwrite the reviewed cut, approved script/plan, project preferences or current pointer. No note is treated as scientific or production approval. |
 | Rendering | Existing source, NAS, editorial, facts, graphics, duration and render gates retain their meaning. A prepared candidate is not a rendered/verified new cut. No automatic paid/provider execution. |
 | Lifecycle | Explicit stop, cancel/retry, view/project exit and quit release capture ownership and drain durable writes. Late ASR or processor results cannot revive a cancelled/revised note or earlier session. |
@@ -130,3 +130,15 @@ review-only project; no new private edit or production approval is inferred.
 
 See task-local final status and independent review for current validation and
 remaining limitations; the foundation test counts above are historical.
+
+## Candidate feedback continuation (15 October)
+
+Verified candidate playback now owns a distinct review target, identified by its
+render UUID, completion SHA, movie/timeline signatures, exact plan and approval,
+and recursively verified parent lineage (up to 16 generations). Original onsets,
+text, target and history remain unchanged. Further ranges use the candidate clock;
+no implicit parent-time mapping or production promotion occurs. Capture may continue
+across player switches, but speech spanning the boundary requires timing resolution.
+Candidate opening checks the decoder's file identity again. The immutable ledger
+and rendered-output checks remain, with no claim that a mutable NAS playback path
+becomes immutable. Native microphone/player/VoiceOver acceptance is still pending.

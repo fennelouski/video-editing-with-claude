@@ -165,7 +165,7 @@ actor VoiceReviewRepository {
         try locked { document in
             guard target.projectID == project.id else { throw ProjectFailure.invalidProject }
             try VoiceReviewProvenance.check(target, project: project)
-            if let old = document.targets.first(where: { $0.versionID == target.versionID && $0.versionMetadataSHA256 == target.versionMetadataSHA256 && $0.preview == target.preview && $0.timeline == target.timeline && $0.approvedPlanSHA256 == target.approvedPlanSHA256 && $0.approvedScriptSHA256 == target.approvedScriptSHA256 && $0.approvedBriefSHA256 == target.approvedBriefSHA256 && $0.duration == target.duration && $0.engineVersion == target.engineVersion }) { return old }
+            if let old = document.targets.first(where: { $0.versionID == target.versionID && $0.versionMetadataSHA256 == target.versionMetadataSHA256 && $0.preview == target.preview && $0.timeline == target.timeline && $0.approvedPlanSHA256 == target.approvedPlanSHA256 && $0.approvedPlanPath == target.approvedPlanPath && $0.approvedScriptSHA256 == target.approvedScriptSHA256 && $0.approvedScriptPath == target.approvedScriptPath && $0.approvedBriefSHA256 == target.approvedBriefSHA256 && $0.duration == target.duration && $0.engineVersion == target.engineVersion && $0.candidateOrigin == target.candidateOrigin }) { return old }
             guard !document.targets.contains(where: { $0.versionID == target.versionID }) else { throw WorkflowFailure.invalid("This saved version changed after its first voice review. Restore its verified files or save a new version before attaching feedback.") }
             document.targets.append(target); return target
         }
@@ -525,6 +525,32 @@ extension VoiceReviewRepository {
                   TranscriptSourceMap.sha(try encoder.encode(approval)) == approvalSHA else { throw WorkflowFailure.invalid("This candidate needs a current explicit frame-plan approval before rendering.") }
             return .init(candidate: candidate,plan: plan,planSHA256: planSHA,approval: approval,approvalSHA256: approvalSHA)
         },save: false)
+    }
+    /// A rendered candidate is a distinct review version. Its original parent
+    /// remains in the plan; candidate-clock feedback is never moved onto it.
+    func candidateReview(_ id: UUID) async throws -> VoiceCandidateReview {
+        let candidate = try locked({ document in
+            guard let candidate = document.candidates.first(where: { $0.id == id }), candidate.renderedPreview != nil else { throw ProjectFailure.invalidProject }
+            return candidate
+        },save: false)
+        let record = candidate.renderedPreview!, url = try await verifiedPreview(id)
+        try Task.checkCancellation()
+        let base = record.relativeFolder+"/"
+        guard try VoiceReviewProvenance.url(base+"review.mov",project: project) == url,
+              let completion = record.completionSHA256 else { throw ProjectFailure.invalidProject }
+        let movie = try VoiceReviewProvenance.inspect(base+"review.mov",project: project)
+        let timeline = try VoiceReviewProvenance.inspect(base+"timeline.fcpxml",project: project)
+        guard movie.sha256 == record.artifactsSHA256["review.mov"], timeline.sha256 == record.artifactsSHA256["timeline.fcpxml"] else { throw ProjectFailure.invalidProject }
+        let parent = candidate.parent
+        let proposed = VoiceReviewTarget(id: record.id,projectID: project.id,versionID: record.id,versionNumber: parent.versionNumber,
+            versionMetadataSHA256: completion,timeline: timeline,preview: movie,
+            approvedPlanSHA256: parent.approvedPlanSHA256,approvedPlanPath: parent.approvedPlanPath,
+            approvedScriptSHA256: parent.approvedScriptSHA256,approvedScriptPath: parent.approvedScriptPath,
+            approvedBriefSHA256: parent.approvedBriefSHA256,engineVersion: parent.engineVersion,duration: Double(record.frames)*1001/24000,
+            candidateOrigin: .init(candidateID: candidate.id,renderID: record.id,protections: try candidate.editPlan.map { try VoiceProtectionConstraint.projected(through: $0) }))
+        try Task.checkCancellation()
+        let registered = try register(proposed)
+        return .init(target: registered,url: url)
     }
     func verifiedPreview(_ id: UUID) async throws -> URL {
         let pair: (VoiceReviewTarget, VoiceCandidatePreview) = try locked({ document in

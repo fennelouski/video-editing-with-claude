@@ -260,3 +260,43 @@ An active renderer may report cancellation as a cancelled process result wrapped
 in a workflow error. The controller also checks its task cancellation state in the
 general catch, preventing a failure banner for an ordinary Cancel. A synthetic
 runner test waits for actual render progress before cancelling and verifies cleanup.
+
+## Candidate playback feedback (15 October, M10)
+
+- [x] Give each verified rendered preview a separate durable review identity and
+  candidate-local clock, preserving the original comment/onset and parent lineage.
+- [x] Permit ongoing capture through source/candidate transitions with explicit
+  version boundaries, no nested candidate ownership, and safe return to the paused
+  source. Unavailable/boundary-spanning speech needs clarification.
+- [x] Reuse the continuous feedback panel and typed drafts during candidate playback.
+  Further exact plans still need the existing approval before rendering; they
+  never apply themselves to a production cut or overwrite a source version.
+- [x] Verify root inputs and each candidate's completion, plan, approval, proof,
+  movie/timeline identity and bounded lineage before attaching feedback.
+- [ ] Native candidate-player/microphone timing and VoiceOver acceptance, held
+  during foreground work. Broader semantic editing and original product gaps remain.
+
+Earlier milestones' candidate-capture restriction describes their historical scope;
+this increment replaces it. Background synthetic checks do not imply native UI
+acceptance, private-project rendering, publication, or full app completion.
+
+M10 review correction: every sheet opening has a fresh immutable identity, and
+controller attachment checks a separate binding generation after registration
+waits. A delayed earlier registration cannot publish a previous decoder's clock
+even if a caller accidentally reuses a token. A held-storage regression exercises
+this race. Closing a candidate cannot end a later opening with a different token.
+
+M10 inherited-protection correction: earlier protected original frames project
+through each candidate's verified retained fragments as separate constraints.
+Original note text, onset, target and revision are untouched. A child removal
+cannot overlap these constraints; revise the source protection and create a new
+source candidate to change it. Native provenance recomputes the projection, and
+the renderer separately checks inherited constraints against parent lineage.
+Each opening is cancellation/generation owned, so navigation during verification
+cannot seize a feedback clock after its surface has closed.
+
+M10 history ownership correction: the controller retains each opening/playing
+candidate's history row by its own presentation token, alongside the newest eight
+entries. New feedback packets cannot evict the row that owns a candidate sheet or
+retarget its clock. Failure, navigation or closing releases only that opening's
+retention. Pure rolling-history regression supplements the source lifecycle review.

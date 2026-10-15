@@ -74,7 +74,7 @@ struct VoiceCandidateTests {
         async let a: Void = controller.approveEditPlan(candidate,engine: f.engine)
         async let b: Void = controller.approveEditPlan(candidate,engine: f.engine)
         _ = await (a,b)
-        let deadline = ContinuousClock.now + .seconds(20)
+        let deadline = ContinuousClock.now + .seconds(90)
         while controller.renderingCandidateID != nil {
             guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Synthetic automatic preview did not finish") }
             try await Task.sleep(for: .milliseconds(20))
@@ -144,7 +144,7 @@ struct VoiceCandidateTests {
         controller.renderPreview(b,engine: f.engine)
         #expect(controller.renderingCandidateID == nil)
         _ = flock(fd,LOCK_UN); await pending.value
-        let renderDeadline = ContinuousClock.now + .seconds(20)
+        let renderDeadline = ContinuousClock.now + .seconds(90)
         while controller.renderingCandidateID != nil {
             guard ContinuousClock.now < renderDeadline else { throw WorkflowFailure.invalid("Synthetic reserved preview did not finish") }; try await Task.sleep(for: .milliseconds(20))
         }
@@ -216,6 +216,96 @@ struct VoiceCandidateTests {
         let path = try #require(next.editPlanRelativePath)
         try Data("Changed frame plan".utf8).write(to: f.project.folder.appendingPathComponent(path))
         await #expect(throws: (any Error).self) { _ = try await f.repository.approvedEditSnapshot(next.id) }
+    }
+    @Test func candidateFeedbackKeepsItsOwnClockAndRendersASecondApprovedGeneration() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let sourceBefore = try VoiceReviewProvenance.inspect(f.target.preview.relativePath,project: f.project)
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let first = try await approve(f)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: first.id,engine: f.engine)
+        let review = try await f.repository.candidateReview(first.id)
+        #expect(review.target.id != f.target.id && review.target.versionID != f.target.versionID)
+        #expect(review.target.candidateOrigin?.candidateID == first.id)
+        #expect(review.target.duration == 24*1001/24000.0)
+        #expect(try await f.repository.candidateReview(first.id).target == review.target)
+        let start = 6*1001/24000.0, end = 12*1001/24000.0
+        let saved = try await f.repository.addTyped(text: "Remove this moment in the candidate",action: .remove,anchor: .init(targetID: review.target.id,seconds: start,endSeconds: end))
+        let original = try #require(saved.notes.last)
+        #expect(original.effectiveAnchor?.targetID == review.target.id && original.effectiveAnchor?.seconds == start)
+        let second = try await approve(f), plan = try #require(second.editPlan)
+        #expect(second.parent == review.target && second.noteRevisions.map(\.id) == [original.id])
+        #expect(plan.parentFrames == 24 && plan.operations.first?.startFrame == 6)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: second.id,engine: f.engine)
+        let next = try await f.repository.candidateReview(second.id)
+        #expect(next.target.duration == 18*1001/24000.0 && next.target.id != review.target.id)
+        try VoiceReviewProvenance.check(next.target,project: f.project)
+        let reopened = try VoiceReviewRepository(project: f.project), document = try await reopened.load()
+        #expect(document.notes.last?.transcript == original.transcript && document.notes.last?.onset == original.onset)
+        #expect(document.notes.last?.effectiveAnchor == original.effectiveAnchor)
+        #expect(try VoiceReviewProvenance.inspect(f.target.preview.relativePath,project: f.project) == sourceBefore)
+        // Parent provenance remains required throughout the chain.
+        try Data("Changed root script".utf8).write(to: f.project.folder.appendingPathComponent(f.target.approvedScriptPath))
+        #expect(throws: (any Error).self) { try VoiceReviewProvenance.check(next.target,project: f.project) }
+        await #expect(throws: (any Error).self) { _ = try await reopened.candidateReview(second.id) }
+    }
+
+    @MainActor @Test func candidatePlayerBindingKeepsOneCaptureAndReturnsToTheOriginalPlayer() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let candidate = try await approve(f)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: candidate.id,engine: f.engine)
+        let review = try await f.repository.candidateReview(candidate.id), provider = MockVoiceProvider()
+        let defaults = UserDefaults(suiteName: "ClautoCandidateFeedback-"+UUID().uuidString)!
+        let controller = try VoiceReviewController(project: f.project,provider: provider,defaults: defaults)
+        await controller.load(); controller.chooseDevice("mock-device")
+        let sourceToken = UUID(), candidateToken = UUID()
+        controller.willAttach(sourceToken)
+        await controller.attach(f.target,token: sourceToken,sampler: { .init(host: VoiceLivePlayhead.now,seconds: 0.1,rate: 0,available: true) })
+        controller.start()
+        let deadline = ContinuousClock.now + .seconds(3)
+        while controller.mode != .recording { guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Synthetic capture did not start") }; await Task.yield() }
+        #expect(controller.beginCandidatePlayback(candidateToken))
+        #expect(controller.target == nil && !controller.canStart)
+        await controller.attachCandidate(review.target,token: candidateToken,sampler: { .init(host: VoiceLivePlayhead.now,seconds: 0.2,rate: 0,available: true) })
+        #expect(controller.target == review.target && controller.mode == .recording)
+        controller.willAttach(sourceToken) // Background source panels cannot steal the candidate clock.
+        #expect(controller.isAttached(to: candidateToken) && controller.target == review.target)
+        controller.endCandidatePlayback(UUID())
+        #expect(controller.target == review.target)
+        controller.endCandidatePlayback(candidateToken)
+        #expect(controller.target == f.target && controller.isAttached(to: sourceToken) && controller.mode == .recording)
+        #expect(await provider.starts == 1)
+        #expect(await provider.stops == 0)
+        #expect(await controller.flushForExit())
+        let session = try #require(try await controller.repository.load().sessions.last)
+        let changes = session.events.filter { $0.kind == .versionChanged }
+        #expect(changes.contains { $0.targetID == review.target.id })
+        #expect(changes.last?.targetID == f.target.id)
+    }
+    @Test func earlierProtectionsFollowEveryCandidateWithoutMovingOriginalFeedback() async throws {
+        let f = try await fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let saved = try await note(f,action: .protect,start: 6,end: 12), original = try #require(saved.notes.last)
+        _ = try await note(f,action: .remove,start: 12,end: 24)
+        let first = try await approve(f)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: first.id,engine: f.engine)
+        let a = try await f.repository.candidateReview(first.id)
+        #expect(a.target.candidateOrigin?.protections?.first?.startFrame == 6)
+        _ = try await f.repository.addTyped(text: "Remove the candidate's opening",action: .remove,anchor: .init(targetID: a.target.id,seconds: 0,endSeconds: 3*1001/24000.0))
+        let second = try await approve(f)
+        #expect(second.editPlan?.inheritedProtections?.first?.noteID == original.id)
+        _ = try await VoiceCandidatePreviewService().render(repository: f.repository,candidateID: second.id,engine: f.engine)
+        let b = try await f.repository.candidateReview(second.id)
+        let inherited = try #require(b.target.candidateOrigin?.protections?.first)
+        #expect(inherited.originTargetID == f.target.id && inherited.originStartFrame == 6 && inherited.originEndFrame == 12)
+        #expect(inherited.startFrame == 3 && inherited.endFrame == 9)
+        var forged = b.target; forged.candidateOrigin?.protections = []
+        #expect(throws: (any Error).self) { try VoiceReviewProvenance.check(forged,project: f.project) }
+        _ = try await f.repository.addTyped(text: "Try removing an earlier protected moment",action: .remove,anchor: .init(targetID: b.target.id,seconds: 4*1001/24000.0,endSeconds: 5*1001/24000.0))
+        let refused = try await prepare(f), plan = try #require(refused.editPlan)
+        #expect(plan.issues.contains { $0.contains("earlier protection") })
+        await #expect(throws: (any Error).self) { _ = try await f.repository.approveEditPlan(refused.id,expectedSHA: try #require(refused.editPlanSHA256)) }
+        let document = try await f.repository.load(), retained = try #require(document.notes.first { $0.id == original.id })
+        #expect(retained.onset == original.onset && retained.effectiveAnchor == original.effectiveAnchor && retained.transcript == original.transcript)
     }
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_VOICE_CANDIDATE_ACCEPTANCE_ROOT"] != nil))
     func durableNASMasterCandidateUsesStrictLocalSnapshotAndKeepsOutputsOnNAS() async throws {

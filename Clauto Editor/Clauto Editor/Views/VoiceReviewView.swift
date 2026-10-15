@@ -123,9 +123,9 @@ struct VoiceReviewView: View {
                 }
                 if !controller.document.candidates.isEmpty {
                     ClautoDisclosure("Separate candidate history", expandedByDefault: true) {
-                        ForEach(Array(controller.document.candidates.suffix(8).reversed())) { candidate in
+                        ForEach(Array(controller.candidateHistory.reversed())) { candidate in
                             VStack(alignment: .leading, spacing: 5) {
-                                Text("Candidate for v\(candidate.parent.versionNumber) · \(candidate.state.rawValue)").font(ClautoDesign.body)
+                                Text("Candidate for \(candidate.parent.reviewLabel) · \(candidate.state.rawValue)").font(ClautoDesign.body)
                                 Text(candidate.detail).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                                 VoiceCandidateActions(controller: controller,candidate: candidate,engine: engine,selected: selected,preparePlayback: prepareCandidatePlayback)
                                 ForEach(candidate.directives, id: \.noteID) { directive in
@@ -211,7 +211,7 @@ private struct VoiceReviewNoteRow: View {
                 Button("Discard retained draft") { controller.discardDraft(note.id) }
             }
             HStack {
-                Text(boundTarget.map { "v\($0.versionNumber)" } ?? "Timing needs resolution").font(ClautoDesign.body)
+                Text(boundTarget?.reviewLabel ?? "Timing needs resolution").font(ClautoDesign.body)
                 if let anchor = note.effectiveAnchor {
                     Button(String(format: "Go to %.3fs", anchor.seconds)) { seek(anchor.seconds) }
                         .disabled(boundTarget?.versionID != versionID)
@@ -268,7 +268,7 @@ private struct VoiceReviewNoteRow: View {
             ClautoDisclosure("Timing and transcript history") {
                 Picker("Saved version for this feedback", selection: Binding(get: { targetID }, set: { targetID = $0; changed() })) {
                     Text("Choose a saved version").tag(Optional<UUID>.none)
-                    ForEach(controller.document.targets) { Text("v\($0.versionNumber)").tag(Optional($0.id)) }
+                    ForEach(controller.document.targets) { Text($0.reviewLabel).tag(Optional($0.id)) }
                 }.disabled(retired)
                 VStack(alignment: .leading,spacing: 8) {
                     TextField("Start seconds", text: Binding(get: { start }, set: { start = $0; changed() })).accessibilityLabel("Feedback start seconds")
@@ -316,15 +316,21 @@ private struct VoiceReviewNoteRow: View {
     }
 }
 
+private struct VoiceCandidatePresentation: Identifiable {
+    let id: UUID
+    let review: VoiceCandidateReview
+}
+
 private struct VoiceCandidateActions: View {
     @Bindable var controller: VoiceReviewController
     let candidate: VoiceRevisionCandidate
     let engine: URL
     let selected: Bool
     let preparePlayback: (UUID) -> Bool
-    @State private var playbackToken = UUID()
-    @State private var previewURL: URL?
-    @State private var showingPreview = false
+    @State private var presentation: VoiceCandidatePresentation?
+    @State private var surfaceVisible = false
+    @State private var openingID: UUID?
+    @State private var openingTask: Task<Void,Never>?
     var body: some View {
         VStack(alignment: .leading,spacing: 8) {
             if candidate.state == .prepared {
@@ -333,6 +339,10 @@ private struct VoiceCandidateActions: View {
                         .font(ClautoDesign.caption)
                     ForEach(Array(plan.operations.enumerated()),id: \.offset) { _, operation in
                         Text("\(operation.action == .protect ? "Protect" : "Remove") watched frames \(operation.startFrame)..<\(operation.endFrame) · note \(operation.noteID.uuidString.prefix(8))")
+                            .font(ClautoDesign.caption).textSelection(.enabled)
+                    }
+                    ForEach(Array((plan.inheritedProtections ?? []).enumerated()),id: \.offset) { _, protection in
+                        Text("Keep earlier protection · frames \(protection.startFrame)..<\(protection.endFrame) · note \(protection.noteID.uuidString.prefix(8))")
                             .font(ClautoDesign.caption).textSelection(.enabled)
                     }
                     Text("Removals round inward and protections outward to complete 24000/1001 video frames. All ranges refer to the watched version before any cuts.").font(ClautoDesign.caption)
@@ -358,16 +368,8 @@ private struct VoiceCandidateActions: View {
             }
             if let rendered = candidate.renderedPreview {
                 Text("Verified candidate · \(rendered.frames) frames · watched version unchanged").font(ClautoDesign.caption)
-                Button("Play verified review candidate") {
-                    Task {
-                        do {
-                            let verified = try await controller.repository.verifiedPreview(candidate.id)
-                            guard preparePlayback(playbackToken) else { return }
-                            previewURL = verified; showingPreview = true
-                        }
-                        catch { controller.error = error.localizedDescription }
-                    }
-                }.disabled(!selected || !controller.canPresentCandidate).accessibilityIdentifier("voicePlayCandidate")
+                Button(openingID == nil ? "Play verified review candidate":"Opening candidate…",action: openPreview)
+                    .disabled(openingID != nil || !selected || !controller.canPresentCandidate).accessibilityIdentifier("voicePlayCandidate")
                 Button("Reveal rendered review candidate") {
                     Task {
                         do { let url = try await controller.repository.verifiedPreview(candidate.id); NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -375,14 +377,44 @@ private struct VoiceCandidateActions: View {
                     }
                 }.accessibilityIdentifier("voiceRevealCandidate")
             }
-        }.sheet(isPresented: $showingPreview,onDismiss: { controller.endCandidatePlayback(playbackToken) }) {
-            if let previewURL { VoiceCandidatePlayback(url: previewURL).clautoThemeAppearance() }
-        }.onDisappear { controller.endCandidatePlayback(playbackToken) }
+        }.sheet(item: $presentation) { opening in
+            VoiceCandidatePlayback(review: opening.review,controller: controller,engine: engine,token: opening.id).clautoThemeAppearance()
+        }.onAppear { surfaceVisible = true }
+        .onDisappear {
+            surfaceVisible = false
+            if let openingID { controller.releaseCandidatePresentation(openingID) }
+            openingID = nil; openingTask?.cancel(); openingTask = nil
+            if let presentation { controller.endCandidatePlayback(presentation.id) }
+        }
+    }
+    private func openPreview() {
+        guard openingID == nil, surfaceVisible else { return }
+        let request = UUID(); openingID = request
+        controller.retainCandidatePresentation(candidate.id,token: request)
+        openingTask = Task {
+            var presented = false
+            defer {
+                if !presented { controller.releaseCandidatePresentation(request) }
+                if openingID == request { openingID = nil; openingTask = nil }
+            }
+            do {
+                let verified = try await controller.repository.candidateReview(candidate.id)
+                guard !Task.isCancelled, surfaceVisible, openingID == request else { return }
+                let opening = VoiceCandidatePresentation(id: request,review: verified)
+                guard preparePlayback(opening.id) else { return }
+                presentation = opening; presented = true
+            } catch {
+                if !Task.isCancelled, surfaceVisible, openingID == request { controller.error = error.localizedDescription }
+            }
+        }
     }
 }
 
 private struct VoiceCandidatePlayback: View {
-    let url: URL
+    let review: VoiceCandidateReview
+    @Bindable var controller: VoiceReviewController
+    let engine: URL
+    let token: UUID
     @Environment(\.dismiss) private var dismiss
     @State private var seconds = 0.0
     @State private var playing = false
@@ -391,18 +423,45 @@ private struct VoiceCandidatePlayback: View {
     @State private var control = ReviewPlaybackControl()
     var body: some View {
         VStack(alignment: .leading,spacing: 14) {
-            Text("Separate review candidate").font(.headline)
-            Text("Review playback only; voice feedback is disabled here. The watched version is paused and unchanged. Original camera and graphics layers remain in the preserved parent timeline.").font(.caption)
-            CutPreview(url: url,playhead: $seconds,playing: $playing,ready: $ready,failure: $failure,control: control,onSeekCompleted: { _ in },onTimeJump: {})
-                .frame(minWidth: 800,minHeight: 450)
+            Text(review.target.reviewLabel).font(.headline).textSelection(.enabled)
+            Text("Keep steering as you watch. Feedback keeps this candidate's identity and original time. Further cuts need your approval.").font(.caption)
+            HStack(alignment: .top,spacing: 16) {
+                CutPreview(url: review.url,playhead: $seconds,playing: $playing,ready: $ready,failure: $failure,control: control,
+                    onSeekRequested: { record(.seekRequested) },onSeekCompleted: { record($0 ? .seekCompleted : .unavailable) },onTimeJump: { record(.unavailable) },
+                    validateOpening: {
+                        let opening = try ReviewMovieOpeningIdentity.capture(url: review.url,project: controller.project)
+                        try opening.check(review.target,project: controller.project)
+                        try VoiceReviewProvenance.check(review.target,project: controller.project)
+                    })
+                    .frame(minWidth: 480,minHeight: 360,maxHeight: .infinity)
+                ScrollView {
+                    VoiceReviewView(controller: controller,versionID: review.target.versionID,engine: engine,selected: controller.isAttached(to: token),
+                        select: bind,seek: control.seek,prepareCandidatePlayback: { _ in false })
+                }.frame(minWidth: 320,idealWidth: 360,maxWidth: 420)
+            }
             if let failure { Text(failure).foregroundStyle(.red) }
             HStack {
-                Button(playing ? "Pause candidate" : "Play candidate") { if playing { control.player?.pause() } else { control.player?.play() } }.disabled(!ready || failure != nil)
+                Button(playing ? "Pause candidate" : "Play candidate") { control.toggle(); record() }.disabled(!ready || failure != nil)
                 Text(String(format: "%.2f s",seconds)).monospacedDigit()
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
-        }.padding(24).frame(minWidth: 860,minHeight: 580)
-        .onDisappear { control.player?.pause() }
+        }.padding(24).frame(minWidth: 900,minHeight: 580)
+        .task {
+            await controller.attachCandidate(review.target,token: token,sampler: sample)
+            while !Task.isCancelled {
+                record()
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { break }
+            }
+        }
+        .onDisappear { control.pause(); record(.pause); controller.endCandidatePlayback(token) }
     }
+    private func bind() { Task { await controller.attachCandidate(review.target,token: token,sampler: sample) } }
+    private func sample() -> VoiceLivePlayhead {
+        let time = control.player?.currentTime().seconds ?? .nan
+        return .init(host: VoiceLivePlayhead.now,seconds: time.isFinite ? max(0,time):0,
+            rate: control.player?.timeControlStatus == .playing ? Double(control.player?.rate ?? 0):0,
+            available: ready && failure == nil && !control.seeking && time.isFinite && time >= 0 && time <= review.target.duration)
+    }
+    private func record(_ kind: VoiceTransportKind = .sample) { controller.record(sample(),kind: kind,token: token) }
 }

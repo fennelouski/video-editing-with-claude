@@ -8,24 +8,25 @@ bounded review mode, not production authorization or a camera-layer editor.
 
 1. Open a saved version in Cut and choose **Use this player for Voice Review**.
 2. Enter a typed review note with start/end seconds and **Remove range** or
-   **Protect range**. Alternatively, deliberately start local voice capture, stop
-   and finalize, then resolve the note's meaning, range and action. Permission
-   prompts and recording require explicit user actions; reopening never records.
-3. Save edits. Point-only speech, missing actions, uncertain anchors, unresolved
-   conflicts and stale note revisions cannot authorize a removal. Likes become
-   protection directives, not removal guesses.
-4. Choose **Review exact candidate cuts**. Removals round inward and protections
-   outward to full 24000/1001 frames. Displayed half-open frame ranges always use
-   the unchanged watched version, before ripple edits. Overlapping removals union;
-   overlap with a protection or removal of every frame blocks approval.
-5. **Approve these review-movie cuts**, then **Render separate review candidate**.
-   Approval binds the exact plan SHA and notes; subsequent feedback invalidates it.
-   The renderer is cancellable and cannot replace the watched cut/current pointer.
-6. **Play verified review candidate** opens a native in-app player after capture
-   is stopped/finalized and the watched player is paused. Candidate playback holds
-   a project-wide capture block: it is review-only, without a feedback target.
-   Reveal opens its NAS output folder. Verification runs again before handing out
-   its URL, and capture/selection are checked again after verification awaits.
+   **Protect range**, or choose **Start listening**. Clauto guides permission,
+   input and on-device speech setup inside the app. Reopening never records.
+3. Keep steering while playback or local work continues. Cards and original speech
+   timing save continuously. After 120 seconds without new feedback, an immutable
+   packet starts local proposal preparation. **Mic Off** is a privacy control;
+   stopping is not a processing prerequisite. Resolve unclear meaning or timing.
+4. Review the exact proposed frame ranges. Removals round inward and protections
+   outward to full 24000/1001 frames. Half-open ranges use the watched version
+   before ripple edits; protections and conflicting requests block approval.
+5. **Approve and create preview** saves the exact plan approval and starts one
+   verified local render. Subsequent feedback invalidates stale proposals. Rendering
+   never replaces a saved cut or changes its current pointer.
+6. **Play verified review candidate** opens the candidate with its own Feedback
+   panel. Listening may continue through the switch; a hard clock boundary marks
+   the transition. New speech and typed notes retain the candidate's identity and
+   candidate-local time, rather than being reassigned to its original parent.
+   A further approved plan can produce a second candidate from this movie.
+   Closing returns feedback ownership to the paused original player when it still
+   exists. The app never silently starts a new recording during playback changes.
 
 `script/launch_pizza_review.sh` builds this canonical checkout and opens the
 separately imported Pizza Yeast v7 project using the task-local verified import
@@ -92,12 +93,22 @@ completion. A stored completion and hashes are checked again before playback.
 Generated red/green/blue and tone fixtures exercise real decoding, native approval,
 NAS publication, source preservation, exact frames/samples and refusal paths.
 Actual v7 is imported for review only; no private candidate edit is invented.
-The graphical launch is waiting for macOS network-volume file-access permission;
-no player-ready or playback acceptance is claimed until that permission is granted. Task-local receipts and independent final review give exact test/build
-counts, source hashes and launch verification.
+Earlier imported-player receipts are scoped to their original builds. The integrated
+M10 app has not been launched during the foreground hold. Task-local receipts give
+exact background build/test counts and source hashes; candidate-player interaction,
+live speech and accessibility acceptance remain unobserved.
 
-Real microphone/recognition timing, interactive VoiceOver, camera/graphics-layer
+Real microphone/recognition timing, native candidate-player interaction, interactive VoiceOver, camera/graphics-layer
 application and production byte attestation remain unfinished. AVPlayer opens a
 mutable NAS pathname after check-time validation; fingerprints do not make later
 playback immutable. No distribution, notarization, remote provider, media upload,
 Final Cut control or remote Git publication is part of this increment.
+
+M10 inherited-protection correction: earlier protected original frames project
+through each candidate's verified retained fragments as separate constraints.
+Original note text, onset, target and revision are untouched. A child removal
+cannot overlap these constraints; revise the source protection and create a new
+source candidate to change it. Native provenance recomputes the projection, and
+the renderer separately checks inherited constraints against parent lineage.
+Each opening is cancellation/generation owned, so navigation during verification
+cannot seize a feedback clock after its surface has closed.

@@ -47,8 +47,54 @@ enum VoiceReviewProvenance {
         }
     }
     static func check(_ target: VoiceReviewTarget, project: Project) throws {
+        try check(target,project: project,ancestors: [])
+    }
+    private static func check(_ target: VoiceReviewTarget, project: Project, ancestors: Set<UUID>) throws {
         guard target.projectID == project.id else { throw ProjectFailure.invalidProject }
+        guard !ancestors.contains(target.versionID), ancestors.count < 16 else {
+            throw WorkflowFailure.invalid("This candidate's review lineage is cyclic or exceeds 16 generations. Keep this history and start a new saved version.")
+        }
         try check(target.preview, project: project); try check(target.timeline, project: project)
+        if let origin = target.candidateOrigin {
+            let base = "build/voice-candidates/"+origin.renderID.uuidString+"/"
+            guard target.id == origin.renderID, target.versionID == origin.renderID,
+                  target.preview.relativePath == base+"review.mov", target.timeline.relativePath == base+"timeline.fcpxml" else { throw ProjectFailure.invalidProject }
+            let folder = try SourceRenderDirectory.open(project.folder).child("build").child("voice-candidates").child(origin.renderID.uuidString)
+            let completion = try folder.read("completion.json")
+            guard TranscriptSourceMap.sha(completion) == target.versionMetadataSHA256 else { throw ProjectFailure.invalidProject }
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .millisecondsSince1970
+            let record = try decoder.decode(VoiceCandidatePreview.self,from: completion)
+            guard record.id == origin.renderID, record.relativeFolder+"/" == base, record.folderIdentity == folder.identity,
+                  record.completionSHA256 == nil, !record.productionAuthorized, !record.appliedToWatchedVersion,
+                  record.frames > 0, record.frames <= 86_400,
+                  target.duration == Double(record.frames)*1001/24000,
+                  record.artifactsSHA256["review.mov"] == target.preview.sha256,
+                  record.artifactsSHA256["timeline.fcpxml"] == target.timeline.sha256 else { throw ProjectFailure.invalidProject }
+            let planBytes = try folder.read("candidate-plan.json"), approvalBytes = try folder.read("candidate-approval.json"), proofBytes = try folder.read("render-proof.json")
+            guard TranscriptSourceMap.sha(planBytes) == record.planSHA256,
+                  TranscriptSourceMap.sha(planBytes) == record.artifactsSHA256["candidate-plan.json"],
+                  TranscriptSourceMap.sha(approvalBytes) == record.artifactsSHA256["candidate-approval.json"],
+                  TranscriptSourceMap.sha(proofBytes) == record.proofSHA256 else { throw ProjectFailure.invalidProject }
+            let plan = try decoder.decode(VoiceCandidateEditPlan.self,from: planBytes)
+            let approval = try decoder.decode(VoiceCandidateEditApproval.self,from: approvalBytes)
+            let proof = try decoder.decode(VoiceMasterProof.self,from: proofBytes)
+            guard plan.candidateID == origin.candidateID, plan.mode == VoiceCandidateEditPlan.mode, plan.issues.isEmpty, !plan.productionAuthorized,
+                  (plan.inheritedProtections ?? []) == (plan.parent.candidateOrigin?.protections ?? []),
+                  (origin.protections ?? []) == (try VoiceProtectionConstraint.projected(through: plan)),
+                  approval.id == record.approvalID, approval.planID == plan.id, approval.planSHA256 == record.planSHA256,
+                  approval.scope == VoiceCandidateEditPlan.mode, !approval.productionAuthorized,
+                  proof.planSHA256 == record.planSHA256, proof.approvalSHA256 == TranscriptSourceMap.sha(approvalBytes),
+                  proof.masterSHA256 == plan.parent.preview.sha256, proof.fragments == plan.fragments,
+                  proof.frames == record.frames, proof.fullDecodePassed, proof.schemaChecked,
+                  !proof.productionAuthorized, !proof.appliedToWatchedVersion,
+                  target.versionNumber == plan.parent.versionNumber, target.engineVersion == plan.parent.engineVersion,
+                  target.approvedPlanPath == plan.parent.approvedPlanPath, target.approvedPlanSHA256 == plan.parent.approvedPlanSHA256,
+                  target.approvedScriptPath == plan.parent.approvedScriptPath, target.approvedScriptSHA256 == plan.parent.approvedScriptSHA256,
+                  target.approvedBriefSHA256 == plan.parent.approvedBriefSHA256 else { throw ProjectFailure.invalidProject }
+            var chain = ancestors; chain.insert(target.versionID)
+            try check(plan.parent,project: project,ancestors: chain)
+            return
+        }
         let folder = String(format: "cuts/v%03d/", target.versionNumber)
         guard try inspect(folder + "clauto-version.json", project: project).sha256 == target.versionMetadataSHA256,
               try inspect(target.approvedScriptPath, project: project).sha256 == target.approvedScriptSHA256,

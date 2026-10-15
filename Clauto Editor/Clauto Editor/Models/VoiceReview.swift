@@ -22,6 +22,22 @@ struct VoiceReviewTarget: Codable, Equatable, Identifiable, Sendable {
     let approvedBriefSHA256: String
     let engineVersion: String
     let duration: Double
+    /// Absent on saved cuts so historical ledger encodings remain unchanged.
+    var candidateOrigin: VoiceCandidateReviewOrigin? = nil
+    var reviewLabel: String {
+        candidateOrigin.map { "Candidate " + $0.renderID.uuidString.prefix(8) + " · v\(versionNumber)" } ?? "v\(versionNumber)"
+    }
+}
+
+struct VoiceCandidateReviewOrigin: Codable, Equatable, Sendable {
+    let candidateID: UUID
+    let renderID: UUID
+    var protections: [VoiceProtectionConstraint]? = nil
+}
+
+struct VoiceCandidateReview: Sendable {
+    let target: VoiceReviewTarget
+    let url: URL
 }
 
 enum VoiceCaptureState: String, Codable, Sendable { case recording, finishing, stopped, cancelled, interrupted, retrying }
@@ -425,6 +441,10 @@ struct VoiceFeedbackPacket: Codable, Identifiable, Equatable, Sendable {
     var needsAttention: Int { notes.filter { !$0.cancelled && (!$0.isFinal || !$0.issues.isEmpty) }.count + drafts.count + typedDrafts.filter { $0.hasContent }.count }
 }
 extension VoiceReviewDocument {
+    func candidateHistory(retaining ids: Set<UUID>,limit: Int = 8) -> [VoiceRevisionCandidate] {
+        let visible = Set(candidates.suffix(max(0,limit)).map(\.id)).union(ids)
+        return candidates.filter { visible.contains($0.id) }
+    }
     var feedbackSnapshot: [VoiceFeedbackSnapshot] { notes.filter { ($0.supersededBy ?? []).isEmpty }.map(VoiceFeedbackSnapshot.init) }
     var hasUnpacketedFeedback: Bool {
         let values = feedbackSnapshot

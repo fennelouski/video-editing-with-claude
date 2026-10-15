@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import Observation
+import Darwin
 #if canImport(ClautoCore)
 @testable import ClautoCore
 #else
@@ -34,7 +35,7 @@ private actor FailsOnceVoiceProcessor: VoiceCandidateProcessing {
     }
 }
 
-private actor MockVoiceProvider: VoiceReviewDictating {
+actor MockVoiceProvider: VoiceReviewDictating {
     var starts = 0
     var microphoneRequests = 0
     var speechRequests = 0
@@ -353,7 +354,7 @@ struct VoiceReviewTests {
         return controller
     }
 
-    @Test @MainActor func candidatePlaybackLeaseBlocksCaptureAndCannotBeginDuringStartRecordingOrStop() async throws {
+    @Test @MainActor func candidateLeaseWaitsForVerifiedBindingAndAllowsSwitchingWhileRecording() async throws {
         let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
         let provider = MockVoiceProvider(), controller = try await controller(project: project,provider: provider,target: target)
         let preview = UUID()
@@ -369,15 +370,57 @@ struct VoiceReviewTests {
         #expect(!controller.beginCandidatePlayback(UUID()))
         await provider.releaseStart()
         try await waitFor { controller.mode == .recording }
-        #expect(!controller.beginCandidatePlayback(UUID()))
+        #expect(controller.beginCandidatePlayback(preview))
+        #expect(controller.target == nil && !controller.playbackAvailable)
+        #expect(controller.mode == .recording)
+        #expect(await provider.starts == 1)
+        controller.endCandidatePlayback(preview)
+        #expect(controller.target?.id == target.id && controller.mode == .recording)
+        await provider.configure(holdStop: true)
         let stopping = Task { await controller.stop() }
-        await Task.yield()
-        if controller.active || controller.canStop { #expect(!controller.beginCandidatePlayback(UUID())) }
+        try await waitFor { controller.mode == .finishing }
+        #expect(!controller.beginCandidatePlayback(UUID()))
+        await provider.releaseStop()
         #expect(await stopping.value)
         #expect(controller.beginCandidatePlayback(preview))
         #expect(!controller.canStart)
         controller.endCandidatePlayback(preview)
         #expect(controller.canStart)
+    }
+
+    @Test @MainActor func aDelayedRegistrationCannotPublishAnEarlierClockWhenATokenIsReused() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), token = UUID()
+        let controller = try await controller(project: project,provider: provider,target: target,token: token)
+        let fd = open(project.folder.appendingPathComponent("notes/voice-review/ledger.lock").path,O_RDWR)
+        guard fd >= 0, flock(fd,LOCK_EX) == 0 else { throw ProjectFailure.invalidProject }
+        defer { _ = flock(fd,LOCK_UN); close(fd) }
+        controller.willAttach(token)
+        var oldStarted = false
+        let old = Task { oldStarted = true; await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) }) }
+        while !oldStarted { await Task.yield() }
+        controller.willAttach(token)
+        // Without a binding generation, releasing registration could resurrect
+        // that earlier clock before the new decoder has even attached.
+        _ = flock(fd,LOCK_UN); await old.value
+        #expect(controller.target == nil && !controller.playbackAvailable)
+        await controller.attach(target,token: token,sampler: { .init(host: 200,seconds: 20,rate: 0,available: true) })
+        #expect(controller.target == target && controller.canStart)
+        controller.start(); try await waitFor { controller.mode == .recording }
+        #expect(await controller.flushForExit())
+        #expect(try await controller.repository.load().sessions.last?.playhead.last?.seconds == 20)
+    }
+    @Test func rollingHistoryRetainsOpeningAndPlayingCandidatesUntilTheirOwnTokensClose() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        var document = VoiceReviewDocument(projectID: project.id)
+        let opening = VoiceRevisionCandidate(id: UUID(),parent: target,noteRevisions: [],ownerProcessID: 0,created: Date(),renderNotBefore: Date())
+        document.candidates.append(opening)
+        for _ in 0..<12 { document.candidates.append(.init(id: UUID(),parent: target,noteRevisions: [],ownerProcessID: 0,created: Date(),renderNotBefore: Date())) }
+        #expect(!document.candidateHistory(retaining: []).contains { $0.id == opening.id })
+        let retained = document.candidateHistory(retaining: [opening.id])
+        #expect(retained.count == 9 && retained.first?.id == opening.id)
+        #expect(retained.dropFirst().map(\.id) == document.candidates.suffix(8).map(\.id))
+        #expect(document.candidateHistory(retaining: [],limit: 0).isEmpty)
     }
 
     @Test @MainActor func openingAndReloadingNeverRecordOrRequestPermissionAndDeviceIsExplicit() async throws {

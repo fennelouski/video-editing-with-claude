@@ -35,6 +35,15 @@ def derive(plan):
     if type(total) is not int or not 0 < total <= 86400 or not 0 < len(operations) <= 64:
         raise ValueError('Review duration/range budget exceeded')
     removals=[]; protections=[]; ids=set()
+    inherited=plan.get('inheritedProtections',[])
+    origin=plan['parent'].get('candidateOrigin') or {}
+    if not isinstance(inherited,list) or len(inherited)>1024 or inherited != origin.get('protections',[]):
+        raise ValueError('Inherited protections differ from the watched candidate lineage')
+    for constraint in inherited:
+        a,b=constraint['startFrame'],constraint['endFrame']
+        if type(a) is not int or type(b) is not int or not 0 <= a < b <= total:
+            raise ValueError('Invalid inherited protected frame range')
+        protections.append((a,b))
     for op in operations:
         a,b=op['startFrame'],op['endFrame']
         if op['noteID'] in ids or type(a) is not int or type(b) is not int or not 0 <= a < b <= total:

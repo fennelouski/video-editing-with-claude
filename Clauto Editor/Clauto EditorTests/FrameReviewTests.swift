@@ -225,7 +225,8 @@ struct FrameReviewTests {
         let first = try f.request(frame: 3); try controller.begin(first)
         await Task.yield(); #expect(controller.cancel())
         let second = try f.request(frame: 20); try controller.begin(second)
-        try await Task.sleep(for: .milliseconds(250))
+        let deadline = ContinuousClock.now + .seconds(20)
+        while controller.preparing && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(controller.draft?.request == second && controller.draft?.frame?.request == second && !controller.preparing)
         #expect(!(await controller.flushForExit()))
         #expect(controller.cancel()); #expect(await controller.flushForExit())

@@ -425,6 +425,7 @@ struct CutPreview: NSViewRepresentable {
     var onSeekCompleted: (Bool) -> Void
     var onTimeJump: () -> Void
     var onSelect: (() -> Void)? = nil
+    var validateOpening: (() throws -> Void)? = nil
     @MainActor final class Coordinator {
         var owner: CutPreview
         var player: AVPlayer?
@@ -433,6 +434,7 @@ struct CutPreview: NSViewRepresentable {
         var itemObserver: NSKeyValueObservation?
         var generation = UUID()
         var jumpObserver: NSObjectProtocol?
+        var requestedURL: URL?
         init(_ owner: CutPreview) { self.owner = owner }
         func install(_ player: AVPlayer) {
             teardown(); self.player = player
@@ -482,16 +484,24 @@ struct CutPreview: NSViewRepresentable {
         }
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
+    private func makePlayer() -> AVPlayer {
+        do { try validateOpening?(); return AVPlayer(url: url) }
+        catch {
+            let message = error.localizedDescription
+            Task { @MainActor in failure = message; ready = false }
+            return AVPlayer()
+        }
+    }
     func makeNSView(context: Context) -> ClautoVideoCanvas {
         let view = ClautoVideoCanvas(frame: .zero)
-        let player = AVPlayer(url: url); view.player = player; context.coordinator.install(player)
+        let player = makePlayer(); view.player = player; context.coordinator.install(player); context.coordinator.requestedURL = url
         return view
     }
     func updateNSView(_ view: ClautoVideoCanvas, context: Context) {
         context.coordinator.owner = self
-        if (view.player?.currentItem?.asset as? AVURLAsset)?.url != url {
+        if context.coordinator.requestedURL != url {
             view.player?.pause()
-            let player = AVPlayer(url: url); view.player = player; context.coordinator.install(player)
+            let player = makePlayer(); view.player = player; context.coordinator.install(player); context.coordinator.requestedURL = url
         }
         view.onSelect = onSelect
         view.onSpace = { [weak control] in onSelect?(); control?.toggle() }

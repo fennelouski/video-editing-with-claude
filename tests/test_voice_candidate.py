@@ -43,6 +43,25 @@ def run_candidate(value,progress=lambda _:None):
     return V.render(job,S.digest(data),progress)
 
 
+@pytest.mark.parametrize('fault',['missing','changed','overlap','invalid'])
+def test_inherited_protections_cannot_be_omitted_changed_or_removed(fault):
+    protection={'noteID':str(uuid.uuid4()),'revision':1,'originTargetID':str(uuid.uuid4()),
+                'originStartFrame':6,'originEndFrame':12,'startFrame':3,'endFrame':9}
+    plan={'schemaVersion':1,'mode':V.MODE,'productionAuthorized':False,'issues':[],
+          'parentFrames':24,'parent':{'preview':{'sha256':'a'*64},'candidateOrigin':{'protections':[protection]}},
+          'inheritedProtections':[copy.deepcopy(protection)],
+          'operations':[{'noteID':str(uuid.uuid4()),'action':'remove','startFrame':0,'endFrame':3}],
+          'fragments':[{'id':'master-3-24','masterSHA256':'a'*64,'parentStartFrame':3,'parentEndFrame':24,'candidateStartFrame':0}]}
+    assert V.derive(plan)[1]==21
+    if fault=='missing':del plan['inheritedProtections']
+    elif fault=='changed':plan['inheritedProtections'][0]['endFrame']=8
+    elif fault=='overlap':plan['operations'][0].update(startFrame=4,endFrame=5)
+    else:
+        plan['inheritedProtections'][0]['startFrame']=False
+        plan['parent']['candidateOrigin']['protections'][0]['startFrame']=False
+    with pytest.raises(ValueError):V.derive(plan)
+
+
 def test_remove_B_keeps_both_distinct_A_occurrences_and_exact_decoded_samples(fixture,tmp_path):
     value=candidate_fixture(fixture,tmp_path);stage,local,job,plan,master=value
     original=master.read_bytes();proof=run_candidate(value)
