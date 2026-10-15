@@ -227,6 +227,7 @@ import Observation
         let window = ReviewDetachedWindow(contentRect: NSRect(x: 0,y: 0,width: 960,height: 580),styleMask: [.titled,.closable,.miniaturizable,.resizable],backing: .buffered,defer: false)
         generation = UUID(); retainedRouter = session.router
         window.presentation = self
+        window.appearance = NSAppearance(named: .darkAqua)
         window.title = "\(session.project.manifest.name) · v\(session.version.number)"
         window.isReleasedWhenClosed = false; window.delegate = self; window.minSize = NSSize(width: 420,height: 280)
         videoWindow = window; detached = true
@@ -354,7 +355,7 @@ private struct DetachedReviewVideo: View {
                 Button("Re-embed") { presentation.dock() }.focused($focused,equals: .detach)
             }.padding(10).opacity(controls ? 1 : 0).allowsHitTesting(controls)
                 .onHover { hovering = $0; reveal() }
-        }.background(.black).foregroundStyle(.white)
+        }.background(.black).foregroundStyle(.white).environment(\.colorScheme,.dark).preferredColorScheme(.dark)
             .onContinuousHover { _ in reveal() }.onChange(of: focused) { reveal() }.onChange(of: session.playing) { reveal() }
             .onAppear { reveal() }.onDisappear { idle?.cancel() }
     }

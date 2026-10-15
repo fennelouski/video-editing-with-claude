@@ -3,17 +3,27 @@ import AppKit
 import CoreText
 
 @MainActor enum ClautoDesign {
-    static var ink: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .labelColor) }; return ClautoThemeStore.shared.palette.ink.color }
-    static var rail: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .underPageBackgroundColor) }; return ClautoThemeStore.shared.palette.sidebar.color }
-    static var railText: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .labelColor) }; return ClautoThemeStore.shared.palette.sidebarInk.color }
-    static var paper: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .windowBackgroundColor) }; return ClautoThemeStore.shared.palette.background.color }
-    static var sheet: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .textBackgroundColor) }; return ClautoThemeStore.shared.palette.surface.color }
-    static var soft: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .controlBackgroundColor) }; return ClautoThemeStore.shared.palette.subtle.color }
-    static var citron: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .controlAccentColor) }; return ClautoThemeStore.shared.palette.accent.color }
-    static var onAccent: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .alternateSelectedControlTextColor) }; return ClautoThemeStore.shared.palette.accentInk.color }
-    static var quiet: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .secondaryLabelColor) }; return ClautoThemeStore.shared.palette.muted.color }
-    static var rule: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .separatorColor) }; return ClautoThemeStore.shared.palette.border.color }
-    static var ember: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .systemRed) }; return ClautoThemeStore.shared.palette.error.color }
+    /// Native attributed control titles can retain a previously resolved dynamic
+    /// NSColor. Re-resolve semantic roles when the observed system scheme changes.
+    private static func systemColor(_ color: NSColor) -> Color {
+        _ = ClautoThemeStore.shared.systemAppearanceRevision
+        var resolved = color
+        NSApplication.shared.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.deviceRGB) ?? color
+        }
+        return Color(nsColor: resolved)
+    }
+    static var ink: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.labelColor) }; return ClautoThemeStore.shared.palette.ink.color }
+    static var rail: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.underPageBackgroundColor) }; return ClautoThemeStore.shared.palette.sidebar.color }
+    static var railText: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.labelColor) }; return ClautoThemeStore.shared.palette.sidebarInk.color }
+    static var paper: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.windowBackgroundColor) }; return ClautoThemeStore.shared.palette.background.color }
+    static var sheet: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.textBackgroundColor) }; return ClautoThemeStore.shared.palette.surface.color }
+    static var soft: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.controlBackgroundColor) }; return ClautoThemeStore.shared.palette.subtle.color }
+    static var citron: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.controlAccentColor) }; return ClautoThemeStore.shared.palette.accent.color }
+    static var onAccent: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.alternateSelectedControlTextColor) }; return ClautoThemeStore.shared.palette.accentInk.color }
+    static var quiet: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.secondaryLabelColor) }; return ClautoThemeStore.shared.palette.muted.color }
+    static var rule: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.separatorColor) }; return ClautoThemeStore.shared.palette.border.color }
+    static var ember: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.systemRed) }; return ClautoThemeStore.shared.palette.error.color }
     static func type(_ size: CGFloat = 14, weight: Font.Weight = .regular) -> Font {
         ClautoThemeStore.shared.selected == .standard ? .system(size: size,weight: weight) : .custom("WorkSans-Regular", size: size).weight(weight)
     }

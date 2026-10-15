@@ -14,7 +14,7 @@ struct ContentView: View {
             if playbackRouter.tab == "Cut", store.selected != nil {
                 VStack(spacing: 18) {
                     ClautoWindowControls().padding(.top,14)
-                    Menu { ForEach(store.projects) { project in Button(project.manifest.name) { store.selectedID = project.id } } } label: { ClautoEmblem(bracketColor: ClautoDesign.railText,stripColor: ClautoDesign.citron).frame(width: 32,height: 32) }.menuStyle(.borderlessButton).frame(width: 44).accessibilityLabel("Projects")
+                    Menu { ForEach(store.projects) { project in Button(project.manifest.name) { store.selectedID = project.id } } } label: { Image(systemName: "folder").font(.system(size: 22)).foregroundStyle(ClautoDesign.railText) }.menuStyle(.borderlessButton).menuIndicator(.hidden).tint(ClautoDesign.railText).frame(width: 44).accessibilityLabel("Projects")
                     Spacer()
                     Button { showSetup = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Workspace")
                 }.padding(.bottom,20).frame(width: 88).frame(maxHeight: .infinity).background(ClautoDesign.rail).foregroundStyle(ClautoDesign.railText)
@@ -52,11 +52,11 @@ struct ContentView: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background { ClautoThemeSurface() }
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).tint(ClautoDesign.citron).textSelection(.enabled)
-            .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).preferredColorScheme(ClautoThemeStore.shared.preferredColorScheme)
+            .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).clautoThemeAppearance()
             .background(PlaybackWindowRegistration(router: playbackRouter).frame(width: 0,height: 0))
             .onAppear { playbackRouter.store = store; playbackRouter.tab = initialProjectTab }
-            .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter) }
-            .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter) }
+            .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter).clautoThemeAppearance() }
+            .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter).clautoThemeAppearance() }
             .sheet(item: $playbackRouter.editor) { controller in
                 FrameCommentEditor(controller: controller, close: { playbackRouter.dismissEditor() })
                     .interactiveDismissDisabled()
@@ -68,7 +68,7 @@ struct ContentView: View {
                     ClautoRule()
                     HStack { Spacer(); ClautoAction("Done", icon: .check, kind: .primary) { showSetup = false }.keyboardShortcut(.cancelAction) }.padding(20)
                 }.frame(width: 680, height: 660).background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink)
-                    .buttonStyle(ClautoButtonStyle())
+                    .buttonStyle(ClautoButtonStyle()).clautoThemeAppearance()
             }
             .sheet(isPresented: $showNewProject) {
                 VStack(alignment: .leading, spacing: 22) {
@@ -86,7 +86,7 @@ struct ContentView: View {
                         }.disabled(projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.working)
                             .keyboardShortcut(.defaultAction).accessibilityIdentifier("createProject")
                     }
-                }.padding(32).frame(width: 530).font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
+                }.padding(32).frame(width: 530).font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper).clautoThemeAppearance()
             }
     }
 

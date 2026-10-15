@@ -37,7 +37,7 @@ struct FrameCommentEditor: View {
                 Button("Cancel") { if controller.cancel() { close() } }.keyboardShortcut(.cancelAction).disabled(controller.saving)
             }
         }.padding(24).frame(minWidth: 660,idealWidth: 820,maxWidth: 1000,minHeight: 560)
-            .background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).preferredColorScheme(ClautoThemeStore.shared.preferredColorScheme)
+            .background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).clautoThemeAppearance()
     }
     @ViewBuilder private func annotationControls(_ draft: FrameCommentDraft, frame: FrozenReviewFrame) -> some View {
         HStack {

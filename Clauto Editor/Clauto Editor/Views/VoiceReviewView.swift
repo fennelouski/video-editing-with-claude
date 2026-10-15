@@ -342,7 +342,7 @@ private struct VoiceCandidateActions: View {
                 }.accessibilityIdentifier("voiceRevealCandidate")
             }
         }.sheet(isPresented: $showingPreview,onDismiss: { controller.endCandidatePlayback(playbackToken) }) {
-            if let previewURL { VoiceCandidatePlayback(url: previewURL) }
+            if let previewURL { VoiceCandidatePlayback(url: previewURL).clautoThemeAppearance() }
         }.onDisappear { controller.endCandidatePlayback(playbackToken) }
     }
 }

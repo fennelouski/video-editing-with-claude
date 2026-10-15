@@ -8,16 +8,16 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
 
 | Requirement | Current increment | Remaining acceptance / implementation |
 | --- | --- | --- |
-| Eleven semantic themes, Homey default | Stable IDs, persisted choice, original palettes/material treatments, native Standard colors/buttons/fonts, native text-area color refresh, contrast tests | Render every theme and every interaction state; increased contrast, text scaling, selection/focus/disabled pairs; refine authored material references |
+| Eleven semantic themes, Homey default | Stable IDs, persisted choice, original palettes/material treatments, native Standard colors/buttons/fonts, native text-area color refresh, contrast tests, offscreen renders of all eleven themes at two sizes and Standard light/dark | Render every interaction state; increased contrast, text scaling, selection/focus/disabled pairs; refine authored material references |
 | One command architecture | Shared typed registry, native menu/palette, navigation, configured skips, J/K/L, rational frame steps/non-drop timecode, versions/pane commands | Active-window/IME/physical keyboard acceptance; contextual availability and palette restoration matrix |
 | Selectable app text | Root text selection, native text areas, copyable timecodes/errors and single tooltip text | Audit all app-owned labels and controls; preserve honest native menu/button exceptions; physical selection precedence |
 | Bare-video play/pause | Mouse-up action with movement threshold, focused Space/JKL/frame keys, explicit-control command guards | Physical click, drag, controls and annotation exclusion checks |
 | Native macOS PiP | Public AVPlayerView controls, retained delegate, start/fail/stop/restore lifecycle and external ownership | Actual native PiP acceptance. Public SDK has no programmatic start operation; start uses the visible AVKit control |
-| Custom detached video | Store/window-scoped stable session and one reparented AVPlayerView, close-to-dock, threshold drag, video-window fullscreen/Escape, display recovery and idle controls | Actual playback reparenting, transition failures, focused controls, screen unplug and physical window tests |
+| Custom detached video | Store/window-scoped stable session and one reparented AVPlayerView, close-to-dock, threshold drag, video-window fullscreen/Escape, display recovery and idle controls | Offscreen same-player/item/paused-clock detach/dock passed; actual video pixels, transition failures, focused controls, screen unplug and physical window tests remain |
 | Compact copy / one tooltip | New compact review workspace and microphone controls; global delayed/Option tooltip with selectable text | Measured before/after copy comparison, full-app removal pass, rapid hover/focus/Option acceptance |
 | Original icon | Existing original editable geometry and complete macOS asset catalog retained | Recheck small-size readability against new default; no other platform app target exists |
 | Explicit local voice and feedback cards | Existing on-device provider, explicit target/mic controls/meter, provisional/final notes, original onset/history/reanchor/candidate isolation; measured signed rate and rate-change epochs; spoken-order cards; explicit merge/split, retained parent/anchor lineage, stale/candidate invalidation and late-ASR protection; ambiguous-reference flags; final idea groups from reported audio runs, captured silence, explicit topic cues and inter-run transport boundaries | Durable new typed drafts; real permitted microphone and native desktop acceptance |
-| Adaptive three panes | Versions/assets left, stable video/timeline center, independent feedback scroll right; pane toggles/focus and compact project rail; detached placeholder | Actual compact/large/long-card/large-text renders, repeated focus, persistence across themes and navigation |
+| Adaptive three panes | Versions/assets left, stable video/timeline center, independent feedback scroll right; pane toggles/focus and compact project rail; detached placeholder; synthetic compact/large renders with long feedback preserve video geometry | Large-text renders, repeated focus, persistence across themes and navigation |
 
 ## Validation boundaries
 
@@ -87,3 +87,37 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
   values, record an unavailable interval with no target. Original feedback stays
   durable and unresolved, and returning to a supported clock creates a boundary.
   Such a rate cannot poison the durable save queue or supply a guessed anchor.
+
+## Milestone 5 — appearance and observed player availability
+
+- Custom themes synchronize SwiftUI and native hosting-window appearance. Standard
+  inherits the application's effective appearance, observes system-color changes,
+  and resolves semantic native title colors again when those change. Sheet roots
+  without authored window controls also receive the selected native appearance.
+  Detached video keeps its independent dark controls. No production code changes
+  the application's or system's appearance.
+- The compact Projects menu uses a visible folder glyph and rail-text tint, rather
+  than an inherited accent that disappeared on two dark sidebar colors. Native
+  close/minimize/zoom buttons remain visible in Standard.
+- Explicit watched-player selection and derived playback availability invalidate
+  their controls immediately. Ordinary clock ticks do not rebuild the mic control.
+  Starting capture samples readiness, finite time and supported rate again before
+  saving a session or opening the microphone. Invalid clocks immediately break
+  continuity without fabricating timestamps; the first valid recovery boundary
+  survives ordinary timestamp backpressure. Speech crossing that gap remains
+  durable and needs manual timing resolution.
+- A protected modified-entry component harness renders all eleven themes at
+  900×640 and 1440×900 using synthetic media/text only. Standard light/dark checks
+  compare application, hosting-window and view appearance plus actual pixels.
+  A separate root without window controls checks native sheet appearance. Long
+  feedback preserves video geometry; offscreen detach/dock retains one AVPlayer,
+  its item and paused clock. Test windows refuse ordering and activation is
+  prohibited; the existing private review process remains alive.
+- These are component-source checks, not acceptance of the exact Release app's
+  startup, decoded video pixels, physical keyboard/selection, PiP/fullscreen,
+  external displays, accessibility or VoiceOver. Foreground native acceptance
+  remains pending. Live speech is blocked by the existing missing speech grant
+  and local model; no permission or model download was requested.
+- New typed composers survive pane/view replacement in memory. Restart-durable
+  new typed drafts and idempotent typed Save still require implementation. The
+  approximate 90% explanatory-copy reduction has not been measured or accepted.

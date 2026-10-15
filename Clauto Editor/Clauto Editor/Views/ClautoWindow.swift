@@ -12,9 +12,10 @@ private struct ClautoWindowReader: NSViewRepresentable {
             guard let window else { return }
             // Only our own window. Native close/minimize/zoom behavior remains
             // behind the authored controls; menus and keyboard commands still work.
-            for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = true }
+            for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = ClautoThemeStore.shared.selected != .standard }
             window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
-            window.backgroundColor = NSColor(ClautoDesign.paper)
+            ClautoThemeStore.shared.applyNativeAppearance(to: window)
+            window.backgroundColor = ClautoThemeStore.shared.selected == .standard ? .windowBackgroundColor:NSColor(ClautoDesign.paper)
             window.isMovableByWindowBackground = true
         }
     }
@@ -23,7 +24,8 @@ private struct ClautoWindowReader: NSViewRepresentable {
         view.handle = handle; handle.window = view.window
         guard let window = view.window else { return }
         for kind in [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton] { window.standardWindowButton(kind)?.isHidden = ClautoThemeStore.shared.selected != .standard }
-        window.backgroundColor = NSColor(ClautoDesign.paper)
+        ClautoThemeStore.shared.applyNativeAppearance(to: window)
+        window.backgroundColor = ClautoThemeStore.shared.selected == .standard ? .windowBackgroundColor:NSColor(ClautoDesign.paper)
     }
 }
 

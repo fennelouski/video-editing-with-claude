@@ -63,7 +63,7 @@ struct ReviewWorkspace: View {
             .onDisappear { router.onWorkspaceCommand = nil }
             .sheet(isPresented: $building) {
                 VStack { HStack { Text("Build and export").font(.title2); Spacer(); Button("Done") { building = false }.keyboardShortcut(.cancelAction) }.padding(); CutView(store: store,playbackRouter: router,showPlayers: false) }
-                    .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper)
+                    .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper).clautoThemeAppearance()
             }
     }
     private func handle(_ command: EditorCommand) {

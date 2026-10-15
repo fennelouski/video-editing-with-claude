@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Observation
 #if canImport(ClautoCore)
 @testable import ClautoCore
 #else
@@ -666,6 +667,119 @@ struct VoiceReviewTests {
         let reopened = try ReviewMovieOpeningIdentity.capture(url: url,project: project)
         try reopened.check(fresh,project: project)
         #expect(throws: (any Error).self) { try ReviewMovieOpeningIdentity.capture(url: project.folder.deletingLastPathComponent().appendingPathComponent("outside.mp4"),project: project) }
+    }
+
+    @MainActor @Test func explicitWatchedPlayerSelectionImmediatelyInvalidatesViewObservers() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let controller = try await controller(project: project,provider: MockVoiceProvider(),target: target)
+        let clicked = UUID()
+        await confirmation("Watched player selection updates its UI",expectedCount: 1) { changed in
+            withObservationTracking { _ = controller.isAttached(to: clicked) } onChange: { changed() }
+            controller.willAttach(clicked)
+        }
+        #expect(controller.isAttached(to: clicked) && !controller.canStart)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func playbackAvailabilityInvalidatesMicControlWithoutPublishingEveryClockTick() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let token = UUID(), provider = MockVoiceProvider()
+        let controller = try await controller(project: project,provider: provider,target: target,token: token)
+        for (index,value) in [(false,0.0,VoiceTransportKind.unavailable),(true,0.0,.seekCompleted),
+                              (true,0.0,.seekRequested),(true,1.0,.seekCompleted),
+                              (true,8.0,.sample),(true,1.0,.sample),(true,Double.nan,.sample),
+                              (true,0.0,.sample)].enumerated() {
+            await confirmation("Availability changes update Mic On",expectedCount: 1) { changed in
+                withObservationTracking { _ = controller.canStart } onChange: { changed() }
+                controller.record(.init(host: 101+Double(index),seconds: 10,rate: value.1,available: value.0),kind: value.2,token: token)
+            }
+            #expect(controller.canStart == (index % 2 == 1))
+        }
+        await confirmation("Ordinary clock ticks do not invalidate the mic control",expectedCount: 0) { changed in
+            withObservationTracking { _ = controller.canStart } onChange: { changed() }
+            controller.record(.init(host: 120,seconds: 11,rate: 0,available: true),token: token)
+            controller.record(.init(host: 121,seconds: 11,rate: 0,available: false),token: UUID())
+        }
+        #expect(await provider.starts == 0 && controller.document.sessions.isEmpty)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func startResamplesAvailabilityAndRejectsInvalidClockBeforeSavingOrStartingMicrophone() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        for invalid in [VoiceLivePlayhead(host: 100,seconds: 10,rate: 0,available: false),
+                        .init(host: .nan,seconds: 10,rate: 0,available: true),
+                        .init(host: 100,seconds: -.infinity,rate: 0,available: true),
+                        .init(host: 100,seconds: -1,rate: 0,available: true),
+                        .init(host: 100,seconds: target.duration+1,rate: 0,available: true),
+                        .init(host: 100,seconds: 10,rate: .nan,available: true),
+                        .init(host: 100,seconds: 10,rate: -8,available: true)] {
+            let provider = MockVoiceProvider(), token = UUID()
+            let controller = try await controller(project: project,provider: provider,target: target,token: token)
+            var current = VoiceLivePlayhead(host: 100,seconds: 10,rate: 0,available: true)
+            await controller.attach(target,token: token,sampler: { current })
+            #expect(controller.canStart)
+            current = invalid; controller.start()
+            #expect(!controller.canStart && !controller.active && controller.error != nil)
+            #expect(controller.document.sessions.isEmpty && !controller.hasPendingWork)
+            #expect(await provider.starts == 0)
+            #expect(await provider.microphoneRequests == 0)
+            #expect(await provider.speechRequests == 0)
+            #expect(await controller.flushForExit())
+        }
+    }
+
+    @MainActor @Test func clockRecoveryBoundarySurvivesOrdinaryTimestampBackpressure() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), token = UUID()
+        let controller = try await controller(project: project,provider: provider,target: target,token: token)
+        controller.start(); try await waitFor { controller.mode == .recording }
+        // MainActor does not yield while filling the real serial write queue.
+        for index in 1...40 {
+            controller.record(.init(host: 100+Double(index)/1000,seconds: 10,rate: 0,available: true),token: token)
+        }
+        #expect(controller.pendingWrites > 32)
+        controller.record(.init(host: .nan,seconds: 10,rate: 0,available: true),token: token)
+        let queued = controller.pendingWrites
+        controller.record(.init(host: 100.8,seconds: 10,rate: 0,available: true),token: token)
+        #expect(controller.pendingWrites == queued+1)
+        controller.record(.init(host: 100.9,seconds: 10,rate: 0,available: true),kind: .pause,token: token)
+        await provider.emit(.clock(audioStart: 0,duration: 1,hostStart: 100))
+        await provider.emit(.speech(.init(segmentID: "backpressure-clock-loss",text: "Keep these words across clock loss",isFinal: true,audioStart: 0.05,audioEnd: 0.85)))
+        try await waitFor { controller.document.notes.count == 1 }
+        #expect(controller.document.notes[0].state == .needsResolution && controller.unsavedActions == 0)
+        #expect(await controller.stop())
+        #expect(await controller.flushForExit())
+        let reopened = try await repository.load()
+        #expect(reopened.notes[0].text == "Keep these words across clock loss" && reopened.notes[0].state == .needsResolution)
+        #expect(!reopened.sessions[0].playhead.contains { $0.hostStart < 100.5 && $0.confirmedThrough > 100.5 })
+    }
+
+    @MainActor @Test func nonfiniteClockLossNeverBridgesFeedbackWhenValidClockReturns() async throws {
+        for invalid in [VoiceLivePlayhead(host: .nan,seconds: 10,rate: 0,available: true),
+                        .init(host: 100.5,seconds: .nan,rate: 0,available: true)] {
+            let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let provider = MockVoiceProvider(), token = UUID()
+            let controller = try await controller(project: project,provider: provider,target: target,token: token)
+            controller.start(); try await waitFor { controller.mode == .recording }
+            controller.record(.init(host: 100.2,seconds: 10,rate: 0,available: true),token: token)
+            controller.record(invalid,token: token)
+            #expect(!controller.playbackAvailable)
+            // Even a transport callback must not extend the preceding span
+            // across the unknown interval, despite matching paused seconds.
+            controller.record(.init(host: 100.8,seconds: 10,rate: 0,available: true),kind: .pause,token: token)
+            controller.record(.init(host: 101.2,seconds: 10,rate: 0,available: true),token: token)
+            await provider.emit(.clock(audioStart: 0,duration: 1.2,hostStart: 100))
+            await provider.emit(.speech(.init(segmentID: "lost-clock",text: "Retain these words across clock loss",isFinal: true,audioStart: 0.1,audioEnd: 1)))
+            try await waitFor { controller.document.notes.count == 1 }
+            #expect(controller.document.notes[0].state == .needsResolution && controller.unsavedActions == 0)
+            #expect(await controller.stop())
+            #expect(await controller.flushForExit())
+            let reopened = try await repository.load()
+            #expect(reopened.notes[0].text == "Retain these words across clock loss" && reopened.notes[0].state == .needsResolution)
+            let spans = try #require(reopened.sessions.last).playhead
+            #expect(spans.allSatisfy { $0.hostStart.isFinite && $0.confirmedThrough.isFinite && $0.seconds.isFinite })
+            #expect(!spans.contains { $0.hostStart < 100.5 && $0.confirmedThrough > 100.5 })
+        }
     }
 
 }

@@ -40,6 +40,7 @@ final class VoiceReviewController {
     private(set) var renderProgress = ""
     private(set) var candidatePlaybackID: UUID?
     private(set) var frameCommentLease: UUID?
+    private(set) var playbackAvailable = false
     var restructuringCards: Set<UUID> = []
     var cardInputs: [UUID:VoiceCardInput] = [:]
     func cardInput(for note: UUID) -> VoiceCardInput {
@@ -91,9 +92,10 @@ final class VoiceReviewController {
     @ObservationIgnored private var pendingStopCancelled = false
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var attemptID: UUID?
-    @ObservationIgnored private var viewToken: UUID?
+    private var viewToken: UUID?
     @ObservationIgnored private var epoch = UUID()
     @ObservationIgnored private var latest: VoiceLivePlayhead?
+    @ObservationIgnored private var clockWasLost = false
     @ObservationIgnored private var clockSampler: (@MainActor () -> VoiceLivePlayhead)?
 
     init(project: Project, provider: any VoiceReviewDictating = DictateReviewAdapter(), defaults: UserDefaults = .standard,
@@ -107,7 +109,7 @@ final class VoiceReviewController {
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
     var hasPendingWork: Bool { !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
-    var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
+    var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
     var canPresentCandidate: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
@@ -191,18 +193,29 @@ final class VoiceReviewController {
     }
 
     func record(_ sample: VoiceLivePlayhead, kind: VoiceTransportKind = .sample, token: UUID?) {
-        guard token == viewToken, sample.host.isFinite, sample.seconds.isFinite else { return }
+        guard token == viewToken else { return }
+        guard sample.host.isFinite, sample.seconds.isFinite else {
+            // There is no valid timestamp to persist. End continuity now; the
+            // next valid sample must not confirm playback through this gap.
+            playbackAvailable = false; latest = nil; epoch = UUID(); clockWasLost = true; return
+        }
         let supportedRate = sample.rate.isFinite && (-4...4).contains(sample.rate)
         let observed = VoiceLivePlayhead(host: sample.host,seconds: sample.seconds,
-            rate: supportedRate ? sample.rate:0,available: sample.available && supportedRate)
+            rate: supportedRate ? sample.rate:0,available: sample.available && supportedRate && kind != .seekRequested && kind != .unavailable)
+        if playbackAvailable != observed.available { playbackAvailable = observed.available }
         let event: VoiceTransportKind
-        if kind == .sample, let latest, latest.available != observed.available { event = .unavailable }
+        let recoveringClock = clockWasLost
+        // The fresh epoch forces repository.observe's non-bridging sample path,
+        // even if recovery arrived as a play/pause/seek callback.
+        if recoveringClock { event = .sample }
+        else if kind == .sample, let latest, latest.available != observed.available { event = .unavailable }
         else if kind == .sample, let latest, latest.rate != observed.rate { event = .rateChanged }
         else { event = kind }
         latest = observed
-        guard let id = sessionID else { return }
-        if pendingWrites > 32 && event == .sample { return }
+        guard let id = sessionID else { clockWasLost = false; return }
+        if pendingWrites > 32 && event == .sample && !recoveringClock { return }
         if pendingWrites > 256 { error = "Voice review storage cannot keep up. Capture stopped; resolve incomplete feedback."; Task { _ = await stop(cancel: true) }; return }
+        clockWasLost = false
         if event != .sample { epoch = UUID() }
         let boundTarget = observed.available && kind != .seekRequested && kind != .unavailable ? target?.id : nil
         let generation = epoch
@@ -212,6 +225,10 @@ final class VoiceReviewController {
 
     func start() {
         guard canStart, let target, let sample = clockSampler?() ?? latest else { error = "Choose a verified version and microphone, then grant the required access before starting."; return }
+        guard sample.available, sample.host.isFinite, sample.seconds.isFinite, (0...target.duration).contains(sample.seconds),
+              sample.rate.isFinite, (-4...4).contains(sample.rate) else {
+            playbackAvailable = false; error = "Playback is unavailable. Wait for the watched version to be ready before starting."; return
+        }
         error = nil; mode = .starting
         let id = UUID(), attempt = UUID(), uid = selectedDeviceUID, language = locale
         sessionID = id; attemptID = attempt
