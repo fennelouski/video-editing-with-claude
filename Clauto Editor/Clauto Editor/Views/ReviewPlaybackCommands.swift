@@ -109,6 +109,17 @@ import Observation
             editor = controller
         } catch { voice.endFrameComment(lease); store.notice = error.localizedDescription }
     }
+    func recoverDictation(_ record: RegionDictationRecord,project: Project) {
+        guard editor == nil, let store, let voice = store.voiceReview(for: project) else { return }
+        let controller = store.frameComment(for: project), lease = UUID()
+        guard !controller.hasPendingWork, voice.beginFrameComment(lease) else { store.notice = "Finish or close the open frame first."; return }
+        selected?.driver.pause()
+        do {
+            try controller.beginRecoverDictation(record.id)
+            controller.releaseLease = { [weak voice] in voice?.endFrameComment(lease) }
+            editor = controller
+        } catch { voice.endFrameComment(lease); store.notice = error.localizedDescription }
+    }
     func restoreInlineSelection() {
         guard let id = inlineEndpointID else { return }
         if let session = store?.reviewPlayers[id] { intendedVersionID = session.version.id }

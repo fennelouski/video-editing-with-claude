@@ -308,6 +308,10 @@ final class VoiceReviewController {
         }
     }
     func cancelVoiceSetup() { voiceSetupTask?.cancel() }
+    func relinquishMicrophoneForRegion() async -> Bool {
+        voiceSetupTask?.cancel(); await voiceSetupTask?.value
+        return await stop()
+    }
 
     func willAttach(_ token: UUID) {
         guard candidatePlaybackID == nil || candidatePlaybackID == token else { return }

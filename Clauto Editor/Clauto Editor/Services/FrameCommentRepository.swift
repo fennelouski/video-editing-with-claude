@@ -259,9 +259,11 @@ actor FrameCommentRepository {
                 record = previous // Retain the original creation timestamp.
             } else if errno != ENOENT { throw ProjectFailure.invalidProject }
         } else if errno != ENOENT { throw ProjectFailure.invalidProject }
-        let peopleLease = references.isEmpty ? nil : try ProjectMutationLease.acquire(project)
+        let hasDictation = annotations.contains { !($0.dictationSessionIDs ?? []).isEmpty }
+        let peopleLease = references.isEmpty && !hasDictation ? nil : try ProjectMutationLease.acquire(project)
         defer { withExtendedLifetime(peopleLease) {} }
         if !references.isEmpty { try ProjectPeopleRepository.checkReferences(references,project: project) }
+        for shape in annotations { try RegionDictationRepository.checkReferences(shape.dictationSessionIDs ?? [],region: shape.id,frame: frame,project: project) }
         try VoiceReviewProvenance.check(frame.request.target,project: project)
         let movie = try VoiceReviewProvenance.url(frame.request.target.preview.relativePath,project: project)
         let source = try SourceRenderDirectory.open(movie.deletingLastPathComponent())

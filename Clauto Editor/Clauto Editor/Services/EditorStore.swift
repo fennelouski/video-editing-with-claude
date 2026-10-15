@@ -40,6 +40,7 @@ final class EditorStore {
     }
     let playbackPreferences: ReviewPlaybackPreferences
     @ObservationIgnored private let voiceProvider = DictateReviewAdapter()
+    @ObservationIgnored private let regionDictationAdmission = RegionDictationAdmission()
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
     @ObservationIgnored private let workflow = WorkflowRepository()
@@ -81,7 +82,12 @@ final class EditorStore {
 
     func frameComment(for project: Project) -> FrameCommentController {
         if let controller = frameComments[project.id] { return controller }
-        let controller = FrameCommentController(project: project,peopleDetector: LocalFramePeopleDetector())
+        let dictation = RegionDictationController(project: project,provider: voiceProvider,admission: regionDictationAdmission) { [weak self] in
+            guard let self else { return false }
+            for voice in self.voiceReviews.values { if !(await voice.relinquishMicrophoneForRegion()) { return false } }
+            return true
+        }
+        let controller = FrameCommentController(project: project,peopleDetector: LocalFramePeopleDetector(),dictation: dictation)
         frameComments[project.id] = controller; return controller
     }
 

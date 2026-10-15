@@ -144,6 +144,15 @@ struct ReviewVersionWorkspace: View {
                                 })
                         }
                         if let comments = store.frameComments[project.id] {
+                            if let dictation = comments.dictation {
+                                ForEach(dictation.visibleHistory.filter { $0.request.target.versionID == version.id && !$0.revisions.isEmpty }) { record in
+                                    VStack(alignment: .leading,spacing: 6) {
+                                        Text("Dictated region · "+ReviewTimecode.label(frame: record.request.frame.frameIndex)).font(.caption.monospacedDigit())
+                                        Text(record.transcript).textSelection(.enabled)
+                                        Button("Open Dictated Region") { router.recoverDictation(record,project: project) }
+                                    }.padding(10).background(ClautoDesign.sheet)
+                                }
+                            }
                             ForEach(comments.comments.filter { $0.request.target.versionID == version.id }) { comment in
                                 VStack(alignment: .leading,spacing: 6) {
                                     Text(ReviewTimecode.label(frame: comment.request.frame.frameIndex)).font(.caption.monospacedDigit())

@@ -81,8 +81,10 @@ struct FrameEllipse: Codable, Equatable, Identifiable, Sendable {
     var note: String? = nil
     var person: ProjectPersonReference? = nil
     var mentions: [FramePersonMention]? = nil
+    var dictationSessionIDs: [UUID]? = nil
     func validate(width: Int, height: Int) throws {
         try bounds.validate()
+        if let ids = dictationSessionIDs { guard ids.count <= 64, Set(ids).count == ids.count else { throw ProjectFailure.invalidProject } }
         guard width > 0, height > 0, bounds.width*Double(width) >= 1, bounds.height*Double(height) >= 1,
               kind != .circle || abs(bounds.width*Double(width)-bounds.height*Double(height)) <= 0.01 else { throw WorkflowFailure.invalid("A circle must have equal width and height in the captured video, with at least one pixel on each axis.") }
         if kind == .freehand {

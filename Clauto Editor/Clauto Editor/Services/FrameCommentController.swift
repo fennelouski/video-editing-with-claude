@@ -17,6 +17,9 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     private var nextSaveID: UUID?
     var text: String
     var history: FrameAnnotationHistory
+    private var noteEditRevisions: [UUID:Int] = [:]
+    private var historyEditRevision = 0
+    func dictationEditIdentity(_ region: UUID) -> [Int] { [historyEditRevision,noteEditRevisions[region] ?? 0] }
     var selectedShapeID: UUID?
     var tool = FrameAnnotationKind.ellipse
     var selecting = false
@@ -40,8 +43,9 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
         guard let selectedShapeID else { return }
         try updateRegion(selectedShapeID,tag: tag,note: note)
     }
-    func updateRegion(_ id: UUID,tag: String,note: String) throws {
+    func updateRegion(_ id: UUID,tag: String,note: String,dictated: Bool = false) throws {
         guard frame != nil, let index = history.shapes.firstIndex(where: { $0.id == id }) else { return }
+        let previousNote = history.shapes[index].note ?? ""
         var shapes = history.shapes
         shapes[index].mentions = FramePersonMention.rebased(shapes[index].mentions,from: shapes[index].note ?? "",to: note)
         shapes[index].tag = tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil:tag
@@ -49,15 +53,16 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
         // Retain all draft wording, including over-limit input. Save validates;
         // a field edit must never silently truncate or replace the user's words.
         try history.replace(shapes)
+        if !dictated, !previousNote.utf8.elementsEqual(note.utf8) { noteEditRevisions[id,default: 0] += 1 }
     }
     func resizeSelected(_ bounds: NormalizedVideoRect) throws {
         guard let frame, let selectedShapeID, let old = history.shapes.first(where: { $0.id == selectedShapeID }) else { return }
         let points = old.points?.map { NormalizedVideoPoint(x: bounds.x+($0.x-old.bounds.x)/old.bounds.width*bounds.width,y: bounds.y+($0.y-old.bounds.y)/old.bounds.height*bounds.height) }
-        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note,person: old.person,mentions: old.mentions)
+        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note,person: old.person,mentions: old.mentions,dictationSessionIDs: old.dictationSessionIDs)
         try next.validate(width: frame.width,height: frame.height)
         try history.replace(history.shapes.map { $0.id == old.id ? next:$0 })
     }
-    func removeSelected() throws { if let selectedShapeID { try history.remove(selectedShapeID); self.selectedShapeID = nil } }
+    func removeSelected() throws { if let selectedShapeID { try history.remove(selectedShapeID); noteEditRevisions[selectedShapeID,default: 0] += 1; self.selectedShapeID = nil } }
     func associate(_ reference: ProjectPersonReference?,with region: UUID,in people: ProjectPeopleDocument) throws {
         guard frame != nil, people.projectID == request.target.projectID else { throw ProjectFailure.invalidProject }
         guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
@@ -80,14 +85,22 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
         mentions.append(.init(id: UUID(),person: reference,utf16Start: query.utf16Start,utf16Length: ("@"+reference.nameSnapshot).utf16.count,noteSHA256: FramePersonMention.hash(text)))
         next[index].note = text; next[index].mentions = mentions.sorted { $0.utf16Start < $1.utf16Start }
         try next[index].validate(width: frame.width,height: frame.height); try history.replace(next)
+        noteEditRevisions[region,default: 0] += 1
     }
     func removeMention(_ id: UUID,region: UUID) throws {
         guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
         var next = history.shapes; let kept = next[index].mentions?.filter { $0.id != id } ?? []
         next[index].mentions = kept.isEmpty ? nil:kept; try history.replace(next)
     }
-    func undo() { history.undo(); selectedShapeID = nil }
-    func redo() { history.redo(); selectedShapeID = nil }
+    func undo() { if history.canUndo { history.undo(); historyEditRevision += 1 }; selectedShapeID = nil }
+    func redo() { if history.canRedo { history.redo(); historyEditRevision += 1 }; selectedShapeID = nil }
+    func linkDictation(_ session: UUID,to region: UUID) throws {
+        guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
+        var next = history.shapes, ids = next[index].dictationSessionIDs ?? []
+        if !ids.contains(session) { ids.append(session) }
+        guard ids.count <= 64 else { throw WorkflowFailure.invalid("This region has reached its saved dictation limit. Add another region for more feedback.") }
+        next[index].dictationSessionIDs = ids; try history.replace(next)
+    }
     var validationIssue: String? {
         guard let frame else { return "Wait for the captured frame." }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || history.shapes.contains(where: { $0.note != nil }) else { return "Add a frame or region note before saving." }
@@ -114,6 +127,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     nonisolated let id: UUID
     let project: Project
     let repository: FrameCommentRepository
+    let dictation: RegionDictationController?
     private(set) var comments: [SavedFrameComment] = []
     private(set) var draft: FrameCommentDraft?
     private(set) var preparing = false
@@ -135,13 +149,13 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     @ObservationIgnored private var draftEpoch = UUID()
     @ObservationIgnored private var saveTask: Task<Bool,Never>?
     @ObservationIgnored var releaseLease: (() -> Void)?
-    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService(), peopleDetector: (any ReviewPeopleDetecting)? = nil, saveCheckpoint: @escaping @Sendable () async throws -> Void = {}) {
-        id = project.id; self.project = project; self.capture = capture; self.peopleDetector = peopleDetector; self.saveCheckpoint = saveCheckpoint; repository = .init(project: project)
+    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService(), peopleDetector: (any ReviewPeopleDetecting)? = nil, dictation: RegionDictationController? = nil, saveCheckpoint: @escaping @Sendable () async throws -> Void = {}) {
+        id = project.id; self.project = project; self.dictation = dictation; self.capture = capture; self.peopleDetector = peopleDetector; self.saveCheckpoint = saveCheckpoint; repository = .init(project: project)
     }
-    var hasPendingWork: Bool { draft != nil || preparing || saveTask != nil || peopleBusy }
+    var hasPendingWork: Bool { draft != nil || preparing || saveTask != nil || peopleBusy || dictation?.hasPendingWork == true }
     func load() async {
         do { comments = try await repository.list() } catch { self.error = error.localizedDescription }
-        await refreshPeople()
+        await refreshPeople(); await dictation?.load()
     }
     func refreshPeople() async {
         guard !peopleBusy else { return }
@@ -262,14 +276,61 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
             } catch { if draftEpoch == epoch { self.error = error.localizedDescription } }
         }
     }
+    func dictateRegion(_ id: UUID) {
+        guard !saving, let dictation, !dictation.hasPendingWork, let draft, let frame = draft.frame,
+              let region = draft.history.shapes.first(where: { $0.id == id }), (region.dictationSessionIDs?.count ?? 0) < 64 else { return }
+        let userEditIdentity = draft.dictationEditIdentity(id)
+        var projection = RegionDictationProjection(draftID: draft.id,regionID: id,base: region.note ?? "",applied: region.note ?? "")
+        dictation.start(frame: frame,region: region,draftID: draft.id) { [weak self] record in
+            guard let self, let current = self.draft, current.id == projection.draftID else { return }
+            do {
+                if current.dictationEditIdentity(id) != userEditIdentity { projection.conflicted = true }
+                let shape = current.history.shapes.first { $0.id == projection.regionID }
+                // The durable anchor can be linked without any spoken words.
+                // A user-removed region is never recreated by late results.
+                if !projection.conflicted, let shape { try current.linkDictation(record.id,to: shape.id) }
+                if let next = projection.next(transcript: record.transcript,current: shape?.note ?? (shape == nil ? nil:"")), let shape {
+                    try current.updateRegion(shape.id,tag: shape.tag ?? "",note: next,dictated: true)
+                }
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+    func closeDictationAndCancel() async -> Bool {
+        guard !saving else { return false }
+        if let dictation, !(await dictation.finish()) { error = dictation.error; return false }
+        return cancel()
+    }
+    func beginRecoverDictation(_ id: UUID) throws {
+        guard draft == nil, !preparing, !saving, let dictation else { throw ProjectFailure.invalidProject }
+        let epoch = draftEpoch, generation = UUID(); preparing = true; preparationID = generation
+        preparation = Task {
+            defer { if preparationID == generation { preparing = false; preparation = nil; preparationID = nil } }
+            do {
+                let (record,frame) = try await dictation.repository.read(id)
+                try Task.checkCancellation()
+                guard draft == nil, draftEpoch == epoch else { return }
+                var shape = record.region
+                let base = shape.note ?? "", spoken = record.transcript
+                shape.note = base+(base.isEmpty || spoken.isEmpty ? "":" ")+spoken
+                shape.mentions = FramePersonMention.rebased(shape.mentions,from: base,to: shape.note ?? "")
+                shape.dictationSessionIDs = Array(Set((shape.dictationSessionIDs ?? [])+[record.id])).sorted { $0.uuidString < $1.uuidString }
+                draft = .init(request: record.request,shapes: [shape],frame: frame)
+                draft?.selectedShapeID = shape.id; error = nil
+            } catch { if draftEpoch == epoch { self.error = error.localizedDescription } }
+        }
+    }
+    var canSaveFrameComment: Bool {
+        !saving && !preparing && !peopleBusy && draft?.frame != nil && (draft?.canAttemptSave == true || dictation?.active == true)
+    }
     @discardableResult func save() async -> Bool {
         if let saveTask { return await saveTask.value }
         guard !peopleBusy else { error = "Wait for the person update to finish before saving this frame comment."; return false }
-        guard let draft, let frame = draft.frame, draft.canAttemptSave else { error = "Add a frame or region note before saving. A mark alone is not an editing instruction."; return false }
+        guard let draft, let frame = draft.frame, draft.canAttemptSave || dictation?.active == true else { error = "Add a frame or region note before saving. A mark alone is not an editing instruction."; return false }
         saving = true; error = nil
         let task = Task { () -> Bool in
             defer { saving = false; saveTask = nil }
             do {
+                if let dictation, !(await dictation.finish()) { error = dictation.error; return false }
                 // Finish an uncertain earlier attempt exactly before saving
                 // newer words as its child. Two passes bound continuous edits.
                 for pass in 0..<2 {
@@ -291,7 +352,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
         saveTask = task; return await task.value
     }
     @discardableResult func cancel() -> Bool {
-        guard !saving else { error = "Wait for the save to finish before closing this frame comment."; return false }
+        guard !saving, dictation?.hasPendingWork != true else { error = "Wait for the dictated words to finish saving before closing this frame comment."; return false }
         let requestID = draft?.request.id
         draftEpoch = UUID(); preparation?.cancel(); stopPeopleDetection(); draft = nil; preparing = false; error = nil
         if let requestID { Task { await capture.cancel(requestID) } }
@@ -299,6 +360,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     }
     func flushForExit() async -> Bool {
         if let saveTask { _ = await saveTask.value }
+        if let dictation, !(await dictation.finish()) { return false }
         return draft == nil && !preparing && !saving && !peopleBusy
     }
 }

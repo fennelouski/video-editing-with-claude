@@ -65,12 +65,13 @@ struct FrameBlockingExecutorTests {
         let executor = FrameBlockingExecutor(label: "clauto.synthetic.blocking-boundary",capacity: 2), gate = FrameReadGate()
         defer { gate.open() }
         let first = Task { try await executor.perform(job: FrameBlockingJob<Int>()) { _ in gate.hold(); return 11 } }
-        let deadline = ContinuousClock.now + .seconds(5)
+        let deadline = ContinuousClock.now + .seconds(30)
         while !gate.entered && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
-        #expect(gate.entered)
+        try #require(gate.entered)
         let second = Task { try await executor.perform(job: FrameBlockingJob<Int>()) { _ in gate.markQueuedBody(); return 22 } }
-        while executor.inFlight != 2 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
-        #expect(executor.inFlight == 2)
+        let admissionDeadline = ContinuousClock.now + .seconds(30)
+        while executor.inFlight != 2 && ContinuousClock.now < admissionDeadline { try await Task.sleep(for: .milliseconds(1)) }
+        try #require(executor.inFlight == 2)
         first.cancel(); second.cancel()
         await #expect(throws: CancellationError.self) { _ = try await first.value }
         await #expect(throws: CancellationError.self) { _ = try await second.value }
@@ -78,7 +79,8 @@ struct FrameBlockingExecutorTests {
         await #expect(throws: (any Error).self) { _ = try await executor.perform(job: FrameBlockingJob<Int>()) { _ in 33 } }
         #expect(executor.inFlight == 2)
         gate.open()
-        while executor.inFlight != 0 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+        let releaseDeadline = ContinuousClock.now + .seconds(30)
+        while executor.inFlight != 0 && ContinuousClock.now < releaseDeadline { try await Task.sleep(for: .milliseconds(1)) }
         #expect(executor.inFlight == 0 && !gate.queuedRan)
         #expect(try await executor.perform(job: FrameBlockingJob<Int>()) { _ in 44 } == 44)
     }

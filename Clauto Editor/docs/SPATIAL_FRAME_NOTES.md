@@ -63,3 +63,8 @@ Typed-mention boundary correction: a confirmed token requires whitespace or a st
 
 
 Unicode range validation: saved UTF-16 positions must map to complete Character boundaries before any Character indexing. Positions inside emoji, combining sequences or joined characters refuse with an ordinary validation error. The note remains bounded to 4096 UTF-8 bytes; oversized draft edits keep their wording and clear person links.
+
+
+## Direct region dictation checkpoint
+
+The direct-region path now includes guided in-app local speech setup, immutable frame/region anchors, raw recognition revisions, manual-edit preservation, automatic final drain on Save/close and recoverable dictated-region history. See [DIRECT_REGION_DICTATION.md](DIRECT_REGION_DICTATION.md) for contracts, bounds and remaining native acceptance. Live conversation, spoken-name disambiguation and graphics/cutout/font completion remain separate requirements.

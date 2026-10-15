@@ -47,16 +47,16 @@ struct FrameCommentEditor: View {
                 if let issue = draft.validationIssue, draft.frame != nil { Text(issue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet) }
                 if let error = controller.error { Text(error).foregroundStyle(ClautoDesign.ember).font(ClautoDesign.caption).textSelection(.enabled) }
                 HStack {
-                    Button("Cancel") { if controller.cancel() { close() } }.keyboardShortcut(.cancelAction).disabled(controller.saving).accessibilityIdentifier("cancelFrameComment")
+                    Button("Cancel") { Task { if await controller.closeDictationAndCancel() { close() } } }.keyboardShortcut(.cancelAction).disabled(controller.saving).accessibilityIdentifier("cancelFrameComment")
                     Spacer()
                     if controller.saving { ProgressView().controlSize(.small); Text("Saving on the project drive…").font(ClautoDesign.caption) }
                     Button("Save Frame Comment") { Task { if await controller.save(), controller.draft == nil { close() } } }
-                        .disabled(!draft.canAttemptSave || controller.saving || controller.preparing || controller.peopleBusy).accessibilityIdentifier("saveFrameComment")
+                        .disabled(!controller.canSaveFrameComment).accessibilityIdentifier("saveFrameComment")
                 }
             } else {
                 if let error = controller.error { Text(error).foregroundStyle(ClautoDesign.ember) }
                 else { ClautoActivity(label: "Opening the saved frame…") }
-                Button("Cancel") { if controller.cancel() { close() } }.keyboardShortcut(.cancelAction).disabled(controller.saving)
+                Button("Cancel") { Task { if await controller.closeDictationAndCancel() { close() } } }.keyboardShortcut(.cancelAction).disabled(controller.saving)
             }
         }.padding(24) }.frame(minWidth: 840,idealWidth: 900,maxWidth: 1100,minHeight: 560,idealHeight: 780,maxHeight: 900)
             .background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).clautoThemeAppearance()
@@ -135,6 +135,7 @@ struct FrameCommentEditor: View {
                 guard !controller.saving else { return }
                 do { try draft.updateRegion(selected.id,tag: draft.history.shapes.first(where: { $0.id == selected.id })?.tag ?? "",note: value) } catch { controller.error = error.localizedDescription }
             }),axis: .vertical).lineLimit(2...3).textFieldStyle(.roundedBorder).accessibilityLabel("Written note for selected region").id("region-note-"+selected.id.uuidString)
+            regionDictationControls(selected,draft: draft)
             mentionControls(selected,draft: draft).disabled(controller.saving || controller.peopleBusy)
             HStack {
                 if let reference = selected.person { Text("Person: \(reference.nameSnapshot)").font(ClautoDesign.caption) }
@@ -150,6 +151,45 @@ struct FrameCommentEditor: View {
                     Button("Remove Person Link") { Task { await controller.assignPerson(nil,to: selected.id,draftID: draft.id) } }.disabled(controller.peopleBusy)
                 }
             }.id("region-person-"+selected.id.uuidString)
+        }
+    }
+    @ViewBuilder private func regionDictationControls(_ region: FrameEllipse,draft: FrameCommentDraft) -> some View {
+        if let dictation = controller.dictation {
+            HStack {
+                Button("Dictate This Region") { controller.dictateRegion(region.id) }
+                    .disabled(controller.saving || dictation.hasPendingWork || (region.dictationSessionIDs?.count ?? 0) >= 64)
+                    .accessibilityIdentifier("dictateFrameRegion")
+                if !dictation.devices.isEmpty, !dictation.active {
+                    Picker("Microphone",selection: Binding(get: { dictation.selectedDeviceUID },set: dictation.chooseDevice)) {
+                        ForEach(dictation.devices) { device in Text(device.name).tag(device.id) }
+                    }.frame(maxWidth: 240).disabled(dictation.storagePending)
+                }
+                if dictation.active {
+                    Button("Microphone Off") { Task { _ = await dictation.finish() } }.disabled(dictation.mode == .finishing)
+                    Text(dictation.mode == .preparing ? dictation.phase.label : dictation.mode == .finishing ? "Saving dictated words…" : "Listening to the original marked region…").font(ClautoDesign.caption)
+                    if dictation.mode == .preparing, let progress = dictation.progress { ProgressView(value: progress).frame(width: 90) }
+                }
+                if dictation.storagePending && !dictation.active {
+                    Button("Retry Saving Words") { Task { _ = await dictation.finish() } }
+                }
+            }
+            if let error = dictation.error { Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled) }
+            let sessions = dictation.visibleHistory.filter { $0.request == draft.request && $0.region.id == region.id }
+            if !sessions.isEmpty {
+                DisclosureGroup("Original dictated words") {
+                    ForEach(sessions) { session in
+                        VStack(alignment: .leading,spacing: 4) {
+                            Text(session.transcript.isEmpty ? "No recognized words yet." : session.transcript).textSelection(.enabled)
+                            DisclosureGroup("Recognition revisions (\(session.revisions.count))") {
+                                ForEach(Array(session.revisions.enumerated()),id: \.offset) { _,revision in
+                                    Text((revision.isFinal ? "Final: " : "Partial: ")+revision.text).textSelection(.enabled)
+                                }
+                            }
+                        }
+                    }
+                    Text("Typing or undoing a note keeps your wording. Later recognition stays here. Save handles the final words automatically.").font(ClautoDesign.caption)
+                }
+            }
         }
     }
     private func personLabel(_ person: ProjectPerson,in people: ProjectPeopleDocument) -> String {
