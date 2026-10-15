@@ -66,7 +66,7 @@ struct TranscriptCatalog: Codable, Sendable {
     }
 }
 
-struct TranscriptWord: Codable, Sendable {
+struct TranscriptWord: Codable, Equatable, Sendable {
     let word: String
     let start: Double
     let end: Double
@@ -79,9 +79,11 @@ struct TranscriptSource: Codable, Identifiable, Sendable {
     let transcriptSHA256: String
     let duration: Double
     let words: [TranscriptWord]
+    var originalTranscriptPath: String? = nil
     enum CodingKeys: String, CodingKey {
         case id = "source_id", path, sourceSHA256 = "source_sha256"
         case transcriptSHA256 = "transcript_sha256", duration = "duration_seconds", words
+        case originalTranscriptPath = "original_transcript"
     }
 }
 

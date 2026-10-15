@@ -131,6 +131,7 @@ actor WorkflowRepository {
     }
 
     func validate(_ run: EditRun, project: Project) throws {
+        try TranscriptProductionGate.requireLegacyPipelineAllowed(project: project)
         guard run.projectID == project.id, try projectFolder(for: run).resolvingSymlinksInPath().standardizedFileURL.path == project.folder.resolvingSymlinksInPath().standardizedFileURL.path else { throw ProjectFailure.invalidProject }
     }
 
@@ -205,6 +206,7 @@ actor WorkflowRepository {
     }
 
     func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) throws -> EditRun {
+        try TranscriptProductionGate.requireLegacyPipelineAllowed(project: project)
         try project.manifest.durationBounds?.validate()
         let missing = project.manifest.files.filter { !fm.fileExists(atPath: project.folder.appendingPathComponent($0.relativePath).path) }
         guard missing.isEmpty else { throw ProjectFailure.missingFile(missing.map(\.name).joined(separator: ", ")) }

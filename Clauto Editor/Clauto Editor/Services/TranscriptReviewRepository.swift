@@ -40,6 +40,11 @@ actor TranscriptReviewRepository {
                 }
                 return current
             }
+            let marker = try safe(".clauto/transcript-review-required.json", project: project)
+            if !fm.fileExists(atPath: marker.path) {
+                let association = try JSONSerialization.data(withJSONObject: ["project_id": project.id.uuidString, "review_required": true], options: [.sortedKeys])
+                try association.write(to: marker, options: .withoutOverwriting)
+            }
             let reviewID = UUID()
             let relative = base(reviewID)
             let folder = try safe(relative, project: project)
@@ -125,6 +130,131 @@ actor TranscriptReviewRepository {
             try data.write(to: destination, options: .withoutOverwriting)
             return destination
         }
+    }
+
+    func bound(expectedRevision: UUID, project: Project) throws -> TranscriptBoundReview {
+        let (session, head) = try read(project: project)
+        guard session.state.revisionID == expectedRevision else {
+            throw WorkflowFailure.invalid("The saved transcript selection changed. Reload and verify the current revision.")
+        }
+        return .init(session: session, revisionSHA256: head.stateSHA256)
+    }
+
+    func prepareSourceMap(expectedRevision: UUID, project: Project) throws -> (TranscriptSourceMap, URL) {
+        try locked(project: project) {
+            let map = try TranscriptSourceMap.compile(bound(expectedRevision: expectedRevision, project: project))
+            return (map, try writeMap(map, project: project))
+        }
+    }
+
+    func verifySource(rowID: String, expectedRevision: UUID, project: Project, progress: (@Sendable (Int64, Int64) async throws -> Void)? = nil) async throws -> VerifiedSourcePlayback {
+        let initial = try bound(expectedRevision: expectedRevision, project: project)
+        let map = try TranscriptSourceMap.compile(initial)
+        guard let span = map.spans.first(where: { $0.id == rowID }),
+              let source = initial.session.catalog.sources.first(where: { $0.id == span.sourceID }) else {
+            throw WorkflowFailure.invalid("Keep this passage before preparing its source preview.")
+        }
+        let media = try await SourceMediaVerifier().verify(source, progress: progress)
+        try media.validate(source: source)
+        try media.validate(span: span)
+        // Hashing/probing suspends this actor. Never attach its result to later choices.
+        try map.validate(against: bound(expectedRevision: expectedRevision, project: project))
+        try SourceMediaVerifier.checkCurrent(media)
+        return .init(projectID: project.id, reviewID: map.reviewID, revisionID: map.revisionID,
+            revisionSHA256: map.revisionSHA256, catalogSHA256: map.catalogSHA256, span: span, media: media)
+    }
+
+    func validatePlayback(_ playback: VerifiedSourcePlayback, project: Project) throws {
+        let current = try bound(expectedRevision: playback.revisionID, project: project)
+        let map = try TranscriptSourceMap.compile(current)
+        guard playback.projectID == project.id, playback.reviewID == map.reviewID,
+              playback.catalogSHA256 == map.catalogSHA256, playback.revisionSHA256 == map.revisionSHA256,
+              map.spans.contains(playback.span) else { throw WorkflowFailure.invalid("This source preview belongs to different review choices. Verify the current passage.") }
+        guard let source = current.session.catalog.sources.first(where: { $0.id == playback.span.sourceID }) else { throw ProjectFailure.invalidProject }
+        try playback.media.validate(source: source)
+        try playback.media.validate(span: playback.span)
+        try SourceMediaVerifier.checkCurrent(playback.media)
+    }
+
+    /// This deliberately records only a local review acknowledgment, never listening,
+    /// scientific accuracy, authenticated human approval, or permission to render.
+    func acknowledgeSourceReview(expectedRevision: UUID, project: Project, mappingsReviewed: Bool, orderAndNotesReviewed: Bool) async throws -> URL {
+        guard mappingsReviewed, orderAndNotesReviewed else { throw WorkflowFailure.invalid("Explicitly acknowledge the source mappings and speech order/notes first.") }
+        let initial = try bound(expectedRevision: expectedRevision, project: project)
+        let map = try TranscriptSourceMap.compile(initial)
+        var media: [VerifiedSourceMedia] = []
+        for sourceID in Set(map.spans.map(\.sourceID)).sorted() {
+            let source = initial.session.catalog.sources.first { $0.id == sourceID }!
+            let verified = try await SourceMediaVerifier().verify(source)
+            guard verified.transcriptSnapshotVerified else { throw WorkflowFailure.invalid("This source has no original transcript snapshot. Media preview is available, but full source-review acknowledgment requires that snapshot.") }
+            for span in map.spans where span.sourceID == sourceID { try verified.validate(span: span) }
+            media.append(verified)
+        }
+        return try locked(project: project) {
+            try map.validate(against: bound(expectedRevision: expectedRevision, project: project))
+            for verified in media { try SourceMediaVerifier.checkCurrent(verified) }
+            let mapURL = try writeMap(map, project: project)
+            let receipt = LocalSourceReviewAcknowledgement(schemaVersion: 1, id: UUID(), projectID: project.id,
+                reviewID: map.reviewID, revisionID: map.revisionID, catalogSHA256: map.catalogSHA256,
+                revisionSHA256: map.revisionSHA256, mapSHA256: try map.sha256(), created: Date(),
+                sourceMappingsReviewed: true, recordedSpeechOrderAndNotesReviewed: true, media: media,
+                approvalScope: "Local source mapping and speech-order/notes review only; listening and human identity are not attested.",
+                humanIdentityVerified: false, pairedEditorialApproval: false, humanFactApproval: false,
+                renderingAuthorized: false, appliedToCut: false)
+            let data = try encoder.encode(receipt); try writableSize(data)
+            let relative = base(map.reviewID) + "/source-review-" + receipt.id.uuidString + ".json"
+            let destination = try safe(relative, project: project)
+            try data.write(to: destination, options: .withoutOverwriting)
+            let pointer = SourceReviewPointer(revisionID: map.revisionID, receiptPath: relative, receiptSHA256: Self.sha(data),
+                mapPath: base(map.reviewID) + "/exports/" + mapURL.lastPathComponent, mapSHA256: try map.sha256())
+            try encoder.encode(pointer).write(to: safe(base(map.reviewID) + "/source-review-current.json", project: project), options: .atomic)
+            return destination
+        }
+    }
+
+    func currentSourceAcknowledgement(expectedRevision: UUID, project: Project) throws -> LocalSourceReviewAcknowledgement? {
+        let current = try bound(expectedRevision: expectedRevision, project: project)
+        let path = try safe(base(current.session.state.reviewID) + "/source-review-current.json", project: project)
+        guard fm.fileExists(atPath: path.path) else { return nil }
+        let pointer = try decode(SourceReviewPointer.self, data: boundedData(path))
+        guard pointer.revisionID == expectedRevision else { return nil }
+        let mapData = try boundedData(safe(pointer.mapPath, project: project))
+        let receiptData = try boundedData(safe(pointer.receiptPath, project: project))
+        guard Self.sha(mapData) == pointer.mapSHA256, Self.sha(receiptData) == pointer.receiptSHA256 else { throw ProjectFailure.invalidProject }
+        let map = try decode(TranscriptSourceMap.self, data: mapData); try map.validate(against: current)
+        let receipt = try decode(LocalSourceReviewAcknowledgement.self, data: receiptData)
+        guard receipt.schemaVersion == 1, receipt.projectID == project.id, receipt.reviewID == map.reviewID,
+              receipt.revisionID == map.revisionID, receipt.revisionSHA256 == map.revisionSHA256,
+              receipt.catalogSHA256 == map.catalogSHA256, receipt.mapSHA256 == pointer.mapSHA256,
+              receipt.sourceMappingsReviewed, receipt.recordedSpeechOrderAndNotesReviewed,
+              !receipt.humanIdentityVerified, !receipt.pairedEditorialApproval, !receipt.humanFactApproval,
+              !receipt.renderingAuthorized, !receipt.appliedToCut,
+              Set(receipt.media.map(\.sourceID)) == Set(map.spans.map(\.sourceID)),
+              receipt.media.count == Set(receipt.media.map(\.sourceID)).count else { throw ProjectFailure.invalidProject }
+        for media in receipt.media {
+            guard media.transcriptSnapshotVerified,
+                  let source = current.session.catalog.sources.first(where: { $0.id == media.sourceID }) else { throw ProjectFailure.invalidProject }
+            try media.validate(source: source)
+            try SourceMediaVerifier.checkCurrent(media)
+            for span in map.spans where span.sourceID == media.sourceID { try media.validate(span: span) }
+        }
+        return receipt
+    }
+
+    private struct SourceReviewPointer: Codable {
+        let revisionID: UUID
+        let receiptPath: String
+        let receiptSHA256: String
+        let mapPath: String
+        let mapSHA256: String
+    }
+    private func writeMap(_ map: TranscriptSourceMap, project: Project) throws -> URL {
+        let directory = try safe(base(map.reviewID) + "/exports", project: project)
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = try safe(base(map.reviewID) + "/exports/source-map-" + UUID().uuidString + ".json", project: project)
+        let data = try map.encoded(); try writableSize(data)
+        try data.write(to: url, options: .withoutOverwriting)
+        return url
     }
 
     func saveDraftCopy(_ draft: TranscriptReviewSession, project: Project) throws -> URL {
@@ -219,7 +349,7 @@ actor TranscriptReviewRepository {
 
 /// JSONDecoder accepts duplicate keys. Reject ambiguous catalogs/checkpoints,
 /// including escaped spellings of the same key, before decoding source identity.
-private struct TranscriptJSONKeys {
+struct TranscriptJSONKeys {
     var bytes: [UInt8]
     var index = 0
     static func validate(_ data: Data) throws {

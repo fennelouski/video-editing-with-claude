@@ -362,10 +362,22 @@ struct TranscriptReviewTests {
         #expect(reopened.state.decisions == saved.state.decisions)
         #expect(reopened.catalog.rows.map(\.text) == initial.catalog.rows.map(\.text))
         let selection = try await repo.export(expectedRevision: reopened.state.revisionID, project: project)
+        let (map, mapURL) = try await repo.prepareSourceMap(expectedRevision: reopened.state.revisionID, project: project)
+        #expect(map.spans.map(\.id) == reopened.state.rowOrder.filter { reopened.state.decisions[$0]!.keep })
+        #expect(map.spans.allSatisfy { span in
+            guard let row = reopened.rowsByID[span.id] else { return false }
+            return span.sourceID == row.sourceID && span.sourceIn == row.start && span.sourceOut == row.end
+        })
+        #expect(map.reviewOnly && !map.appliedToCut)
+        #expect(reopened.catalog.sources.allSatisfy { $0.originalTranscriptPath != nil })
+        #expect(try await repo.currentSourceAcknowledgement(expectedRevision: reopened.state.revisionID, project: project) == nil)
         #expect(hash(try Data(contentsOf: input)) == before)
         let report: [String: Any] = ["project": project.folder.path, "catalog_sha256": before, "source_clips": 27,
             "rows": 914, "words": 11900, "source_catalog_unchanged": true, "row_order_and_notes_reopened": true,
             "selected_bounds_issues": reopened.selectedBoundsIssues, "selection_export": selection.path,
+            "source_map": mapURL.path, "source_map_sha256": try map.sha256(), "source_map_spans": map.spans.count,
+            "untrimmed_selection_seconds_not_cut_runtime": map.untrimmedSelectionSeconds,
+            "source_map_original_coordinates_verified": true, "local_source_acknowledgement_recorded": false,
             "live_Sheet_accessed": false, "source_media_read_or_written": false, "cut_rendered_or_approved": false]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: project.folder.appendingPathComponent("TRANSCRIPT_ACCEPTANCE.json"), options: .withoutOverwriting)
         print("LOCAL_TRANSCRIPT_ACCEPTANCE=" + project.folder.path)

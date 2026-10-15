@@ -12,6 +12,11 @@ import Observation
     var failure: String?
     var exportedURL: URL?
     var recoveredDraftURL: URL?
+    private(set) var sourceMap: TranscriptSourceMap?
+    private(set) var sourceMapURL: URL?
+    private(set) var sourcePlayback: VerifiedSourcePlayback?
+    private(set) var sourceAcknowledgement: LocalSourceReviewAcknowledgement?
+    private(set) var sourceAcknowledgementURL: URL?
     @ObservationIgnored private let repository: TranscriptReviewRepository
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var operationWaiters: [CheckedContinuation<Void, Never>] = []
@@ -26,7 +31,12 @@ import Observation
         guard !loading, !saving, !dirty else { return }
         operationDescription = "Opening review…"
         loading = true; defer { finishOperation() }
-        do { session = try await repository.load(project: project); failure = nil }
+        do {
+            invalidateSourceReview()
+            session = try await repository.load(project: project)
+            if let session { sourceAcknowledgement = try await repository.currentSourceAcknowledgement(expectedRevision: session.state.revisionID, project: project) }
+            failure = nil
+        }
         catch { failure = error.localizedDescription }
     }
 
@@ -54,7 +64,7 @@ import Observation
     }
 
     private func changed(_ draft: TranscriptReviewSession) {
-        session = draft; generation += 1; dirty = true; failure = nil; exportedURL = nil
+        invalidateSourceReview(); session = draft; generation += 1; dirty = true; failure = nil; exportedURL = nil
         scheduleSave()
     }
 
@@ -92,7 +102,9 @@ import Observation
     @discardableResult func flush() async -> Bool {
         if dirty && saveTask == nil { scheduleSave() }
         if let task = saveTask { await task.value }
-        return !dirty && failure == nil
+        // A clean review may have a retryable read/probe error. Only unsaved
+        // choices prevent flushing; failed saves leave dirty set.
+        return !dirty
     }
 
     func undo() async {
@@ -101,6 +113,7 @@ import Observation
         loading = true; defer { finishOperation() }
         guard await flush(), let current = session else { return }
         do {
+            invalidateSourceReview()
             session = try await repository.undo(expectedRevision: current.state.revisionID, project: project)
             failure = nil; exportedURL = nil
         } catch { failure = error.localizedDescription }
@@ -124,7 +137,74 @@ import Observation
         do {
             let backup = try await repository.saveDraftCopy(draft, project: project)
             let latest = try await repository.load(project: project)
+            invalidateSourceReview()
             recoveredDraftURL = backup; session = latest; dirty = false; failure = nil
+        } catch { failure = error.localizedDescription }
+    }
+
+    private func invalidateSourceReview() {
+        sourceMap = nil; sourceMapURL = nil; sourcePlayback = nil
+        sourceAcknowledgement = nil; sourceAcknowledgementURL = nil
+    }
+
+    func clearSourcePlayback() { sourcePlayback = nil }
+
+    func prepareSourceMap() async {
+        guard !loading else { return }
+        operationDescription = "Mapping kept passages to their original clips…"
+        loading = true; defer { finishOperation() }
+        guard await flush(), let current = session else { return }
+        do {
+            let (map, url) = try await repository.prepareSourceMap(expectedRevision: current.state.revisionID, project: project)
+            sourceMap = map; sourceMapURL = url; failure = nil
+        } catch { failure = error.localizedDescription }
+    }
+
+    func verifySource(_ rowID: String) async {
+        guard !loading else { return }
+        sourcePlayback = nil
+        operationDescription = "Verifying local source bytes and audio coverage…"
+        loading = true; defer { finishOperation() }
+        guard await flush(), let current = session else { return }
+        do {
+            sourcePlayback = try await repository.verifySource(rowID: rowID, expectedRevision: current.state.revisionID, project: project) { [weak self] bytes, total in
+                if let controller = self { await controller.reportSourceVerification(bytes, total: total) }
+            }
+            failure = nil
+        } catch {
+            sourceAcknowledgement = nil; sourceAcknowledgementURL = nil
+            failure = error.localizedDescription
+        }
+    }
+
+    private func reportSourceVerification(_ bytes: Int64, total: Int64) {
+        guard loading else { return }
+        operationDescription = String(format: "Verifying local source bytes · %.0f of %.0f MB", Double(bytes) / 1_048_576, Double(total) / 1_048_576)
+    }
+
+    func validatePlayback(_ playback: VerifiedSourcePlayback) async throws {
+        guard !dirty, session?.state.revisionID == playback.revisionID,
+              sourcePlayback?.id == playback.id else { throw WorkflowFailure.invalid("The source preview selection changed. Verify this passage again.") }
+        try await repository.validatePlayback(playback, project: project)
+        guard !dirty, session?.state.revisionID == playback.revisionID, sourcePlayback?.id == playback.id else {
+            throw WorkflowFailure.invalid("The review changed during the playback check.")
+        }
+    }
+
+    func acknowledgeSources(expectedRevision: UUID, expectedGeneration: Int, mappingsReviewed: Bool, orderAndNotesReviewed: Bool) async {
+        guard !loading, !dirty, !saving, session?.state.revisionID == expectedRevision, generation == expectedGeneration else {
+            failure = "Choices changed after the review acknowledgment was clicked. Review the saved checkpoint again."; return
+        }
+        operationDescription = "Rechecking originals and saving the local review acknowledgment…"
+        loading = true; defer { finishOperation() }
+        guard await flush(), let current = session, current.state.revisionID == expectedRevision, generation == expectedGeneration else {
+            failure = "Choices changed before the review acknowledgment could be saved."; return
+        }
+        do {
+            let url = try await repository.acknowledgeSourceReview(expectedRevision: current.state.revisionID, project: project,
+                mappingsReviewed: mappingsReviewed, orderAndNotesReviewed: orderAndNotesReviewed)
+            sourceAcknowledgement = try await repository.currentSourceAcknowledgement(expectedRevision: current.state.revisionID, project: project)
+            sourceAcknowledgementURL = url; failure = nil
         } catch { failure = error.localizedDescription }
     }
 
