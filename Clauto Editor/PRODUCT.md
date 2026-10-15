@@ -35,3 +35,5 @@ license is introduced.
 The app UI's durable design decisions are in [DESIGN.md](DESIGN.md). Detailed
 product and engineering plans remain in [docs/PRODUCT.md](docs/PRODUCT.md) and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+Cutout Studio adds a project-local original/mask/revision workflow with local subject selection, manual brush corrections, undo/redo, feathered transparency and PNG output. It retains original encoded bytes, source/model/parameter hashes and earlier revisions. The bounded source/core increment does not establish actual Vision/native GUI acceptance or composition of its asset into a saved cut; see docs/CUTOUT_STUDIO.md.

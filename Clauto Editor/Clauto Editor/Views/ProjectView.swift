@@ -30,7 +30,7 @@ struct ProjectView: View {
                     ClautoAction("Project folder", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
-                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut)]).accessibilityIdentifier("projectTabs")
+                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
                     Spacer()
                 }.padding(.horizontal, 28).padding(.bottom, 20)
                 ClautoRule()
@@ -44,10 +44,11 @@ struct ProjectView: View {
                     Group {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
+                        else if tab == "Studio" { CutoutStudioView(controller: store.cutoutStudio(for: project)) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
                         else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
                     }.frame(maxHeight: .infinity)
-                    if tab != "Transcript" && tab != "Cut" {
+                    if tab != "Transcript" && tab != "Cut" && tab != "Studio" {
                         ClautoRule()
                         conversation(compact: true)
                     }

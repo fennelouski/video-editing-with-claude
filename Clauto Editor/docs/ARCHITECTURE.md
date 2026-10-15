@@ -221,3 +221,5 @@ mid-run. Each app version declares the engine versions it supports.
 | Disk nearly full | Warn before transcribe and render (ProRes alpha layers are large) |
 | Engine update breaks a project | Projects record engine version; update never applies mid-run; old version restorable |
 | User edits `brief.md` outside the app | App watches the file and marks the cut stale |
+
+The Cutout Studio module keeps source bytes, mask bases and generated PNG revisions under assets/generated-cutouts on the project drive. Descriptor-relative immutable publication and the shared project lease protect exact saved-base draft CAS; normal quit joins saves and retains failed corrections. Local detector work is independently bounded, and late responses cannot replace newer brush corrections. Native Vision/GUI and saved-cut composition acceptance remain separate. See CUTOUT_STUDIO.md.
