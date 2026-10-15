@@ -62,6 +62,15 @@ struct FrameMarkGesture: Sendable {
     }
     var isClick: Bool { !moved }
 }
+enum FrameMarkClickAction: Equatable, Sendable {
+    case select(UUID?), acceptPerson(UUID), newPin
+    static func resolve(existing: UUID?,proposal: UUID?,selecting: Bool) -> Self {
+        if let existing { return .select(existing) }
+        if selecting { return .select(nil) }
+        if let proposal { return .acceptPerson(proposal) }
+        return .newPin
+    }
+}
 struct FrameEllipse: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let kind: FrameAnnotationKind
@@ -69,6 +78,7 @@ struct FrameEllipse: Codable, Equatable, Identifiable, Sendable {
     var points: [NormalizedVideoPoint]? = nil
     var tag: String? = nil
     var note: String? = nil
+    var person: ProjectPersonReference? = nil
     func validate(width: Int, height: Int) throws {
         try bounds.validate()
         guard width > 0, height > 0, bounds.width*Double(width) >= 1, bounds.height*Double(height) >= 1,
@@ -175,6 +185,175 @@ struct SavedFrameComment: Codable, Equatable, Identifiable, Sendable {
               annotations.count <= 32, Set(annotations.map(\.id)).count == annotations.count,
               width > 0, height > 0, width <= 7680, height <= 7680, width*height <= 33_177_600,
               actualFrameTime == ReviewClockTime(value: request.frame.presentationValue,timescale: 24000), TranscriptCatalog.isSHA(framePNG_SHA256), reviewOnly, !productionAuthorized, !appliedToVideo else { throw ProjectFailure.invalidProject }
-        for shape in annotations { try shape.validate(width: width,height: height) }
+        for shape in annotations {
+            try shape.validate(width: width,height: height)
+            try shape.person?.validate(project: request.target.projectID)
+        }
+    }
+}
+
+/// Names are supplied by the user and scoped to one project. No visual or
+/// external identity is inferred by creating, matching or merging these IDs.
+enum ProjectPersonNames {
+    static func cleaned(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping }
+    static func valid(_ value: String) -> Bool {
+        !value.isEmpty && value == cleaned(value) && value.utf8.count <= 160 && !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+    static func folded(_ value: String) -> String { cleaned(value).folding(options: [.caseInsensitive,.diacriticInsensitive],locale: Locale(identifier: "en_US_POSIX")) }
+}
+struct ProjectPerson: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    var name: String
+    var previousNames: [String] = []
+    var revision = 1
+    var archived = false
+    var mergedIntoID: UUID? = nil
+    var active: Bool { !archived && mergedIntoID == nil }
+}
+struct ProjectPeopleChange: Codable, Equatable, Identifiable, Sendable {
+    enum Kind: String, Codable, Sendable { case create, rename, archive, restore, merge, split }
+    let id: UUID
+    let revision: Int
+    let kind: Kind
+    let people: [UUID]
+    let previousName: String?
+    let name: String?
+    let created: Date
+}
+struct ProjectPeopleDocument: Codable, Equatable, Sendable {
+    var schemaVersion = 1
+    let projectID: UUID
+    var revision = 0
+    var people: [ProjectPerson] = []
+    var changes: [ProjectPeopleChange] = []
+    func validate(project: UUID) throws {
+        guard schemaVersion == 1, projectID == project, people.count <= 512, changes.count <= 4096,
+              revision == changes.count, Set(people.map(\.id)).count == people.count, Set(changes.map(\.id)).count == changes.count else { throw ProjectFailure.invalidProject }
+        let ids = Set(people.map(\.id))
+        for person in people {
+            guard ProjectPersonNames.valid(person.name), person.revision > 0, person.revision <= max(1,revision),
+                  person.previousNames.count <= 64, Set(person.previousNames).count == person.previousNames.count,
+                  person.previousNames.allSatisfy(ProjectPersonNames.valid),
+                  person.mergedIntoID == nil || (person.archived && person.mergedIntoID != person.id && ids.contains(person.mergedIntoID!)) else { throw ProjectFailure.invalidProject }
+            var seen = Set<UUID>(), current: ProjectPerson? = person
+            while let value = current {
+                guard seen.insert(value.id).inserted else { throw ProjectFailure.invalidProject }
+                current = value.mergedIntoID.flatMap { id in people.first { $0.id == id } }
+            }
+        }
+        for (index,change) in changes.enumerated() {
+            guard change.revision == index+1, (1...2).contains(change.people.count), Set(change.people).count == change.people.count,
+                  change.people.allSatisfy(ids.contains), change.created.timeIntervalSince1970.isFinite,
+                  change.name.map(ProjectPersonNames.valid) ?? true, change.previousName.map(ProjectPersonNames.valid) ?? true else { throw ProjectFailure.invalidProject }
+        }
+        // The checksummed payload must describe the exact roster produced by its
+        // explicit history. A valid hash alone cannot authorize invented people,
+        // silent reassignment, skipped revisions or a changed historical label.
+        var replay: [ProjectPerson] = []
+        for change in changes {
+            let first = change.people[0]
+            switch change.kind {
+            case .create, .split:
+                let newID: UUID
+                if change.kind == .split {
+                    guard change.people.count == 2, replay.contains(where: { $0.id == first && $0.active }) else { throw ProjectFailure.invalidProject }
+                    newID = change.people[1]
+                } else {
+                    guard change.people.count == 1 else { throw ProjectFailure.invalidProject }
+                    newID = first
+                }
+                guard let name = change.name, change.previousName == nil, !replay.contains(where: { $0.id == newID }) else { throw ProjectFailure.invalidProject }
+                replay.append(.init(id: newID,name: name))
+            case .rename:
+                guard change.people.count == 1, let name = change.name,
+                      let i = replay.firstIndex(where: { $0.id == first && $0.active }),
+                      change.previousName == replay[i].name, name != replay[i].name else { throw ProjectFailure.invalidProject }
+                if !replay[i].previousNames.contains(replay[i].name) { replay[i].previousNames.append(replay[i].name) }
+                replay[i].name = name; replay[i].revision += 1
+            case .archive, .restore:
+                guard change.people.count == 1, change.name == nil, change.previousName == nil,
+                      let i = replay.firstIndex(where: { $0.id == first && $0.mergedIntoID == nil }),
+                      replay[i].archived == (change.kind == .restore) else { throw ProjectFailure.invalidProject }
+                replay[i].archived = change.kind == .archive; replay[i].revision += 1
+            case .merge:
+                guard change.people.count == 2, change.name == nil, change.previousName == nil,
+                      let i = replay.firstIndex(where: { $0.id == first && $0.active }),
+                      replay.contains(where: { $0.id == change.people[1] && $0.active }) else { throw ProjectFailure.invalidProject }
+                replay[i].archived = true; replay[i].mergedIntoID = change.people[1]; replay[i].revision += 1
+            }
+        }
+        guard replay == people else { throw ProjectFailure.invalidProject }
+    }
+    /// New assignments use an active profile's current label. Historical notes
+    /// retain their original ID and words through later renames or merges.
+    func validateReference(_ reference: ProjectPersonReference,historical: Bool = false) throws {
+        try reference.validate(project: projectID)
+        guard let person = people.first(where: { $0.id == reference.personID }),
+              historical ? ([person.name]+person.previousNames).contains(reference.nameSnapshot) : (person.active && reference.nameSnapshot == person.name) else { throw ProjectFailure.invalidProject }
+    }
+    func canonicalID(_ id: UUID) -> UUID? {
+        var seen = Set<UUID>(), next = id
+        while let person = people.first(where: { $0.id == next }), seen.insert(next).inserted {
+            if let merged = person.mergedIntoID { next = merged }
+            else { return person.active ? person.id:nil }
+        }
+        return nil
+    }
+    /// Return every candidate. Duplicate names always require explicit choice.
+    func mentionMatches(_ query: String,exact: Bool = false) -> [ProjectPerson] {
+        let wanted = ProjectPersonNames.folded(query)
+        var matches = Set<UUID>()
+        for person in people {
+            let named = ([person.name]+person.previousNames).contains { name in
+                let value = ProjectPersonNames.folded(name); return exact ? value == wanted:value.hasPrefix(wanted)
+            }
+            if named, let id = canonicalID(person.id) { matches.insert(id) }
+        }
+        return people.filter { matches.contains($0.id) }.sorted {
+            let first = ProjectPersonNames.folded($0.name), second = ProjectPersonNames.folded($1.name)
+            return first == second ? $0.id.uuidString < $1.id.uuidString:first < second
+        }
+    }
+}
+struct ProjectPersonReference: Codable, Equatable, Sendable {
+    let projectID: UUID
+    let personID: UUID
+    let nameSnapshot: String
+    let confirmedByUser: Bool
+    func validate(project: UUID) throws {
+        guard projectID == project, confirmedByUser, ProjectPersonNames.valid(nameSnapshot) else { throw ProjectFailure.invalidProject }
+    }
+}
+
+/// Field callbacks retain their original project/person even after selection
+/// changes. Delayed acknowledgements clear only the submitted wording.
+struct ProjectPersonNameDrafts: Sendable {
+    private struct Key: Hashable, Sendable { let project: UUID; let person: UUID }
+    private var values: [Key:String] = [:]
+    func text(for person: ProjectPerson,project: UUID) -> String { values[.init(project: project,person: person.id)] ?? person.name }
+    mutating func update(_ text: String,person: UUID,project: UUID) { values[.init(project: project,person: person)] = text }
+    mutating func acknowledge(_ submitted: String,person: UUID,project: UUID) {
+        let key = Key(project: project,person: person)
+        if values[key] == submitted { values[key] = nil }
+    }
+}
+
+/// Anonymous, frame-bound suggestions are not identities or tracking results.
+struct FramePersonProposal: Equatable, Identifiable, Sendable {
+    let id: UUID
+    let requestID: UUID
+    let frameSHA256: String
+    let bounds: NormalizedVideoRect
+    let confidence: Double
+    func validate(frame: FrozenReviewFrame) throws {
+        guard requestID == frame.request.id, frameSHA256 == frame.pngSHA256,
+              confidence.isFinite, (0.5...1).contains(confidence) else { throw ProjectFailure.invalidProject }
+        try FrameEllipse(id: id,kind: .highlight,bounds: bounds).validate(width: frame.width,height: frame.height)
+    }
+    static func fromVision(_ rect: CGRect,confidence: Double,frame: FrozenReviewFrame) -> Self? {
+        let value = Self(id: UUID(),requestID: frame.request.id,frameSHA256: frame.pngSHA256,
+                         bounds: .init(x: rect.minX,y: 1-rect.maxY,width: rect.width,height: rect.height),confidence: confidence)
+        guard rect.width > 0, rect.height > 0, (try? value.validate(frame: frame)) != nil else { return nil }
+        return value
     }
 }

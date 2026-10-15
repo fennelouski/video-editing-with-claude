@@ -427,3 +427,10 @@ unobserved during the foreground hold.
 ## Background frame-grid validation
 
 The common frame verifier moves synchronous sample scanning off Swift's shared cooperative workers onto a bounded owned serial queue. Cancellation promptly releases the awaiting task, refuses late publication and retains physical capacity until the underlying operation ends. All existing timestamp/decoder/provenance checks remain. A synchronous OS/NAS read is not forcibly interruptible; there is no hard I/O deadline. See [FRAME_CAPTURE_BACKGROUND_IO.md](FRAME_CAPTURE_BACKGROUND_IO.md). People/Vision implementation is excluded from this correction, and native/NAS/full-product acceptance remains held.
+
+
+## Local project people and frame links
+
+The isolated people milestone adds automatic local anonymous person-box analysis after a verified frame capture, explicit named region associations, a project roster with stable IDs and rename/archive/restore/merge history, and undoable link changes. Duplicate names stay separate choices. Catalog history must replay its saved roster exactly, and optional person references preserve earlier note labels through profile corrections. All storage remains on the project drive. See [PROJECT_PEOPLE.md](PROJECT_PEOPLE.md) for limits and remaining work.
+
+Synthetic detector tests avoid live Vision/model execution. Native UI, real detection accuracy, VoiceOver and the full product remain unaccepted under the foreground hold. Typed/spoken mentions, direct region dictation, tracking, original-camera time mapping and full split/unmerge remain unfinished. This section describes source implementation; the immutable source/build receipts determine acceptance of a particular milestone.

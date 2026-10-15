@@ -52,11 +52,17 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     func resizeSelected(_ bounds: NormalizedVideoRect) throws {
         guard let frame, let selectedShapeID, let old = history.shapes.first(where: { $0.id == selectedShapeID }) else { return }
         let points = old.points?.map { NormalizedVideoPoint(x: bounds.x+($0.x-old.bounds.x)/old.bounds.width*bounds.width,y: bounds.y+($0.y-old.bounds.y)/old.bounds.height*bounds.height) }
-        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note)
+        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note,person: old.person)
         try next.validate(width: frame.width,height: frame.height)
         try history.replace(history.shapes.map { $0.id == old.id ? next:$0 })
     }
     func removeSelected() throws { if let selectedShapeID { try history.remove(selectedShapeID); self.selectedShapeID = nil } }
+    func associate(_ reference: ProjectPersonReference?,with region: UUID,in people: ProjectPeopleDocument) throws {
+        guard frame != nil, people.projectID == request.target.projectID else { throw ProjectFailure.invalidProject }
+        guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
+        if let reference { try people.validateReference(reference) }
+        var next = history.shapes; next[index].person = reference; try history.replace(next)
+    }
     func undo() { history.undo(); selectedShapeID = nil }
     func redo() { history.redo(); selectedShapeID = nil }
     var validationIssue: String? {
@@ -89,19 +95,105 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     private(set) var draft: FrameCommentDraft?
     private(set) var preparing = false
     private(set) var saving = false
+    private(set) var people: ProjectPeopleDocument?
+    private(set) var peopleBusy = false
+    var peopleError: String?
+    private(set) var personProposals: [FramePersonProposal] = []
+    private(set) var findingPeople = false
+    private(set) var peopleDetectionError: String?
     var error: String?
     @ObservationIgnored private let capture: any ReviewFrameCapturing
     @ObservationIgnored private let saveCheckpoint: @Sendable () async throws -> Void
+    @ObservationIgnored private let peopleDetector: (any ReviewPeopleDetecting)?
+    @ObservationIgnored private var detection: Task<Void,Never>?
+    @ObservationIgnored private var detectionID: UUID?
     @ObservationIgnored private var preparation: Task<Void,Never>?
     @ObservationIgnored private var preparationID: UUID?
     @ObservationIgnored private var draftEpoch = UUID()
     @ObservationIgnored private var saveTask: Task<Bool,Never>?
     @ObservationIgnored var releaseLease: (() -> Void)?
-    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService(), saveCheckpoint: @escaping @Sendable () async throws -> Void = {}) {
-        id = project.id; self.project = project; self.capture = capture; self.saveCheckpoint = saveCheckpoint; repository = .init(project: project)
+    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService(), peopleDetector: (any ReviewPeopleDetecting)? = nil, saveCheckpoint: @escaping @Sendable () async throws -> Void = {}) {
+        id = project.id; self.project = project; self.capture = capture; self.peopleDetector = peopleDetector; self.saveCheckpoint = saveCheckpoint; repository = .init(project: project)
     }
-    var hasPendingWork: Bool { draft != nil || preparing || saveTask != nil }
-    func load() async { do { comments = try await repository.list() } catch { self.error = error.localizedDescription } }
+    var hasPendingWork: Bool { draft != nil || preparing || saveTask != nil || peopleBusy }
+    func load() async {
+        do { comments = try await repository.list() } catch { self.error = error.localizedDescription }
+        await refreshPeople()
+    }
+    func refreshPeople() async {
+        guard !peopleBusy else { return }
+        peopleBusy = true; defer { peopleBusy = false }
+        do { people = try await ProjectPeopleRepository(project: project).load(); peopleError = nil }
+        catch { people = nil; peopleError = error.localizedDescription }
+    }
+    func assignPerson(_ id: UUID?,to region: UUID,draftID: UUID) async {
+        guard !peopleBusy, !saving, draft?.id == draftID else { return }
+        peopleBusy = true; defer { peopleBusy = false }
+        do {
+            let current = try await ProjectPeopleRepository(project: project).load(); people = current
+            guard !saving, let draft, draft.id == draftID, draft.history.shapes.contains(where: { $0.id == region }) else { return }
+            let reference: ProjectPersonReference?
+            if let id {
+                guard let person = current.people.first(where: { $0.id == id && $0.active }) else { throw WorkflowFailure.invalid("This person's name changed. Choose an available person again.") }
+                reference = .init(projectID: project.id,personID: id,nameSnapshot: person.name,confirmedByUser: true)
+            } else { reference = nil }
+            try draft.associate(reference,with: region,in: current); peopleError = nil
+        } catch { peopleError = error.localizedDescription }
+    }
+    func createPerson(name: String) async -> Bool {
+        await changePeople { repo in _ = try await repo.create(name: name) }
+    }
+    func renamePerson(_ id: UUID,name: String) async -> Bool {
+        await changePeople { repo in _ = try await repo.rename(id,name: name) }
+    }
+    func archivePerson(_ id: UUID,archived: Bool) async {
+        _ = await changePeople { repo in _ = try await repo.archive(id,archived: archived) }
+    }
+    func mergePerson(_ source: UUID,into destination: UUID) async {
+        _ = await changePeople { repo in _ = try await repo.merge(source,into: destination) }
+    }
+    private func stopPeopleDetection() {
+        detectionID = nil; detection?.cancel(); detection = nil
+        findingPeople = false; personProposals = []; peopleDetectionError = nil
+    }
+    private func findPeople(in frame: FrozenReviewFrame,draftID: UUID) {
+        stopPeopleDetection()
+        guard let peopleDetector else { return }
+        let generation = UUID(); detectionID = generation; findingPeople = true
+        detection = Task {
+            defer { if detectionID == generation { findingPeople = false; detection = nil } }
+            do {
+                let result = try await peopleDetector.detect(frame)
+                try Task.checkCancellation()
+                guard detectionID == generation, draft?.id == draftID, draft?.frame?.pngSHA256 == frame.pngSHA256 else { return }
+                guard result.count <= 32, Set(result.map(\.id)).count == result.count else { throw ProjectFailure.invalidProject }
+                for proposal in result { try proposal.validate(frame: frame) }
+                personProposals = result
+            } catch {
+                if detectionID == generation, draft?.id == draftID { peopleDetectionError = error.localizedDescription }
+            }
+        }
+    }
+    func retryPeopleDetection() {
+        guard !saving, let draft, let frame = draft.frame else { return }
+        findPeople(in: frame,draftID: draft.id)
+    }
+    func acceptPersonProposal(_ id: UUID,draftID: UUID) {
+        guard !saving, let draft, draft.id == draftID, let frame = draft.frame,
+              let proposal = personProposals.first(where: { $0.id == id }) else { return }
+        do {
+            try proposal.validate(frame: frame); try draft.add(proposal.bounds,kind: .highlight)
+            personProposals.removeAll { $0.id == id }; peopleDetectionError = nil
+        } catch { peopleDetectionError = error.localizedDescription }
+    }
+    private func changePeople(_ operation: (ProjectPeopleRepository) async throws -> Void) async -> Bool {
+        guard !peopleBusy, !saving else { return false }
+        peopleBusy = true; defer { peopleBusy = false }
+        do {
+            let repo = ProjectPeopleRepository(project: project)
+            try await operation(repo); people = try await repo.load(); peopleError = nil; return true
+        } catch { peopleError = error.localizedDescription; return false }
+    }
     func begin(_ request: FrameCommentRequest) throws {
         guard draft == nil, !preparing, !saving, request.target.projectID == project.id else { throw WorkflowFailure.invalid("Finish or cancel the open frame comment first.") }
         let next = FrameCommentDraft(request: request); draft = next; error = nil; preparing = true
@@ -114,6 +206,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
                 let frozen = try await capture.capture(request,project: project)
                 try Task.checkCancellation()
                 guard draft?.id == next.id else { return }; try next.receive(frozen)
+                findPeople(in: frozen,draftID: next.id)
             } catch { if draft?.id == next.id { self.error = error.localizedDescription } }
         }
     }
@@ -128,11 +221,13 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
                 try Task.checkCancellation()
                 guard draft == nil, draftEpoch == epoch else { return }
                 draft = .init(request: saved.request,text: saved.text,shapes: saved.annotations,supersedes: saved.id,frame: frame)
+                if let draft { findPeople(in: frame,draftID: draft.id) }
             } catch { if draftEpoch == epoch { self.error = error.localizedDescription } }
         }
     }
     @discardableResult func save() async -> Bool {
         if let saveTask { return await saveTask.value }
+        guard !peopleBusy else { error = "Wait for the person update to finish before saving this frame comment."; return false }
         guard let draft, let frame = draft.frame, draft.canAttemptSave else { error = "Add a frame or region note before saving. A mark alone is not an editing instruction."; return false }
         saving = true; error = nil
         let task = Task { () -> Bool in
@@ -148,7 +243,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
                     comments.removeAll { $0.id == record.id || $0.id == record.supersedesID }; comments.append(record)
                     guard self.draft?.id == draft.id else { return true }
                     if draft.text == snapshot.text, draft.history.shapes == snapshot.annotations {
-                        self.draft = nil; releaseLease?(); releaseLease = nil; return true
+                        self.draft = nil; stopPeopleDetection(); releaseLease?(); releaseLease = nil; return true
                     }
                     if pass == 1 || !draft.canSave { break }
                 }
@@ -161,12 +256,12 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     @discardableResult func cancel() -> Bool {
         guard !saving else { error = "Wait for the save to finish before closing this frame comment."; return false }
         let requestID = draft?.request.id
-        draftEpoch = UUID(); preparation?.cancel(); draft = nil; preparing = false; error = nil
+        draftEpoch = UUID(); preparation?.cancel(); stopPeopleDetection(); draft = nil; preparing = false; error = nil
         if let requestID { Task { await capture.cancel(requestID) } }
         releaseLease?(); releaseLease = nil; return true
     }
     func flushForExit() async -> Bool {
         if let saveTask { _ = await saveTask.value }
-        return draft == nil && !preparing && !saving
+        return draft == nil && !preparing && !saving && !peopleBusy
     }
 }

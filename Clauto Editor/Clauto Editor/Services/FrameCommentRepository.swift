@@ -3,6 +3,7 @@ import Darwin
 import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
+import Vision
 
 /// A cancelled waiter may return before a synchronous OS read does. The queue
 /// retains that job's capacity until its actual work ends; replacement requests
@@ -81,6 +82,40 @@ final class FrameBlockingExecutor: @unchecked Sendable {
 protocol ReviewFrameCapturing: Sendable {
     func capture(_ request: FrameCommentRequest, project: Project) async throws -> FrozenReviewFrame
     func cancel(_ id: UUID) async
+}
+protocol ReviewPeopleDetecting: Sendable {
+    func detect(_ frame: FrozenReviewFrame) async throws -> [FramePersonProposal]
+}
+actor LocalFramePeopleDetector: ReviewPeopleDetecting {
+    private static let executor = FrameBlockingExecutor(label: "com.clauto.frame-people",capacity: 4)
+    func detect(_ frame: FrozenReviewFrame) async throws -> [FramePersonProposal] {
+        try await Self.executor.perform(job: FrameBlockingJob<[FramePersonProposal]>()) { job in
+            try Self.findPeople(in: frame,job: job)
+        }
+    }
+    private nonisolated static func findPeople(in frame: FrozenReviewFrame,job: FrameBlockingJob<[FramePersonProposal]>) throws -> [FramePersonProposal] {
+        try job.checkCancellation()
+        guard frame.width > 0, frame.height > 0, frame.width <= 7680, frame.height <= 7680,
+              frame.width*frame.height <= 33_177_600, !frame.png.isEmpty, frame.png.count <= FrameCommentRepository.pngLimit,
+              TranscriptSourceMap.sha(frame.png) == frame.pngSHA256,
+              let source = CGImageSourceCreateWithData(frame.png as CFData,nil), CGImageSourceGetCount(source) == 1,
+              CGImageSourceGetType(source) == UTType.png.identifier as CFString,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
+              properties[kCGImagePropertyPixelWidth] as? Int == frame.width,
+              properties[kCGImagePropertyPixelHeight] as? Int == frame.height,
+              properties[kCGImagePropertyOrientation] == nil || properties[kCGImagePropertyOrientation] as? Int == 1,
+              let image = CGImageSourceCreateImageAtIndex(source,0,[kCGImageSourceShouldCacheImmediately:true] as CFDictionary),
+              image.width == frame.width, image.height == frame.height, CGImageSourceGetStatusAtIndex(source,0) == .statusComplete else { throw ProjectFailure.invalidProject }
+        let request = VNDetectHumanRectanglesRequest()
+        defer { request.cancel() }
+        request.revision = VNDetectHumanRectanglesRequestRevision2; request.upperBodyOnly = false
+        try job.checkCancellation()
+        try VNImageRequestHandler(cgImage: image,orientation: .up,options: [:]).perform([request])
+        try job.checkCancellation()
+        return Array((request.results ?? []).sorted { $0.confidence > $1.confidence }.compactMap {
+            FramePersonProposal.fromVision($0.boundingBox,confidence: Double($0.confidence),frame: frame)
+        }.prefix(32))
+    }
 }
 actor ReviewFrameCaptureService: ReviewFrameCapturing {
     private var active: (UUID,AVAssetImageGenerator)?
@@ -198,6 +233,7 @@ actor FrameCommentRepository {
         guard frame.request.target.projectID == project.id else { throw ProjectFailure.invalidProject }
         var record = SavedFrameComment(schemaVersion: 1,id: id,supersedesID: supersedes,request: frame.request,text: text.trimmingCharacters(in: .whitespacesAndNewlines),annotations: annotations,framePNG_SHA256: frame.pngSHA256,width: frame.width,height: frame.height,actualFrameTime: frame.actualTime,created: Date(),reviewOnly: true,productionAuthorized: false,appliedToVideo: false)
         try record.validate(); try validatePNG(frame.png,sha: frame.pngSHA256,width: frame.width,height: frame.height)
+        let references = annotations.compactMap(\.person)
         let parent = try root(create: true)
         let lock = openat(parent.descriptor,"save.lock",O_CREAT | O_RDWR | O_NOFOLLOW,S_IRUSR | S_IWUSR)
         guard lock >= 0 else { throw ProjectFailure.invalidProject }; defer { Darwin.close(lock) }
@@ -223,6 +259,9 @@ actor FrameCommentRepository {
                 record = previous // Retain the original creation timestamp.
             } else if errno != ENOENT { throw ProjectFailure.invalidProject }
         } else if errno != ENOENT { throw ProjectFailure.invalidProject }
+        let peopleLease = references.isEmpty ? nil : try ProjectMutationLease.acquire(project)
+        defer { withExtendedLifetime(peopleLease) {} }
+        if !references.isEmpty { try ProjectPeopleRepository.checkReferences(references,project: project) }
         try VoiceReviewProvenance.check(frame.request.target,project: project)
         let movie = try VoiceReviewProvenance.url(frame.request.target.preview.relativePath,project: project)
         let source = try SourceRenderDirectory.open(movie.deletingLastPathComponent())
@@ -294,5 +333,100 @@ actor FrameCommentRepository {
         let previous = Set(records.compactMap(\.supersedesID))
         guard records.allSatisfy({ record in record.supersedesID == nil || records.contains(where: { $0.id == record.supersedesID && $0.request == record.request && $0.created <= record.created }) }) else { throw ProjectFailure.invalidProject }
         return records.filter { !previous.contains($0.id) }.sorted { $0.created < $1.created }
+    }
+}
+
+/// Local project metadata only. No embeddings, face library, network lookup or
+/// automatic name association is stored or requested by this repository.
+actor ProjectPeopleRepository {
+    private struct Envelope: Codable { let sha256: String; let payload: Data }
+    let project: Project
+    private let encoder: JSONEncoder
+    init(project: Project) {
+        self.project = project
+        encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; encoder.dateEncodingStrategy = .millisecondsSince1970
+    }
+    nonisolated private static func read(_ state: SourceRenderDirectory,projectID: UUID) throws -> ProjectPeopleDocument {
+        var info = stat()
+        if fstatat(state.descriptor,"people.json",&info,AT_SYMLINK_NOFOLLOW) != 0 {
+            guard errno == ENOENT else { throw ProjectFailure.invalidProject }; return .init(projectID: projectID)
+        }
+        let bytes = try state.read("people.json",limit: 4*1024*1024); try TranscriptJSONKeys.validate(bytes)
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .millisecondsSince1970
+        let envelope = try decoder.decode(Envelope.self,from: bytes)
+        guard envelope.payload.count <= 3*1024*1024, TranscriptSourceMap.sha(envelope.payload) == envelope.sha256 else { throw ProjectFailure.invalidProject }
+        try TranscriptJSONKeys.validate(envelope.payload)
+        let value = try decoder.decode(ProjectPeopleDocument.self,from: envelope.payload); try value.validate(project: projectID); return value
+    }
+    nonisolated private static func document(project: Project) throws -> ProjectPeopleDocument {
+        let root = try ProjectMutationLease.checkedRoot(project)
+        var info = stat()
+        if fstatat(root.descriptor,".clauto",&info,AT_SYMLINK_NOFOLLOW) != 0 {
+            guard errno == ENOENT else { throw ProjectFailure.invalidProject }; try root.checkPath(); return .init(projectID: project.id)
+        }
+        let state = try root.child(".clauto"), value = try read(state,projectID: project.id)
+        try root.checkPath(); try state.checkPath(); return value
+    }
+    func load() throws -> ProjectPeopleDocument { try Self.document(project: project) }
+    nonisolated static func checkReferences(_ references: [ProjectPersonReference],project: Project) throws {
+        let value = try document(project: project)
+        // An explicit choice may have been renamed or archived while the draft
+        // was open. Preserve its known historical ID/label rather than guessing
+        // another person or rewriting the user's earlier association.
+        for reference in references { try value.validateReference(reference,historical: true) }
+    }
+    private func mutate(_ change: (inout ProjectPeopleDocument) throws -> Void) throws -> ProjectPeopleDocument {
+        let lease = try ProjectMutationLease.acquire(project); defer { withExtendedLifetime(lease) {} }
+        let state = try lease.root.child(".clauto"), original = try Self.read(state,projectID: project.id)
+        guard original.changes.count < 4096 else { throw WorkflowFailure.invalid("This project's person history is full. Existing names remain saved.") }
+        var value = original; try change(&value); try value.validate(project: project.id)
+        if value == original { return original }
+        let payload = try encoder.encode(value), bytes = try encoder.encode(Envelope(sha256: TranscriptSourceMap.sha(payload),payload: payload))
+        guard payload.count <= 3*1024*1024, bytes.count <= 4*1024*1024 else { throw WorkflowFailure.invalid("This project's person history is full. Existing names remain saved.") }
+        try lease.root.checkPath(); try state.checkPath(); try Task.checkCancellation()
+        try state.replacePointer(bytes,name: "people.json"); try lease.root.checkPath(); try state.checkPath(); return value
+    }
+    private static func record(_ kind: ProjectPeopleChange.Kind,people: [UUID],previous: String? = nil,name: String? = nil,in value: inout ProjectPeopleDocument) {
+        value.revision += 1; value.changes.append(.init(id: UUID(),revision: value.revision,kind: kind,people: people,previousName: previous,name: name,created: Date()))
+    }
+    func create(name: String,splitFrom source: UUID? = nil) throws -> ProjectPerson {
+        let name = ProjectPersonNames.cleaned(name), id = UUID()
+        guard ProjectPersonNames.valid(name) else { throw WorkflowFailure.invalid("Use a short name for this person.") }
+        let result = try mutate { value in
+            guard value.people.count < 512 else { throw WorkflowFailure.invalid("This project already has 512 people. Existing names remain saved.") }
+            if let source { guard value.people.contains(where: { $0.id == source && $0.active }) else { throw ProjectFailure.invalidProject } }
+            value.people.append(.init(id: id,name: name))
+            Self.record(source == nil ? .create:.split,people: source.map { [$0,id] } ?? [id],name: name,in: &value)
+        }
+        guard let created = result.people.first(where: { $0.id == id }) else { throw ProjectFailure.invalidProject }; return created
+    }
+    func rename(_ id: UUID,name: String) throws -> ProjectPeopleDocument {
+        let name = ProjectPersonNames.cleaned(name)
+        guard ProjectPersonNames.valid(name) else { throw WorkflowFailure.invalid("Use a short name for this person.") }
+        return try mutate { value in
+            guard let i = value.people.firstIndex(where: { $0.id == id && $0.active }) else { throw ProjectFailure.invalidProject }
+            let previous = value.people[i].name
+            guard previous != name else { return }
+            guard value.people[i].previousNames.contains(previous) || value.people[i].previousNames.count < 64 else { throw WorkflowFailure.invalid("This person has reached the name-history limit. The saved name remains unchanged.") }
+            if !value.people[i].previousNames.contains(previous) { value.people[i].previousNames.append(previous) }
+            value.people[i].name = name; value.people[i].revision += 1
+            Self.record(.rename,people: [id],previous: previous,name: name,in: &value)
+        }
+    }
+    func archive(_ id: UUID,archived: Bool) throws -> ProjectPeopleDocument {
+        try mutate { value in
+            guard let i = value.people.firstIndex(where: { $0.id == id && $0.mergedIntoID == nil }) else { throw ProjectFailure.invalidProject }
+            guard value.people[i].archived != archived else { return }
+            value.people[i].archived = archived; value.people[i].revision += 1
+            Self.record(archived ? .archive:.restore,people: [id],in: &value)
+        }
+    }
+    func merge(_ source: UUID,into destination: UUID) throws -> ProjectPeopleDocument {
+        try mutate { value in
+            guard source != destination, let i = value.people.firstIndex(where: { $0.id == source && $0.active }),
+                  value.people.contains(where: { $0.id == destination && $0.active }) else { throw ProjectFailure.invalidProject }
+            value.people[i].archived = true; value.people[i].mergedIntoID = destination; value.people[i].revision += 1
+            Self.record(.merge,people: [source,destination],in: &value)
+        }
     }
 }

@@ -9,6 +9,9 @@ struct FrameCommentEditor: View {
     @State private var width = "0.25"
     @State private var height = "0.25"
     @State private var drawingPoints = "0.25,0.25; 0.5,0.5"
+    @State private var newPersonName = ""
+    @State private var selectedPersonID: UUID?
+    @State private var personNames = ProjectPersonNameDrafts()
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 12) {
             Text("Comment on a paused frame").font(ClautoDesign.heading).accessibilityAddTraits(.isHeader)
@@ -16,9 +19,26 @@ struct FrameCommentEditor: View {
                 Text(String(format: "Version %d · Frame %d · %.6f seconds", draft.request.target.versionNumber,draft.request.frame.frameIndex,draft.request.frame.seconds))
                     .font(ClautoDesign.caption.monospacedDigit()).textSelection(.enabled)
                 if let frame = draft.frame {
-                    FrameAnnotationCanvas(draft: draft, enabled: !controller.saving).frame(minHeight: 220,maxHeight: 380)
+                    FrameAnnotationCanvas(draft: draft, enabled: !controller.saving,personProposals: controller.personProposals,acceptPerson: { controller.acceptPersonProposal($0,draftID: draft.id) }).frame(minHeight: 220,maxHeight: 380)
                         .accessibilityLabel("Paused frame annotation canvas. Drag inside the video to draw. Coordinate fields below also add marks.")
                     annotationControls(draft,frame: frame).disabled(controller.saving)
+                    if controller.findingPeople {
+                        ClautoActivity(label: "Finding people in this frame on this Mac…")
+                    } else if !controller.personProposals.isEmpty {
+                        VStack(alignment: .leading,spacing: 6) {
+                            Text("Choose a suggested box, then assign a name.").font(ClautoDesign.caption)
+                            ScrollView(.horizontal) { HStack {
+                                ForEach(Array(controller.personProposals.enumerated()),id: \.element.id) { index,proposal in
+                                    Button("Mark Person \(index+1)") { controller.acceptPersonProposal(proposal.id,draftID: draft.id) }
+                                }
+                            } }
+                        }.disabled(controller.saving)
+                    }
+                    if let error = controller.peopleDetectionError {
+                        Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
+                        Button("Find People Again") { controller.retryPeopleDetection() }.disabled(controller.saving)
+                    }
+                    projectPeopleControls.disabled(controller.saving || controller.peopleBusy)
                 } else { ClautoActivity(label: controller.preparing ? "Capturing and verifying the exact local frame…" : "The paused frame is unavailable. Cancel and try again.") }
                 TextField("Comment on this frame",text: Binding(get: { draft.text },set: { if !controller.saving { draft.text = $0 } }),axis: .vertical)
                     .lineLimit(3...5).textFieldStyle(.roundedBorder).disabled(controller.saving).accessibilityIdentifier("frameCommentText")
@@ -31,7 +51,7 @@ struct FrameCommentEditor: View {
                     Spacer()
                     if controller.saving { ProgressView().controlSize(.small); Text("Saving on the project drive…").font(ClautoDesign.caption) }
                     Button("Save Frame Comment") { Task { if await controller.save(), controller.draft == nil { close() } } }
-                        .disabled(!draft.canAttemptSave || controller.saving || controller.preparing).accessibilityIdentifier("saveFrameComment")
+                        .disabled(!draft.canAttemptSave || controller.saving || controller.preparing || controller.peopleBusy).accessibilityIdentifier("saveFrameComment")
                 }
             } else {
                 if let error = controller.error { Text(error).foregroundStyle(ClautoDesign.ember) }
@@ -40,6 +60,7 @@ struct FrameCommentEditor: View {
             }
         }.padding(24) }.frame(minWidth: 840,idealWidth: 900,maxWidth: 1100,minHeight: 560,idealHeight: 780,maxHeight: 900)
             .background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).clautoThemeAppearance()
+            .task { await controller.refreshPeople() }
             .onChange(of: controller.draft?.selectedShapeID) {
                 if let draft = controller.draft, let shape = draft.history.shapes.first(where: { $0.id == draft.selectedShapeID }) {
                     x = String(shape.bounds.x); y = String(shape.bounds.y); width = String(shape.bounds.width); height = String(shape.bounds.height)
@@ -114,6 +135,70 @@ struct FrameCommentEditor: View {
                 guard !controller.saving else { return }
                 do { try draft.updateRegion(selected.id,tag: draft.history.shapes.first(where: { $0.id == selected.id })?.tag ?? "",note: value) } catch { controller.error = error.localizedDescription }
             }),axis: .vertical).lineLimit(2...3).textFieldStyle(.roundedBorder).accessibilityLabel("Written note for selected region").id("region-note-"+selected.id.uuidString)
+            HStack {
+                if let reference = selected.person { Text("Person: \(reference.nameSnapshot)").font(ClautoDesign.caption) }
+                Menu(selected.person == nil ? "Assign a Person…" : "Change Person…") {
+                    if let people = controller.people {
+                        ForEach(people.people.filter(\.active)) { person in
+                            Button(personLabel(person,in: people)) { Task { await controller.assignPerson(person.id,to: selected.id,draftID: draft.id) } }
+                        }
+                    }
+                }.disabled(controller.peopleBusy || controller.people?.people.contains(where: \.active) != true)
+                    .accessibilityLabel("Explicitly choose a project person for this region")
+                if selected.person != nil {
+                    Button("Remove Person Link") { Task { await controller.assignPerson(nil,to: selected.id,draftID: draft.id) } }.disabled(controller.peopleBusy)
+                }
+            }.id("region-person-"+selected.id.uuidString)
+        }
+    }
+    private func personLabel(_ person: ProjectPerson,in people: ProjectPeopleDocument) -> String {
+        let number = (people.people.firstIndex(where: { $0.id == person.id }) ?? 0)+1
+        return "\(person.name) · Person \(number)"
+    }
+    @ViewBuilder private var projectPeopleControls: some View {
+        DisclosureGroup("People in this Project") {
+            VStack(alignment: .leading,spacing: 8) {
+                Text("Create names here, then choose a person for a selected region. Names and links are saved on this project's drive. Earlier notes keep their original names.")
+                    .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                HStack {
+                    TextField("New person's name",text: $newPersonName).textFieldStyle(.roundedBorder)
+                    Button("Add Person") {
+                        let submitted = newPersonName
+                        Task { let created = await controller.createPerson(name: submitted); if created && newPersonName == submitted { newPersonName = "" } }
+                    }.disabled(ProjectPersonNames.cleaned(newPersonName).isEmpty || controller.people == nil)
+                }
+                if let people = controller.people, !people.people.isEmpty {
+                    Picker("Project person",selection: $selectedPersonID) {
+                        Text("Choose a person…").tag(Optional<UUID>.none)
+                        ForEach(people.people) { person in
+                            Text(personLabel(person,in: people)+(person.mergedIntoID != nil ? " · merged":person.archived ? " · archived":"")).tag(Optional(person.id))
+                        }
+                    }
+                    if let selected = people.people.first(where: { $0.id == selectedPersonID }), selected.mergedIntoID == nil {
+                        HStack {
+                            TextField("Correct person's name",text: Binding(get: { personNames.text(for: selected,project: controller.project.id) },set: { personNames.update($0,person: selected.id,project: controller.project.id) }))
+                                .textFieldStyle(.roundedBorder).disabled(selected.archived).id("person-name-"+controller.project.id.uuidString+selected.id.uuidString)
+                            Button("Rename") {
+                                let submitted = personNames.text(for: selected,project: controller.project.id), projectID = controller.project.id
+                                Task { if await controller.renamePerson(selected.id,name: submitted) { personNames.acknowledge(submitted,person: selected.id,project: projectID) } }
+                            }.disabled(selected.archived || ProjectPersonNames.cleaned(personNames.text(for: selected,project: controller.project.id)).isEmpty)
+                            Button(selected.archived ? "Restore Person":"Archive Person") { Task { await controller.archivePerson(selected.id,archived: !selected.archived) } }
+                        }
+                        if selected.active {
+                            Menu("Merge \(selected.name) into…") {
+                                ForEach(people.people.filter { $0.active && $0.id != selected.id }) { other in
+                                    Button(personLabel(other,in: people)) { Task { await controller.mergePerson(selected.id,into: other.id) } }
+                                }
+                            }.disabled(people.people.filter(\.active).count < 2)
+                            Text("Merging keeps earlier links and labels; future choices use the destination person.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                        }
+                    }
+                }
+                if let error = controller.peopleError {
+                    Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
+                    Button("Retry People") { Task { await controller.refreshPeople() } }
+                }
+            }.padding(.top,8)
         }
     }
     private func coordinate(_ title: String,text: Binding<String>) -> some View {
@@ -124,9 +209,12 @@ struct FrameCommentEditor: View {
 struct FrameAnnotationCanvas: NSViewRepresentable {
     @Bindable var draft: FrameCommentDraft
     var enabled: Bool
+    var personProposals: [FramePersonProposal] = []
+    var acceptPerson: (UUID) -> Void = { _ in }
     func makeNSView(context: Context) -> AnnotationImageView { AnnotationImageView(frame: .zero) }
     func updateNSView(_ view: AnnotationImageView,context: Context) {
         view.draft = draft; view.editingEnabled = enabled
+        view.personProposals = personProposals; view.acceptPerson = acceptPerson
         if view.imageSHA != draft.frame?.pngSHA256 {
             view.image = draft.frame.flatMap { NSImage(data: $0.png) }; view.imageSHA = draft.frame?.pngSHA256
         }
@@ -141,6 +229,8 @@ final class AnnotationImageView: NSView, NSUserInterfaceValidations {
     var editingEnabled = true
     var image: NSImage?
     var imageSHA: String?
+    var personProposals: [FramePersonProposal] = []
+    var acceptPerson: (UUID) -> Void = { _ in }
     private var start: CGPoint?
     private var finish: CGPoint?
     private var dragKind = FrameAnnotationKind.ellipse
@@ -160,6 +250,11 @@ final class AnnotationImageView: NSView, NSUserInterfaceValidations {
         image.draw(in: video,from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: true,hints: nil)
         NSGraphicsContext.saveGraphicsState(); defer { NSGraphicsContext.restoreGraphicsState() }
         NSBezierPath(rect: video).addClip()
+        for (index,proposal) in personProposals.enumerated() {
+            let rect = VideoAnnotationGeometry.display(proposal.bounds,video: video), path = NSBezierPath(rect: rect)
+            NSColor.systemCyan.setStroke(); path.lineWidth = 2; path.setLineDash([5,4],count: 2,phase: 0); path.stroke()
+            ("Person \(index+1)" as NSString).draw(at: .init(x: rect.minX+4,y: rect.minY+3),withAttributes: [.font:NSFont.systemFont(ofSize: 12,weight: .semibold),.foregroundColor:NSColor.white,.backgroundColor:NSColor.black.withAlphaComponent(0.8)])
+        }
         for shape in draft.history.shapes {
             let rect = VideoAnnotationGeometry.display(shape.bounds,video: video)
             let path: NSBezierPath
@@ -207,9 +302,14 @@ final class AnnotationImageView: NSView, NSUserInterfaceValidations {
         let click = gesture?.isClick == true
         if dragSelecting || click {
             let hit = draft.history.shapes.reversed().first { VideoAnnotationGeometry.display($0.bounds,video: video).insetBy(dx: -4,dy: -4).contains(end) }
-            draft.selectedShapeID = hit?.id
-            if hit != nil || dragSelecting { return }
-            if let pin = VideoAnnotationGeometry.pin(at: end,video: video) { try? draft.add(pin,kind: .circle) }
+            let proposal = personProposals.reversed().first(where: { VideoAnnotationGeometry.display($0.bounds,video: video).contains(end) })
+            switch FrameMarkClickAction.resolve(existing: hit?.id,proposal: proposal?.id,selecting: dragSelecting) {
+            case .select(let id): draft.selectedShapeID = id
+            case .acceptPerson(let id): draft.selectedShapeID = nil; acceptPerson(id)
+            case .newPin:
+                draft.selectedShapeID = nil
+                if let pin = VideoAnnotationGeometry.pin(at: end,video: video) { try? draft.add(pin,kind: .circle) }
+            }
             return
         }
         do {

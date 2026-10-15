@@ -81,7 +81,7 @@ final class EditorStore {
 
     func frameComment(for project: Project) -> FrameCommentController {
         if let controller = frameComments[project.id] { return controller }
-        let controller = FrameCommentController(project: project)
+        let controller = FrameCommentController(project: project,peopleDetector: LocalFramePeopleDetector())
         frameComments[project.id] = controller; return controller
     }
 

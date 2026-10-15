@@ -49,3 +49,6 @@ earlier attempt first, preserving both versions, then saves newer valid words.
 At most two revisions are acknowledged per Save call; further or invalid edits
 remain visible. Synthetic checkpoints cover late edits and failed-attempt retry
 without windows, microphone or private media.
+
+
+Local anonymous person-box suggestions and explicit project-person links are specified in [PROJECT_PEOPLE.md](PROJECT_PEOPLE.md). They retain the same frame-bound review-only contract. Tracking, direct region dictation and original-camera time mapping remain unfinished.
