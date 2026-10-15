@@ -16,7 +16,7 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
 | Custom detached video | Store/window-scoped stable session and one reparented AVPlayerView, close-to-dock, threshold drag, video-window fullscreen/Escape, display recovery and idle controls | Offscreen same-player/item/paused-clock detach/dock passed; actual video pixels, transition failures, focused controls, screen unplug and physical window tests remain |
 | Compact copy / one tooltip | New compact review workspace and microphone controls; global delayed/Option tooltip with selectable text | Measured before/after copy comparison, full-app removal pass, rapid hover/focus/Option acceptance |
 | Original icon | Existing original editable geometry and complete macOS asset catalog retained | Recheck small-size readability against new default; no other platform app target exists |
-| Explicit local voice and feedback cards | Existing on-device provider, explicit target/mic controls/meter, provisional/final notes, original onset/history/reanchor/candidate isolation; measured signed rate and rate-change epochs; spoken-order cards; explicit merge/split, retained parent/anchor lineage, stale/candidate invalidation and late-ASR protection; ambiguous-reference flags; final idea groups from reported audio runs, captured silence, explicit topic cues and inter-run transport boundaries | Durable new typed drafts; real permitted microphone and native desktop acceptance |
+| Explicit local voice and feedback cards | Existing on-device provider, explicit target/mic controls/meter, provisional/final notes, original onset/history/reanchor/candidate isolation; measured signed rate and rate-change epochs; spoken-order cards; explicit merge/split, retained parent/anchor lineage, stale/candidate invalidation and late-ASR protection; ambiguous-reference flags; final idea groups from reported audio runs, captured silence, explicit topic cues and inter-run transport boundaries; restart-durable raw typed drafts, compare-and-swap conflict protection and idempotent explicit Save | Real permitted microphone and native desktop acceptance |
 | Adaptive three panes | Versions/assets left, stable video/timeline center, independent feedback scroll right; pane toggles/focus and compact project rail; detached placeholder; synthetic compact/large renders with long feedback preserve video geometry | Large-text renders, repeated focus, persistence across themes and navigation |
 
 ## Validation boundaries
@@ -118,6 +118,32 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
   external displays, accessibility or VoiceOver. Foreground native acceptance
   remains pending. Live speech is blocked by the existing missing speech grant
   and local model; no permission or model download was requested.
-- New typed composers survive pane/view replacement in memory. Restart-durable
-  new typed drafts and idempotent typed Save still require implementation. The
+- At M5, new typed composers survived pane/view replacement in memory; restart-
+  durable new typed drafts and idempotent Save remained for M6 below. The
   approximate 90% explanatory-copy reduction has not been measured or accepted.
+
+## Milestone 6 — durable new typed feedback
+
+- New typed drafts retain exact text, unfinished range strings, action and the
+  original explicitly selected version target in the existing project ledger.
+  Typing before a player is selected stores an unbound draft; it never selects a
+  player or starts capture. View replacement and restart recover the same draft.
+- Autosave waits 250 milliseconds after typing stops. Dirty drafts and their
+  writes participate in quit flushing. A failed or conflicting save retains the
+  local text, reports failure and prevents a false successful flush. Another
+  controller's saved draft cannot be overwritten without a matching saved base;
+  reloading that draft requires an explicit product confirmation after copying.
+- Explicit Save freezes the fields while its tracked transaction runs. A stable
+  per-content-revision submission ID atomically creates one note and receipt and
+  removes the draft. Retrying that exact submission returns the same note, even
+  after an uncertain response; an old delayed autosave cannot resurrect it.
+  Further edits use a new submission ID. Changed movie files or invalid ranges
+  refuse finalization while retaining the stored raw draft.
+- Optional ledger fields preserve checksums from the pre-draft encoder. Draft and
+  receipt counts, text sizes, revisions and selected-target identities are bounded.
+  Synthetic tests cover restart, immediate Save/quit, retry/stale writes, two
+  controllers, invalid data, changed movies and explicit version binding.
+- This increment is developed and tested in the background. App launch and
+  interactive acceptance remain deferred while Nathan uses the foreground for
+  taxes. The prior M5 synthetic component renders are retained only for that pin;
+  they do not establish runtime acceptance of these new typed controls.

@@ -10,6 +10,7 @@ struct VoiceReviewView: View {
     let seek: (Double) -> Void
     let prepareCandidatePlayback: (UUID) -> Bool
     @State private var visibleNotes = 50
+    @State private var reloadTypedDraft = false
     @Bindable private var composer: VoiceTypedComposer
     init(controller: VoiceReviewController,versionID: UUID,engine: URL,selected: Bool,select: @escaping () -> Void,seek: @escaping (Double) -> Void,prepareCandidatePlayback: @escaping (UUID) -> Bool) {
         self.controller = controller; self.versionID = versionID; self.engine = engine; self.selected = selected
@@ -94,19 +95,20 @@ struct VoiceReviewView: View {
                         TextField("Start seconds", text: $composer.start).accessibilityLabel("Typed feedback start seconds")
                         TextField("End seconds", text: $composer.end).accessibilityLabel("Typed feedback end seconds")
                         Button("Save typed review note") {
-                            guard let start = Double(composer.start), let end = Double(composer.end) else { controller.error = "Enter explicit start and end times in seconds."; return }
-                            guard let expectedTarget = controller.target, expectedTarget.versionID == versionID else { controller.error = "Select this saved video before saving its feedback."; return }
-                            let submitted = composer.text, action = composer.action, submittedStart = composer.start, submittedEnd = composer.end
-                            composer.saving = true
-                            Task {
-                                let saved = await controller.addTyped(text: submitted,action: action,start: start,end: end,expectedTarget: expectedTarget)
-                                composer.saving = false
-                                if saved, composer.text == submitted, composer.action == action, composer.start == submittedStart, composer.end == submittedEnd { composer.text = "" }
-                            }
+                            controller.submitTypedComposer(versionID)
                         }.disabled(composer.saving || !selected || controller.target?.versionID != versionID || composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .accessibilityIdentifier("voiceSaveTypedFeedback")
                     }
-                }
+                    if let issue = composer.storageIssue {
+                        Text(issue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
+                        Button("Reload saved draft…") { reloadTypedDraft = true }
+                            .confirmationDialog("Replace this unsaved draft? Copy any text you want to keep first.",isPresented: $reloadTypedDraft) {
+                                Button("Reload saved draft",role: .destructive) { controller.reloadTypedComposer(versionID) }
+                            }
+                    } else if composer.hasEdits {
+                        Text(controller.dirtyTypedVersions.contains(versionID) ? "Draft saving…":"Draft saved").font(ClautoDesign.caption).textSelection(.enabled)
+                    }
+                }.disabled(composer.saving)
                 if controller.renderingCandidateID != nil {
                     ProgressView(controller.renderProgress)
                     Button("Cancel candidate render") { Task { await controller.cancelRender() } }.accessibilityIdentifier("voiceCancelCandidateRender")

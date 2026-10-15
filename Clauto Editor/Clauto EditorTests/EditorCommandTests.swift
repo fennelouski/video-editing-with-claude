@@ -53,7 +53,7 @@ struct EditorCommandTests {
     @MainActor @Test func unsavedTypedComposerSurvivesPaneAndVersionViewReplacement() async throws {
         let fixture = try await FrameReviewFixture.make()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let controller = try VoiceReviewController(project: fixture.project)
+        let controller = try VoiceReviewController(project: fixture.project,provider: SyntheticVoiceReviewProvider())
         let firstVersion = UUID(), otherVersion = UUID()
         var editor: VoiceTypedComposer? = controller.typedComposer(for: firstVersion)
         editor?.text = "Keep this unsaved idea"; editor?.start = "0.25"; editor?.end = "1.25"; editor?.action = .remove
@@ -64,6 +64,7 @@ struct EditorCommandTests {
         #expect(restored.text == "Keep this unsaved idea" && restored.start == "0.25" && restored.end == "1.25" && restored.action == .remove)
         #expect(controller.document.notes.isEmpty && controller.document.candidates.isEmpty)
         #expect(controller.typedComposer(for: otherVersion).text == "Separate version draft")
+        #expect(await controller.flushForExit())
     }
 
 }

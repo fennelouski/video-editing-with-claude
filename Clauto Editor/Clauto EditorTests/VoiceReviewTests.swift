@@ -669,6 +669,130 @@ struct VoiceReviewTests {
         #expect(throws: (any Error).self) { try ReviewMovieOpeningIdentity.capture(url: project.folder.deletingLastPathComponent().appendingPathComponent("outside.mp4"),project: project) }
     }
 
+    @MainActor @Test func newTypedDraftRestoresInvalidRangesUnicodeActionAndFrozenTargetAfterRestart() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try await controller(project: project,provider: provider,target: target)
+        let composer = controller.typedComposer(for: target.versionID)
+        composer.text = "Keep café 👩🏽‍🍳 and the original words"; composer.start = "unfinished :"; composer.end = "-"; composer.action = .remove
+        #expect(controller.hasPendingWork && controller.typedComposer(for: target.versionID) === composer)
+        #expect(await controller.flushForExit())
+        let saved = try #require(try await repository.load().typedDrafts?.first)
+        #expect(saved.text == composer.text && saved.start == "unfinished :" && saved.end == "-" && saved.action == .remove && saved.target == target)
+        let reopened = try VoiceReviewController(project: project,provider: provider); await reopened.load()
+        let restored = reopened.typedComposer(for: target.versionID)
+        #expect(restored.snapshot == saved && reopened.target == nil && !reopened.canStart)
+        #expect(reopened.document.notes.isEmpty && reopened.document.sessions.isEmpty)
+        #expect(await provider.starts == 0)
+        #expect(await provider.microphoneRequests == 0)
+        #expect(await reopened.flushForExit())
+    }
+
+    @MainActor @Test func typedSaveReservesSynchronouslyFreezesFieldsAndImmediateQuitWaits() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try await controller(project: project,provider: provider,target: target)
+        let composer = controller.typedComposer(for: target.versionID)
+        composer.text = "Remove this exact range"; composer.start = "1"; composer.end = "2"; composer.action = .remove
+        let operation = try #require(controller.submitTypedComposer(target.versionID))
+        #expect(composer.saving && controller.hasPendingWork && controller.submitTypedComposer(target.versionID) == nil)
+        composer.text = "Cannot replace frozen submitted words"; composer.action = .protect
+        #expect(composer.text == "Remove this exact range" && composer.action == .remove)
+        #expect(await controller.flushForExit()); #expect(await operation.value)
+        let saved = try await repository.load()
+        #expect(saved.notes.count == 1 && saved.notes[0].text == "Remove this exact range" && saved.notes[0].action == .remove)
+        #expect(saved.typedSubmissions?.count == 1 && (saved.typedDrafts ?? []).isEmpty)
+        #expect(composer.text.isEmpty && !composer.saving && !controller.hasPendingWork)
+        #expect(await provider.starts == 0)
+        let reopened = try VoiceReviewController(project: project,provider: provider); await reopened.load()
+        #expect(reopened.typedComposer(for: target.versionID).text.isEmpty)
+        #expect(await reopened.flushForExit())
+    }
+
+    @Test func typedSubmissionRetryDoesNotDuplicateOrResurrectDraftAndNewRevisionCanFollow() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        var draft = VoiceTypedDraft(versionID: target.versionID); draft.revision = 4; draft.text = "Keep the first words"; draft.start = "1"; draft.end = "2"; draft.target = target
+        _ = try await repository.saveTypedDraft(draft,expected: nil)
+        let first = try await repository.submitTypedDraft(draft,expected: draft)
+        let retry = try await repository.submitTypedDraft(draft,expected: draft)
+        #expect(retry.notes.map(\.id) == first.notes.map(\.id) && retry.sessions.count == 1 && retry.typedSubmissions?.count == 1)
+        _ = try await repository.cancel(note: first.notes[0].id)
+        #expect(try await repository.submitTypedDraft(draft,expected: nil).notes[0].state == .cancelled)
+        let delayed = try await repository.saveTypedDraft(draft,expected: draft)
+        #expect((delayed.typedDrafts ?? []).isEmpty)
+        var changed = draft; changed.text = "A changed request cannot reuse the saved operation"
+        await #expect(throws: (any Error).self) { try await repository.submitTypedDraft(changed,expected: nil) }
+        changed.submissionID = UUID()
+        await #expect(throws: (any Error).self) { try await repository.submitTypedDraft(changed,expected: nil) }
+        var older = changed; older.revision = 3
+        await #expect(throws: (any Error).self) { try await repository.submitTypedDraft(older,expected: nil) }
+        changed.revision += 1; changed.submissionID = UUID()
+        _ = try await repository.saveTypedDraft(changed,expected: draft)
+        let second = try await repository.submitTypedDraft(changed,expected: changed)
+        #expect(second.notes.count == 2 && second.typedSubmissions?.count == 2)
+        #expect(second.notes[0].text == draft.text && second.notes[1].text == changed.text)
+        // Idempotent receipt lookup still works after its media becomes unavailable.
+        try Data("Synthetic changed movie after successful submit".utf8).write(to: project.folder.appendingPathComponent(target.preview.relativePath))
+        #expect(try await repository.submitTypedDraft(changed,expected: nil).notes.count == 2)
+    }
+
+    @MainActor @Test func concurrentTypedDraftConflictPreservesBothLocalAndSavedWordsUntilExplicitReload() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let a = try await controller(project: project,provider: MockVoiceProvider(),target: target)
+        let first = a.typedComposer(for: target.versionID); first.text = "Original draft"; first.start = "1"; first.end = "2"
+        #expect(await a.flushForExit())
+        let b = try await controller(project: project,provider: MockVoiceProvider(),target: target)
+        let second = b.typedComposer(for: target.versionID)
+        first.text = "Saved by first window"; #expect(await a.flushForExit())
+        second.text = "Unsaved words from second window"; #expect(await b.flushForExit() == false)
+        #expect(second.text == "Unsaved words from second window" && second.storageIssue != nil && b.hasPendingWork)
+        #expect(try await repository.load().typedDrafts?.first?.text == "Saved by first window")
+        b.reloadTypedComposer(target.versionID); try await waitFor { !second.saving }
+        #expect(second.text == "Saved by first window" && second.storageIssue == nil)
+        #expect(await b.flushForExit())
+    }
+
+    @Test func invalidTypedDraftAndChangedMovieSubmissionLeaveStoredDraftAndNotesUntouched() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        var draft = VoiceTypedDraft(versionID: target.versionID); draft.text = "Keep immutable original"; draft.start = "1"; draft.end = "2"; draft.target = target
+        _ = try await repository.saveTypedDraft(draft,expected: nil)
+        let ledger = project.folder.appendingPathComponent("notes/voice-review/ledger.json"), original = try Data(contentsOf: ledger)
+        var invalid = draft; invalid.revision = 0
+        await #expect(throws: (any Error).self) { try await repository.saveTypedDraft(invalid,expected: draft) }
+        invalid = draft; invalid.start = String(repeating: "x",count: 101)
+        await #expect(throws: (any Error).self) { try await repository.saveTypedDraft(invalid,expected: draft) }
+        #expect(try Data(contentsOf: ledger) == original)
+        try Data("Synthetic changed movie".utf8).write(to: project.folder.appendingPathComponent(target.preview.relativePath))
+        await #expect(throws: (any Error).self) { try await repository.submitTypedDraft(draft,expected: draft) }
+        let saved = try await repository.load()
+        #expect(saved.typedDrafts == [draft] && saved.notes.isEmpty && (saved.typedSubmissions ?? []).isEmpty)
+    }
+
+    @MainActor @Test func unboundTypedDraftPinsOnlyAfterExplicitSelectionAndRefusesAnotherVersion() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider)
+        await controller.load()
+        let composer = controller.typedComposer(for: target.versionID)
+        composer.text = "Keep these unbound words"; composer.start = "unfinished"; composer.end = "3"
+        #expect(await controller.flushForExit())
+        #expect(try await repository.load().typedDrafts?.first?.target == nil)
+        #expect(controller.submitTypedComposer(target.versionID) == nil)
+        let first = UUID(); controller.willAttach(first)
+        await controller.attach(target,token: first,sampler: { .init(host: 100,seconds: 1,rate: 0,available: true) })
+        #expect(controller.submitTypedComposer(target.versionID) == nil) // Range still unfinished; pin is nevertheless saved.
+        #expect(await controller.flushForExit())
+        #expect(try await repository.load().typedDrafts?.first?.target == target)
+        let restarted = try VoiceReviewController(project: project,provider: provider); await restarted.load()
+        #expect(restarted.typedComposer(for: target.versionID).snapshot.target == target && restarted.target == nil)
+        #expect(await restarted.flushForExit())
+        composer.start = "1"
+        let other = try self.target(project: project,number: 2), second = UUID(); controller.willAttach(second)
+        await controller.attach(other,token: second,sampler: { .init(host: 101,seconds: 1,rate: 0,available: true) })
+        #expect(controller.submitTypedComposer(target.versionID) == nil)
+        #expect(composer.text == "Keep these unbound words" && composer.snapshot.target == target)
+        #expect(await controller.flushForExit())
+        #expect(await provider.starts == 0)
+        #expect(controller.document.notes.isEmpty)
+    }
+
     @MainActor @Test func explicitWatchedPlayerSelectionImmediatelyInvalidatesViewObservers() async throws {
         let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
         let controller = try await controller(project: project,provider: MockVoiceProvider(),target: target)

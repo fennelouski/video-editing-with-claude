@@ -14,11 +14,37 @@ struct VoiceLivePlayhead: Sendable {
 /// MainActor owns UI/player sampling; repositories/processors own background work.
 /// Per-version composer ownership survives pane collapse and view replacement.
 @MainActor @Observable final class VoiceTypedComposer {
-    var text = ""
-    var start = ""
-    var end = ""
-    var action = VoiceRangeAction.protect
+    private(set) var snapshot: VoiceTypedDraft
     var saving = false
+    var storageIssue: String?
+    @ObservationIgnored var persisted: VoiceTypedDraft?
+    @ObservationIgnored var onEdit: (() -> Void)?
+    init(version: UUID, draft: VoiceTypedDraft? = nil) { snapshot = draft ?? .init(versionID: version); persisted = draft }
+    var text: String { get { snapshot.text } set { change { $0.text = newValue } } }
+    var start: String { get { snapshot.start } set { change { $0.start = newValue } } }
+    var end: String { get { snapshot.end } set { change { $0.end = newValue } } }
+    var action: VoiceRangeAction { get { snapshot.action } set { change { $0.action = newValue } } }
+    var hasEdits: Bool { snapshot.revision > 1 || !snapshot.text.isEmpty || !snapshot.start.isEmpty || !snapshot.end.isEmpty }
+    private func change(_ edit: (inout VoiceTypedDraft) -> Void) {
+        guard !saving else { return }
+        var value = snapshot; edit(&value); guard value != snapshot else { return }
+        value.revision += 1; value.submissionID = UUID(); snapshot = value; storageIssue = nil; onEdit?()
+    }
+    func pin(_ target: VoiceReviewTarget) {
+        guard snapshot.target == nil, target.versionID == snapshot.versionID else { return }
+        snapshot.target = target; snapshot.revision += 1; snapshot.submissionID = UUID()
+    }
+    func acknowledge(_ value: VoiceTypedDraft) {
+        guard value.id == snapshot.id, value.revision >= (persisted?.revision ?? 0) else { return }
+        persisted = value
+    }
+    func restore(_ value: VoiceTypedDraft?) {
+        snapshot = value ?? .init(versionID: snapshot.versionID); persisted = value; storageIssue = nil
+    }
+    func finishSubmission(_ value: VoiceTypedDraft) {
+        guard snapshot == value else { return }
+        restore(nil)
+    }
 }
 
 @MainActor @Observable final class VoiceCardInput { var splitAfter = "" }
@@ -66,8 +92,11 @@ final class VoiceReviewController {
     var typedComposers: [UUID:VoiceTypedComposer] = [:]
     func typedComposer(for version: UUID) -> VoiceTypedComposer {
         if let value = typedComposers[version] { return value }
-        let value = VoiceTypedComposer(); typedComposers[version] = value; return value
+        let value = VoiceTypedComposer(version: version,draft: document.typedDrafts?.first { $0.versionID == version })
+        value.onEdit = { [weak self] in self?.retainTypedComposer(version) }
+        typedComposers[version] = value; return value
     }
+    private(set) var dirtyTypedVersions: Set<UUID> = []
     var error: String?
     var selectedDeviceUID: String
     var locale: String
@@ -88,6 +117,8 @@ final class VoiceReviewController {
     @ObservationIgnored private var prepareTask: Task<Void, Never>?
     @ObservationIgnored private var draftTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var cardTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var typedDraftTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var typedSaveTasks: [UUID: Task<Bool, Never>] = [:]
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingStopCancelled = false
     @ObservationIgnored private var sessionID: UUID?
@@ -108,7 +139,7 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var hasPendingWork: Bool { !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
     var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
@@ -139,7 +170,13 @@ final class VoiceReviewController {
         if let loadTask { await loadTask.value; return }
         guard !loaded else { return }
         let task = Task {
-            do { apply(try await repository.recover()); drafts = Dictionary(uniqueKeysWithValues: (document.drafts ?? []).map { ($0.noteID, $0) }); loaded = true; error = document.sessions.last?.failure; await refreshAccess() }
+            do {
+                apply(try await repository.recover()); drafts = Dictionary(uniqueKeysWithValues: (document.drafts ?? []).map { ($0.noteID, $0) })
+                for (version,composer) in typedComposers where !composer.hasEdits && !dirtyTypedVersions.contains(version) {
+                    composer.restore(document.typedDrafts?.first { $0.versionID == version })
+                }
+                loaded = true; error = document.sessions.last?.failure; await refreshAccess()
+            }
             catch { self.error = error.localizedDescription }
         }
         loadTask = task; await task.value; loadTask = nil
@@ -351,6 +388,70 @@ final class VoiceReviewController {
         guard expectedTarget == target else { error = "The selected video changed. Your draft is retained; select its original version and save again."; return false }
         return await enqueue(retainFailure: false) { try await $0.addTyped(text: text,action: action,anchor: .init(targetID: target.id,seconds: start,endSeconds: end)) }.value
     }
+    private func retainTypedComposer(_ version: UUID) {
+        guard let composer = typedComposers[version] else { return }
+        if let target, target.versionID == version { composer.pin(target) }
+        dirtyTypedVersions.insert(version); typedDraftTasks[version]?.cancel()
+        let snapshot = composer.snapshot
+        typedDraftTasks[version] = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation() } catch { return }
+            _ = await persistTypedComposer(snapshot,composer: composer)
+            if composer.snapshot == snapshot { typedDraftTasks[version] = nil }
+        }
+    }
+    private func persistTypedComposer(_ snapshot: VoiceTypedDraft, composer: VoiceTypedComposer) async -> Bool {
+        let saved = await enqueue(retainFailure: false) { repository in
+            let base = await MainActor.run { composer.persisted }
+            let result = try await repository.saveTypedDraft(snapshot,expected: base)
+            if result.typedDrafts?.contains(snapshot) == true { await MainActor.run { composer.acknowledge(snapshot) } }
+            return result
+        }.value
+        if composer.snapshot == snapshot {
+            if saved { dirtyTypedVersions.remove(snapshot.versionID); composer.storageIssue = nil }
+            else { composer.storageIssue = error ?? "This draft has not saved. Keep it open to retry." }
+        }
+        return saved
+    }
+    @discardableResult func submitTypedComposer(_ version: UUID) -> Task<Bool, Never>? {
+        let composer = typedComposer(for: version)
+        guard !composer.saving, let target, target.versionID == version else { error = "Select this saved video before saving its feedback."; return nil }
+        let beforePin = composer.snapshot
+        composer.pin(target)
+        if composer.snapshot != beforePin { retainTypedComposer(version) }
+        guard composer.snapshot.target == target else { error = "This draft belongs to a different saved movie. Copy it before reloading or restoring that movie."; return nil }
+        let snapshot = composer.snapshot
+        guard let start = Double(snapshot.start), let end = Double(snapshot.end), start.isFinite, end.isFinite,
+              start >= 0, end > start, end <= target.duration, !snapshot.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            error = "Enter feedback and an explicit start/end inside the selected movie."; return nil
+        }
+        typedDraftTasks[version]?.cancel(); typedDraftTasks[version] = nil
+        composer.saving = true; dirtyTypedVersions.insert(version)
+        let write = enqueue(retainFailure: false) { repository in
+            let base = await MainActor.run { composer.persisted }
+            return try await repository.submitTypedDraft(snapshot,expected: base)
+        }
+        let task = Task { @MainActor in
+            defer { composer.saving = false; typedSaveTasks[version] = nil }
+            let saved = await write.value
+            if saved, composer.snapshot == snapshot { composer.finishSubmission(snapshot); dirtyTypedVersions.remove(version) }
+            else if !saved { composer.storageIssue = error ?? "This feedback has not saved. Retry it unchanged." }
+            return saved
+        }
+        typedSaveTasks[version] = task; return task
+    }
+    func reloadTypedComposer(_ version: UUID) {
+        let composer = typedComposer(for: version); guard !composer.saving else { return }
+        typedDraftTasks[version]?.cancel(); typedDraftTasks[version] = nil; composer.saving = true
+        let task = Task { @MainActor in
+            defer { composer.saving = false; typedSaveTasks[version] = nil }
+            _ = await writes?.value
+            do {
+                let saved = try await repository.load(); apply(saved)
+                composer.restore(saved.typedDrafts?.first { $0.versionID == version }); dirtyTypedVersions.remove(version); return true
+            } catch { composer.storageIssue = error.localizedDescription; return false }
+        }
+        typedSaveTasks[version] = task
+    }
     func prepareEditPlan(_ candidate: VoiceRevisionCandidate) async { _ = await enqueue(retainFailure: false) { try await $0.prepareEditPlan(candidate.id) }.value }
     func approveEditPlan(_ candidate: VoiceRevisionCandidate) async {
         guard let sha = candidate.editPlanSHA256 else { return }
@@ -395,9 +496,14 @@ final class VoiceReviewController {
         _ = await stop()
         for task in Array(cardTasks.values) { await task.value }
         for task in Array(draftTasks.values) { await task.value }
+        for task in Array(typedSaveTasks.values) { _ = await task.value }
+        for task in Array(typedDraftTasks.values) { await task.value }
+        for version in dirtyTypedVersions {
+            if let composer = typedComposers[version] { _ = await persistTypedComposer(composer.snapshot,composer: composer) }
+        }
         _ = await writes?.value
         await retryStorage()
         prepareTask?.cancel(); await prepareTask?.value; debounceTask?.cancel()
-        return sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty && restructuringCards.isEmpty && cardTasks.isEmpty
+        return sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty && restructuringCards.isEmpty && cardTasks.isEmpty && dirtyTypedVersions.isEmpty && typedDraftTasks.isEmpty && typedSaveTasks.isEmpty
     }
 }

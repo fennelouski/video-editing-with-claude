@@ -58,6 +58,21 @@ actor VoiceReviewRepository {
     private func validate(_ document: VoiceReviewDocument) throws {
         try document.validateCardLineage()
         try document.validateSpeechSources()
+        let typed = document.typedDrafts ?? [], submissions = document.typedSubmissions ?? []
+        guard typed.count <= 1_000, Set(typed.map(\.versionID)).count == typed.count,
+              Set(typed.map(\.id)).count == typed.count, Set(typed.map(\.submissionID)).count == typed.count,
+              submissions.count <= 10_000, Set(submissions.map(\.noteID)).count == submissions.count,
+              Set(submissions.map { $0.draft.submissionID }).count == submissions.count,
+              typed.allSatisfy({ draft in !submissions.contains { $0.draft.submissionID == draft.submissionID } }) else { throw ProjectFailure.invalidProject }
+        for draft in typed {
+            try draft.validate(project: project.id)
+            guard draft.target == nil || document.targets.contains(draft.target!) else { throw ProjectFailure.invalidProject }
+        }
+        for submission in submissions {
+            try submission.draft.validate(project: project.id)
+            guard let target = submission.draft.target, document.targets.contains(target),
+                  document.notes.contains(where: { $0.id == submission.noteID }) else { throw ProjectFailure.invalidProject }
+        }
         guard document.schemaVersion == 1, document.projectID == project.id, document.sequence >= 0,
               (document.cardOperations ?? []).count <= 10_000,
               Set((document.cardOperations ?? []).map(\.id)).count == (document.cardOperations ?? []).count,
@@ -316,6 +331,57 @@ extension VoiceReviewRepository {
             note.action = action; note.manuallyEdited = true; note.resolvedAnchor = anchor
             note.history.append(.init(date: Date(),source: "User typed feedback; no microphone",text: text,revision: note.revision))
             document.notes.append(note); document.refresh(); return document
+        }
+    }
+    func saveTypedDraft(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?) throws -> VoiceReviewDocument {
+        try locked { document in
+            try draft.validate(project: project.id)
+            // An old delayed autosave must not resurrect submitted words.
+            if (document.typedSubmissions ?? []).contains(where: { $0.draft.id == draft.id && $0.draft.revision >= draft.revision }) { return document }
+            try checkTypedDraftBase(draft,expected: expected,document: document)
+            var values = document.typedDrafts ?? []; values.removeAll { $0.versionID == draft.versionID }; values.append(draft)
+            document.typedDrafts = values; return document
+        }
+    }
+    private func checkTypedDraftBase(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?, document: VoiceReviewDocument) throws {
+        let stored = (document.typedDrafts ?? []).first { $0.versionID == draft.versionID }
+        // A previous submission may have committed despite an uncertain response.
+        let consumedBase = stored == nil && expected.map { base in
+            (document.typedSubmissions ?? []).contains { $0.draft == base }
+        } == true
+        guard stored == expected || stored == draft || consumedBase,
+              stored == nil || stored!.id == draft.id,
+              stored == nil || stored!.revision <= draft.revision,
+              stored?.revision != draft.revision || stored == draft else {
+            throw WorkflowFailure.invalid("This draft changed in another window. Copy your text before reloading the saved draft.")
+        }
+    }
+    func submitTypedDraft(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?) throws -> VoiceReviewDocument {
+        try locked { document in
+            if let receipt = (document.typedSubmissions ?? []).first(where: { $0.draft.submissionID == draft.submissionID }) {
+                guard receipt.draft == draft else { throw WorkflowFailure.invalid("This feedback submission changed. Keep its original draft and retry it unchanged.") }
+                return document
+            }
+            guard !(document.typedSubmissions ?? []).contains(where: { $0.draft.id == draft.id && $0.draft.revision >= draft.revision }) else {
+                throw WorkflowFailure.invalid("This draft revision was already submitted. Edit a new draft before saving another note.")
+            }
+            try draft.validate(project: project.id)
+            try checkTypedDraftBase(draft,expected: expected,document: document)
+            guard let target = draft.target, document.targets.contains(target),
+                  !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let start = Double(draft.start), let end = Double(draft.end), start.isFinite, end.isFinite,
+                  start >= 0, end > start, end <= target.duration else {
+                throw WorkflowFailure.invalid("Enter feedback and an explicit start/end inside the selected movie.")
+            }
+            try VoiceReviewProvenance.check(target,project: project)
+            let sessionID = UUID(), noteID = UUID()
+            var session = VoiceReviewSession(id: sessionID,attemptID: UUID(),deviceUID: "typed-no-microphone",locale: "",ownerProcessID: getpid(),created: Date()); session.state = .stopped
+            var note = VoiceReviewNote(id: noteID,sessionID: sessionID,segmentID: "typed-"+draft.submissionID.uuidString,audioStart: nil,audioEnd: nil,created: Date(),transcript: "",text: draft.text,isFinal: true,intent: draft.action == .protect ? .protect:.change)
+            note.action = draft.action; note.manuallyEdited = true; note.resolvedAnchor = .init(targetID: target.id,seconds: start,endSeconds: end)
+            note.history.append(.init(date: Date(),source: "User typed feedback; no microphone",text: draft.text,revision: note.revision))
+            document.sessions.append(session); document.notes.append(note)
+            var submissions = document.typedSubmissions ?? []; submissions.append(.init(draft: draft,noteID: noteID)); document.typedSubmissions = submissions
+            document.typedDrafts?.removeAll { $0.id == draft.id }; document.refresh(); return document
         }
     }
     func prepareEditPlan(_ id: UUID) throws -> VoiceReviewDocument {

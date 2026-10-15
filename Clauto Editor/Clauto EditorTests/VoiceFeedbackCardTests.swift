@@ -6,6 +6,16 @@ import Testing
 @testable import Clauto_Editor
 #endif
 
+/// Core tests never enumerate hardware or request system speech assets.
+actor SyntheticVoiceReviewProvider: VoiceReviewDictating {
+    func access(locale: String) async -> VoiceReviewAccess { .init(microphone: .authorized,speech: .authorized,installedModel: true,locale: locale) }
+    func devices() async -> [VoiceInputDevice] { [] }
+    func requestMicrophonePermission() async -> Bool { Issue.record("Unexpected microphone request in a synthetic core test"); return false }
+    func requestSpeechPermission() async -> Bool { Issue.record("Unexpected speech request in a synthetic core test"); return false }
+    func start(session: UUID,deviceUID: String,locale: String) async throws -> AsyncStream<VoiceDictationEvent> { throw WorkflowFailure.invalid("Synthetic core test cannot start a microphone") }
+    func stop(session: UUID,cancel: Bool) async {}
+}
+
 struct VoiceFeedbackCardTests {
     private func speechFixture(_ f: FrameReviewFixture) async throws -> (VoiceReviewRepository,UUID,UUID) {
         let repo = try VoiceReviewRepository(project: f.project)
@@ -152,7 +162,7 @@ struct VoiceFeedbackCardTests {
         let f = try await FrameReviewFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
         let repo = try VoiceReviewRepository(project: f.project); _ = try await repo.register(f.target)
         _ = try await repo.addTyped(text: "Keep one. Keep two.",action: .protect,anchor: .init(targetID: f.target.id,seconds: 0.1,endSeconds: 0.3))
-        let controller = try VoiceReviewController(project: f.project); await controller.load()
+        let controller = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider()); await controller.load()
         let parent = try #require(controller.document.notes.first)
         let request = VoiceCardRequest(id: UUID(),kind: .split,parents: [.init(id: parent.id,revision: parent.revision)],splitUTF16: "Keep one.".utf16.count)
         controller.restructureCards(request)
@@ -162,7 +172,7 @@ struct VoiceFeedbackCardTests {
         #expect(reopened.cardOperations == [request] && reopened.orderedVisibleNotes.count == 2)
         let draft = VoiceTranscriptDraft(noteID: parent.id,text: "Recover my late draft",intent: .protect,targetID: f.target.id,start: "0.1",end: "0.3",baseRevision: parent.revision)
         _ = try await repo.saveDraft(draft)
-        let restored = try VoiceReviewController(project: f.project); await restored.load()
+        let restored = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider()); await restored.load()
         #expect(restored.visibleCards.contains { $0.id == parent.id } && restored.drafts[parent.id] == draft)
         restored.discardDraft(parent.id)
         #expect(await restored.flushForExit())

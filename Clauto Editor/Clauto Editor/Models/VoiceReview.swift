@@ -233,6 +233,29 @@ struct VoiceSpeechResult: Sendable {
     var runs: [VoiceSpeechRun]? = nil
 }
 
+/// A new typed composer is storage only; even an invalid range can be recovered.
+/// Each content revision owns a stable submission ID for uncertain-save retries.
+struct VoiceTypedDraft: Codable, Equatable, Sendable {
+    var id = UUID()
+    let versionID: UUID
+    var revision = 1
+    var submissionID = UUID()
+    var text = ""
+    var start = ""
+    var end = ""
+    var action = VoiceRangeAction.protect
+    var target: VoiceReviewTarget?
+    func validate(project: UUID) throws {
+        guard revision > 0, revision < 1_000_000_000, text.count <= 20_000,
+              start.count <= 100, end.count <= 100,
+              target == nil || (target!.projectID == project && target!.versionID == versionID) else { throw ProjectFailure.invalidProject }
+    }
+}
+struct VoiceTypedSubmission: Codable, Equatable, Sendable {
+    let draft: VoiceTypedDraft
+    let noteID: UUID
+}
+
 struct VoiceReviewDocument: Codable, Sendable {
     var schemaVersion = 1
     let projectID: UUID
@@ -245,6 +268,8 @@ struct VoiceReviewDocument: Codable, Sendable {
     var processingJobID: UUID?
     var cardOperations: [VoiceCardRequest]?
     var drafts: [VoiceTranscriptDraft]? // Optional for ledgers created before draft retention.
+    var typedDrafts: [VoiceTypedDraft]?
+    var typedSubmissions: [VoiceTypedSubmission]?
 
     mutating func storeSpeech(_ result: VoiceSpeechResult, sessionID: UUID, attemptID: UUID, now: Date, refreshNow: Bool = true) throws {
         guard let session = sessions.first(where: { $0.id == sessionID && $0.attemptID == attemptID }),
