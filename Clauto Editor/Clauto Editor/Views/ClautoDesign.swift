@@ -2,22 +2,24 @@ import SwiftUI
 import AppKit
 import CoreText
 
-enum ClautoDesign {
-    static let ink = Color(red: 23/255, green: 41/255, blue: 37/255)
-    static let rail = Color(red: 24/255, green: 63/255, blue: 53/255)
-    static let paper = Color(red: 243/255, green: 240/255, blue: 229/255)
-    static let sheet = Color(red: 0.993, green: 0.981, blue: 0.943)
-    static let soft = Color(red: 0.889, green: 0.898, blue: 0.824)
-    static let citron = Color(red: 216/255, green: 231/255, blue: 108/255)
-    static let quiet = Color(red: 82/255, green: 103/255, blue: 94/255)
-    static let rule = Color(red: 113/255, green: 135/255, blue: 120/255)
-    static let ember = Color(red: 170/255, green: 79/255, blue: 54/255)
+@MainActor enum ClautoDesign {
+    static var ink: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .labelColor) }; return ClautoThemeStore.shared.palette.ink.color }
+    static var rail: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .underPageBackgroundColor) }; return ClautoThemeStore.shared.palette.sidebar.color }
+    static var railText: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .labelColor) }; return ClautoThemeStore.shared.palette.sidebarInk.color }
+    static var paper: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .windowBackgroundColor) }; return ClautoThemeStore.shared.palette.background.color }
+    static var sheet: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .textBackgroundColor) }; return ClautoThemeStore.shared.palette.surface.color }
+    static var soft: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .controlBackgroundColor) }; return ClautoThemeStore.shared.palette.subtle.color }
+    static var citron: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .controlAccentColor) }; return ClautoThemeStore.shared.palette.accent.color }
+    static var onAccent: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .alternateSelectedControlTextColor) }; return ClautoThemeStore.shared.palette.accentInk.color }
+    static var quiet: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .secondaryLabelColor) }; return ClautoThemeStore.shared.palette.muted.color }
+    static var rule: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .separatorColor) }; return ClautoThemeStore.shared.palette.border.color }
+    static var ember: Color { if ClautoThemeStore.shared.selected == .standard { return Color(nsColor: .systemRed) }; return ClautoThemeStore.shared.palette.error.color }
     static func type(_ size: CGFloat = 14, weight: Font.Weight = .regular) -> Font {
-        .custom("WorkSans-Regular", size: size).weight(weight)
+        ClautoThemeStore.shared.selected == .standard ? .system(size: size,weight: weight) : .custom("WorkSans-Regular", size: size).weight(weight)
     }
-    static let body = type()
-    static let caption = type(12)
-    static let heading = type(24, weight: .semibold)
+    static var body: Font { type() }
+    static var caption: Font { type(12) }
+    static var heading: Font { type(24, weight: .semibold) }
 }
 
 @MainActor enum ClautoFonts {
@@ -44,10 +46,10 @@ struct ClautoButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(ClautoDesign.type(13, weight: .semibold))
-            .foregroundStyle(enabled ? (kind == .danger ? ClautoDesign.ember : ClautoDesign.ink) : ClautoDesign.quiet)
+            .foregroundStyle(enabled ? (kind == .danger ? ClautoDesign.ember : kind == .primary && enabled && !configuration.isPressed && !hovering ? ClautoDesign.onAccent : ClautoDesign.ink) : ClautoDesign.quiet)
             .padding(.horizontal, kind == .quiet ? 8 : 14).padding(.vertical, 9)
-            .background(background(pressed: configuration.isPressed), in: CutCorner(cut: kind == .primary ? 6 : 0))
-            .overlay(CutCorner(cut: kind == .primary ? 6 : 0).stroke(focused ? ClautoDesign.ink : kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
+            .background(background(pressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: ClautoThemeStore.shared.palette.corner))
+            .overlay(RoundedRectangle(cornerRadius: ClautoThemeStore.shared.palette.corner).stroke(focused ? ClautoDesign.ink : kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
             .contentShape(Rectangle()).focusEffectDisabled()
             .onHover { hovering = $0 }
     }
@@ -77,7 +79,7 @@ struct ClautoInlineButtonStyle: ButtonStyle {
     private func background(pressed: Bool) -> Color {
         if selected { return onRail ? ClautoDesign.citron : ClautoDesign.soft }
         guard enabled, hovering || pressed else { return .clear }
-        return onRail ? ClautoDesign.ink : ClautoDesign.soft
+        return onRail ? ClautoDesign.railText.opacity(0.08) : ClautoDesign.soft
     }
 }
 
@@ -102,8 +104,15 @@ struct ClautoAction: View {
         self.title = title; self.icon = icon; self.kind = kind; self.action = action
     }
     var body: some View {
-        Button(action: action) { HStack(spacing: 7) { if let icon { ClautoIcon(icon, size: 16) }; Text(title) } }
-            .buttonStyle(ClautoButtonStyle(kind: kind)).accessibilityLabel(title)
+        Group {
+            if ClautoThemeStore.shared.selected == .standard {
+                Button(action: action) { Label { Text(title) } icon: { if let icon { ClautoIcon(icon, size: 16) } } }
+                    .buttonStyle(.bordered).tint(kind == .primary ? .accentColor : nil)
+            } else {
+                Button(action: action) { HStack(spacing: 7) { if let icon { ClautoIcon(icon, size: 16) }; Text(title) } }
+                    .buttonStyle(ClautoButtonStyle(kind: kind))
+            }
+        }.accessibilityLabel(title)
     }
 }
 
@@ -202,6 +211,11 @@ private struct ClautoNativeTextArea: NSViewRepresentable {
         context.coordinator.parent = self
         if let view = scroll.documentView as? NSTextView {
             view.isEditable = enabled
+            scroll.backgroundColor = NSColor(ClautoDesign.sheet)
+            view.textColor = NSColor(ClautoDesign.ink); view.backgroundColor = NSColor(ClautoDesign.sheet)
+            view.insertionPointColor = NSColor(ClautoDesign.ink)
+            view.font = ClautoThemeStore.shared.selected == .standard ? .systemFont(ofSize: 15) : NSFont(name: "WorkSans-Regular", size: 15)
+            view.selectedTextAttributes = [.backgroundColor: NSColor(ClautoDesign.citron), .foregroundColor: NSColor(ClautoDesign.onAccent)]
             view.setAccessibilityLabel(label)
             if view.string != text {
                 let selection = view.selectedRange(); view.string = text
@@ -316,7 +330,7 @@ struct ClautoSegments: View {
                 Button { selection = value } label: {
                     HStack(spacing: 7) { ClautoIcon(icon, size: 17); Text(value) }
                         .font(ClautoDesign.type(14, weight: .semibold)).padding(.horizontal, 20).padding(.vertical, 12)
-                        .foregroundStyle(selection == value ? ClautoDesign.paper : ClautoDesign.quiet)
+                        .foregroundStyle(selection == value ? ClautoDesign.railText : ClautoDesign.quiet)
                         .background(selection == value ? ClautoDesign.rail : .clear)
                 }.buttonStyle(ClautoInlineButtonStyle()).accessibilityLabel(value)
                     .accessibilityAddTraits(selection == value ? .isSelected : [])

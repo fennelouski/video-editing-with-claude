@@ -36,7 +36,7 @@ enum VoiceIntent: String, Codable, CaseIterable, Sendable {
     }
 }
 enum VoiceTransportKind: String, Codable, Sendable {
-    case sample, play, pause, seekRequested, seekCompleted, versionChanged, unavailable
+    case sample, play, pause, seekRequested, seekCompleted, versionChanged, rateChanged, unavailable
 }
 struct VoiceTransportEvent: Codable, Identifiable, Sendable {
     var id = UUID()
@@ -77,7 +77,7 @@ struct VoiceReviewSession: Codable, Identifiable, Sendable {
     var backupSHA256: String?
 
     mutating func observe(host: Double, seconds: Double, rate: Double, targetID: UUID?, epoch: UUID, kind: VoiceTransportKind) throws {
-        guard host.isFinite, seconds.isFinite, seconds >= 0, [0,1].contains(rate) else { throw ProjectFailure.invalidProject }
+        guard host.isFinite, seconds.isFinite, seconds >= 0, rate.isFinite, (-4...4).contains(rate) else { throw ProjectFailure.invalidProject }
         if kind != .sample && !events.contains(where: { $0.hostTime == host && $0.kind == kind && $0.targetID == targetID && $0.seconds == seconds }) { events.append(.init(hostTime: host, kind: kind, targetID: targetID, seconds: seconds)) }
         if let last = playhead.last, host >= last.confirmedThrough {
             if kind == .sample, last.targetID == targetID, last.epoch == epoch, last.rate == rate,

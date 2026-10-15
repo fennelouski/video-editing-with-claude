@@ -48,6 +48,15 @@ import Observation
             performSeek(seconds: 0,resume: true)
         } else { player.play() }
     }
+    func shuttle(_ direction: Int) {
+        guard ready, !seeking, let player, let item = player.currentItem else { return }
+        let sign: Float = direction < 0 ? -1 : 1
+        let current = player.rate
+        let next: Float = current*sign > 0 ? min(4,abs(current)*2)*sign : sign
+        if next < 0 && !item.canPlayReverse { return }
+        if abs(next) > 1 && (next < 0 ? !item.canPlayFastReverse : !item.canPlayFastForward) { player.rate = sign; return }
+        player.rate = next
+    }
     func seek(seconds: Double) { performSeek(seconds: seconds,resume: false) }
     private func performSeek(seconds: Double, resume: Bool) {
         guard ready, seconds.isFinite, seconds >= 0, let player else { return }
@@ -80,6 +89,13 @@ import Observation
         let seconds = Double(clock.value)/Double(clock.timescale)
         guard seconds.isFinite else { return }
         driver.seek(seconds: min(target.duration,max(0,seconds+interval)))
+    }
+    func step(_ delta: Int) {
+        guard ready else { return }
+        driver.pause()
+        guard let clock = driver.clock, let frame = try? ReviewFrameAnchor.capture(clock,duration: target.duration) else { return }
+        let last = frame.frameCount-1
+        driver.seek(seconds: ReviewTimecode.seconds(frame: min(last,max(0,frame.frameIndex+delta))))
     }
     /// Synchronous: pause and freeze selected version/clock before any task or
     /// editor focus change. Async extraction can never choose another endpoint.

@@ -590,4 +590,28 @@ struct VoiceReviewTests {
         }
     }
 
+    @MainActor @Test func delayedTypedSaveRefusesChangedTargetAndKeepsClickedAction() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-typed-dispatch-"+UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = try await ProjectRepository().create(name: "Synthetic typed dispatch",root: root,engine: root,engineVersion: "test")
+        let a = try target(project: project,number: 1), b = try target(project: project,number: 2)
+        let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider())
+        await controller.load()
+        let first = UUID(); controller.willAttach(first)
+        await controller.attach(a,token: first,sampler: { .init(host: 100,seconds: 1,rate: 0,available: true) })
+        let clickedTarget = try #require(controller.target), clickedAction = VoiceRangeAction.protect
+        let delayed = { @MainActor in await controller.addTyped(text: "Keep A",action: clickedAction,start: 1,end: 2,expectedTarget: clickedTarget) }
+        let second = UUID(); controller.willAttach(second)
+        await controller.attach(b,token: second,sampler: { .init(host: 101,seconds: 1,rate: 0,available: true) })
+        #expect(await delayed() == false)
+        #expect(controller.document.notes.isEmpty)
+        let expectedB = try #require(controller.target)
+        var pickerAction = VoiceRangeAction.protect
+        let frozenAction = pickerAction; pickerAction = .remove
+        #expect(await controller.addTyped(text: "Keep B",action: frozenAction,start: 1,end: 2,expectedTarget: expectedB))
+        let note = try #require(controller.document.notes.last)
+        #expect(pickerAction == .remove && note.action == .protect && note.effectiveAnchor?.targetID == expectedB.id)
+        #expect(await controller.flushForExit())
+    }
+
 }

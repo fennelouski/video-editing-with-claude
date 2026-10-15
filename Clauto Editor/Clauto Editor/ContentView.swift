@@ -11,11 +11,18 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            projectRail.frame(width: 226)
+            if playbackRouter.tab == "Cut", store.selected != nil {
+                VStack(spacing: 18) {
+                    ClautoWindowControls().padding(.top,14)
+                    Menu { ForEach(store.projects) { project in Button(project.manifest.name) { store.selectedID = project.id } } } label: { ClautoEmblem(bracketColor: ClautoDesign.railText,stripColor: ClautoDesign.citron).frame(width: 32,height: 32) }.menuStyle(.borderlessButton).frame(width: 44).accessibilityLabel("Projects")
+                    Spacer()
+                    Button { showSetup = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Workspace")
+                }.padding(.bottom,20).frame(width: 88).frame(maxHeight: .infinity).background(ClautoDesign.rail).foregroundStyle(ClautoDesign.railText)
+            } else { projectRail.frame(width: 226) }
             VStack(spacing: 0) {
                 ForEach(Array(store.voiceReviews.values.filter(\.active)), id: \.project.id) { controller in
                     HStack {
-                        Text("Microphone active · \(controller.project.manifest.name) · \(controller.mode.rawValue)").font(ClautoDesign.caption)
+                        Text("Microphone active · \(controller.project.manifest.name) · v\(controller.target?.versionNumber ?? 0) · \(controller.mode.rawValue)").font(ClautoDesign.caption)
                         Spacer()
                         Button("Stop Voice Review") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
                             .accessibilityIdentifier("voiceReviewGlobalStop")
@@ -43,11 +50,13 @@ struct ContentView: View {
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }.padding(48).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(ClautoDesign.paper)
-        }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).tint(ClautoDesign.rail)
-            .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).preferredColorScheme(.light)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background { ClautoThemeSurface() }
+        }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).tint(ClautoDesign.citron).textSelection(.enabled)
+            .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).preferredColorScheme(ClautoThemeStore.shared.preferredColorScheme)
             .background(PlaybackWindowRegistration(router: playbackRouter).frame(width: 0,height: 0))
-            .onAppear { playbackRouter.store = store }
+            .onAppear { playbackRouter.store = store; playbackRouter.tab = initialProjectTab }
+            .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter) }
+            .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter) }
             .sheet(item: $playbackRouter.editor) { controller in
                 FrameCommentEditor(controller: controller, close: { playbackRouter.dismissEditor() })
                     .interactiveDismissDisabled()
@@ -85,10 +94,10 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             ClautoWindowControls().padding(.horizontal, 24).padding(.top, 14)
             HStack(spacing: 12) {
-                ClautoEmblem(bracketColor: ClautoDesign.paper, stripColor: ClautoDesign.citron).frame(width: 38, height: 38)
+                ClautoEmblem(bracketColor: ClautoDesign.railText, stripColor: ClautoDesign.citron).frame(width: 38, height: 38)
                 Text("Clauto").font(ClautoDesign.type(24, weight: .semibold)).tracking(-0.5)
             }.padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 30)
-            Text("Projects").accessibilityAddTraits(.isHeader).font(ClautoDesign.type(13, weight: .semibold)).foregroundStyle(ClautoDesign.soft).padding(.horizontal, 24).padding(.bottom, 12)
+            Text("Projects").accessibilityAddTraits(.isHeader).font(ClautoDesign.type(13, weight: .semibold)).foregroundStyle(ClautoDesign.railText).padding(.horizontal, 24).padding(.bottom, 12)
             ScrollView {
                 VStack(spacing: 6) {
                     ForEach(store.projects) { project in
@@ -99,7 +108,7 @@ struct ContentView: View {
                                     Text(project.manifest.name).font(ClautoDesign.type(14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
                                     Text("\(store.currentCuts[project.id].map { "Cut v\($0.number)" } ?? "Draft") · \(project.manifest.files.count) files").font(ClautoDesign.caption)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
-                            }.padding(13).foregroundStyle(store.selectedID == project.id ? ClautoDesign.ink : ClautoDesign.paper)
+                            }.padding(13).foregroundStyle(store.selectedID == project.id ? ClautoDesign.onAccent : ClautoDesign.railText)
                                 .background(store.selectedID == project.id ? ClautoDesign.citron : .clear, in: CutCorner(cut: 7))
                         }.buttonStyle(ClautoInlineButtonStyle(onRail: true)).clipShape(CutCorner(cut: 7))
                             .accessibilityLabel(project.manifest.name).accessibilityAddTraits(store.selectedID == project.id ? .isSelected : [])
@@ -113,11 +122,11 @@ struct ContentView: View {
                 railAction("Workspace", icon: .settings) { showSetup = true }
             }.padding(.horizontal, 16).padding(.bottom, 22)
             HStack(spacing: 7) { Rectangle().fill(ClautoDesign.citron).frame(width: 6, height: 6); Text("Originals stay on your drive").font(ClautoDesign.type(11)) }
-                .foregroundStyle(ClautoDesign.soft).padding(.horizontal, 24).padding(.bottom, 24)
-        }.foregroundStyle(ClautoDesign.paper).background(ClautoDesign.rail)
+                .foregroundStyle(ClautoDesign.railText).padding(.horizontal, 24).padding(.bottom, 24)
+        }.foregroundStyle(ClautoDesign.railText).background(ClautoDesign.rail)
     }
     private func railAction(_ title: String, icon: ClautoIconName, action: @escaping () -> Void) -> some View {
         Button(action: action) { HStack(spacing: 10) { ClautoIcon(icon, size: 17); Text(title) }.padding(.horizontal, 8).padding(.vertical, 11).frame(maxWidth: .infinity, alignment: .leading) }
-            .buttonStyle(ClautoInlineButtonStyle(onRail: true)).font(ClautoDesign.type(13, weight: .medium)).foregroundStyle(ClautoDesign.paper)
+            .buttonStyle(ClautoInlineButtonStyle(onRail: true)).font(ClautoDesign.type(13, weight: .medium)).foregroundStyle(ClautoDesign.railText)
     }
 }

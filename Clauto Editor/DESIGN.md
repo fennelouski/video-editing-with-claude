@@ -93,3 +93,22 @@ Captures use offscreen windows, activation policy `prohibited`, and temporary
 synthetic project records. They contain no private media or product screenshots.
 The capture report distinguishes automated control evidence from physical pointer,
 keyboard, VoiceOver, and video-layer checks that need a later live app review.
+
+
+## Approved 2026-10-15 refresh (in progress)
+
+Nathan's approved eleven-theme, three-pane design supersedes the single-palette
+composition described above. The prior identity remains the original asset and
+baseline review record. Homey is now warm paper/wood; Standard uses native system
+colors, fonts, buttons and traffic lights. Other themes use semantic tokens from
+`ClautoTheme.swift`. Original Clauto geometry remains the app icon and main mark;
+familiar system symbols identify the new video/pane actions. Decorative material
+is static and noninteractive. New review controls share `EditorCommand`.
+
+Review uses an 88-point project rail and collapsible versions/assets and feedback
+panes around a stable video/timeline. Each originating window owns its player
+session. Custom detach rehosts one AVPlayerView and shares its exact clock;
+native PiP uses public AVKit controls and delegate callbacks. Neither a theme
+change nor a growing feedback card disposes the player. The full requirements,
+known implementation gaps and unobserved runtime acceptance remain in
+`docs/DESIGN_REFRESH_CHECKLIST.md`; this paragraph does not certify completion.

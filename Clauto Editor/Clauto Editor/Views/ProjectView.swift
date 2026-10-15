@@ -5,7 +5,7 @@ struct ProjectView: View {
     @Bindable var store: EditorStore
     var project: Project
     let playbackRouter: ReviewWindowRouter
-    @State private var tab = "Brief"
+    private var tab: String { playbackRouter.tab }
     // Intentional one-time seed; parent keys this view by project ID when switching projects.
     @State private var draft: Brief
     @State private var message = ""
@@ -16,7 +16,7 @@ struct ProjectView: View {
         self.initialTranscriptReviewGates = initialTranscriptReviewGates
         self.store = store; self.project = project; self.playbackRouter = playbackRouter
         _draft = State(initialValue: project.brief)
-        _tab = State(initialValue: initialTab)
+        // Navigation belongs to the shared window command router.
     }
 
     var body: some View {
@@ -32,7 +32,7 @@ struct ProjectView: View {
                     ClautoAction("Project folder", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
-                    ClautoSegments(selection: $tab, options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut)]).accessibilityIdentifier("projectTabs")
+                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut)]).accessibilityIdentifier("projectTabs")
                     Spacer()
                 }.padding(.horizontal, 28).padding(.bottom, 20)
                 ClautoRule()
@@ -47,9 +47,9 @@ struct ProjectView: View {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
-                        else { CutView(store: store, playbackRouter: playbackRouter) }
+                        else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
                     }.frame(maxHeight: .infinity)
-                    if tab != "Transcript" {
+                    if tab != "Transcript" && tab != "Cut" {
                         ClautoRule()
                         conversation(compact: true)
                     }
@@ -260,7 +260,7 @@ private struct FilesView: View {
                 Text(file.name).font(ClautoDesign.type(14, weight: .semibold)).lineLimit(2)
                 Text(exists ? (file.copied ? "Copied into project" : "Referenced in place") : "Missing file — reconnect its drive")
                     .font(ClautoDesign.caption).foregroundStyle(exists ? ClautoDesign.quiet : ClautoDesign.ember)
-                Text(file.originalPath).font(ClautoDesign.type(11)).foregroundStyle(ClautoDesign.quiet).lineLimit(1).help(file.originalPath)
+                Text(file.originalPath).font(ClautoDesign.type(11)).foregroundStyle(ClautoDesign.quiet).lineLimit(1).clautoHelp(file.originalPath)
             }
             Spacer()
             if file.group == .audio || file.group == .music {
@@ -274,9 +274,10 @@ private struct FilesView: View {
     }
 }
 
-private struct CutView: View {
+struct CutView: View {
     @Bindable var store: EditorStore
     let playbackRouter: ReviewWindowRouter
+    var showPlayers = true
     @State private var versionLabel = "First cut"
     @State private var comparison: UUID?
     @State private var primaryID: UUID?
@@ -390,7 +391,7 @@ private struct CutView: View {
             if project.manifest.importedReviewOnly == true {
                 Text("Imported verified movie · review candidates use the watched movie. Original camera and graphics timeline is retained separately; new production approval is required for a production cut.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             }
-            if let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
+            if showPlayers, let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
                 VersionReview(store: store, project: project, playbackRouter: playbackRouter, version: version, url: folder.appendingPathComponent(preview)).id(version.id)
             }
             DerivativeView(store: store, project: project, version: version).id(version.id)
@@ -530,7 +531,7 @@ struct VersionReview: View {
         guard let player = control.player else { return .init(host: VoiceLivePlayhead.now, seconds: 0, rate: 0, available: false) }
         let time = player.currentTime().seconds
         return .init(host: VoiceLivePlayhead.now, seconds: time.isFinite && time >= 0 ? time : 0,
-            rate: player.timeControlStatus == .playing ? 1 : 0,
+            rate: player.timeControlStatus == .playing ? Double(player.rate) : 0,
             available: ready && !control.seeking && playbackIssue == nil && time.isFinite && time >= 0 && time <= duration)
     }
     private func selectForVoiceReview() {

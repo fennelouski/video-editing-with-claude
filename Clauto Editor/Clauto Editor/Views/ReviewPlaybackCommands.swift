@@ -5,14 +5,27 @@ import Observation
 /// Per-window selection. A comparison player can only take ownership through
 /// its own selection button or canvas; late-loading players never steal it.
 @MainActor @Observable final class ReviewWindowRouter {
+    let id = UUID()
+    var inlineEndpointID: UUID?
+    var intendedVersionID: UUID?
+    var returnVersionID: UUID?
     private(set) var endpoints: [UUID: ReviewPlaybackEndpoint] = [:]
     private(set) var selectedID: UUID?
     var editor: FrameCommentController?
+    var tab = "Brief"
+    var paletteVisible = false
+    var showTimecode = false
+    var onWorkspaceCommand: ((EditorCommand) -> Void)?
+    private var paletteEndpoint: UUID?
+    private var paletteProject: UUID?
+    private var pendingCommand: EditorCommand?
+    @ObservationIgnored private weak var paletteOriginWindow: NSWindow?
+    var ownsSheetContext: Bool { paletteVisible || pendingCommand != nil || showTimecode || editor != nil }
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored weak var store: EditorStore?
     func register(_ endpoint: ReviewPlaybackEndpoint) {
         endpoints[endpoint.id] = endpoint
-        if selectedID == nil { selectedID = endpoint.id }
+        if selectedID == nil && (intendedVersionID == nil || intendedVersionID == endpoint.target.versionID) { selectedID = endpoint.id }
     }
     func unregister(_ id: UUID) {
         if let endpoint = endpoints[id], let editor, editor.preparing, editor.draft?.request.target == endpoint.target {
@@ -21,21 +34,63 @@ import Observation
         endpoints.removeValue(forKey: id)
         if selectedID == id { selectedID = nil }
     }
-    func select(_ id: UUID) { if endpoints[id] != nil { selectedID = id } }
+    func select(_ id: UUID) { if let endpoint = endpoints[id] { selectedID = id; intendedVersionID = endpoint.target.versionID } }
     var selected: ReviewPlaybackEndpoint? { selectedID.flatMap { endpoints[$0] } }
-    var enabled: Bool {
-        guard let window, window === NSApp.keyWindow else { return false }
-        return ReviewShortcutPolicy.permits(textEditing: PlaybackMenuCoordinator.isTextEditing(window.firstResponder),
-            modalPresented: window.attachedSheet != nil || NSApp.modalWindow != nil || editor != nil,
-            selectedPlayerReady: selected?.ready == true)
+    var enabled: Bool { canPerform(.toggle) }
+    func canPerform(_ command: EditorCommand, fromPalette: Bool = false) -> Bool {
+        guard let key = NSApp.keyWindow, PlaybackMenuCoordinator.shared.owns(key,router: self), let store else { return false }
+        if key.attachedSheet != nil || window?.attachedSheet != nil || NSApp.modalWindow != nil || editor != nil || paletteVisible || showTimecode { return false }
+        if [.comment,.timecode,.palette,.brief,.files,.transcript,.review].contains(command) && window == nil { return false }
+        if command.needsPlayer {
+            if !fromPalette && PlaybackMenuCoordinator.isTextEditing(key.firstResponder) { return false }
+            return selected?.ready == true
+        }
+        if command == .palette { return true }
+        return store.selected != nil
     }
-    func perform(_ command: PlaybackMenuCoordinator.Command) {
-        guard enabled, let selected, let store else { return }
+    func choosePaletteCommand(_ command: EditorCommand) { pendingCommand = command; paletteVisible = false }
+    func finishPalette() {
+        guard let command = pendingCommand else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }; defer { self.pendingCommand = nil }
+            // SwiftUI's dismissal callback can precede AppKit sheet/key restoration.
+            for _ in 0..<20 {
+                if self.window?.attachedSheet == nil { break }; try? await Task.sleep(for: .milliseconds(10))
+            }
+            guard self.store?.selectedID == self.paletteProject,
+                  !command.needsPlayer || self.selectedID == self.paletteEndpoint,
+                  let origin = self.paletteOriginWindow, origin.isVisible,
+                  PlaybackMenuCoordinator.shared.owns(origin,router: self) else { self.store?.notice = "The selected player changed. Open Commands again."; return }
+            origin.makeKeyAndOrderFront(nil)
+            self.perform(command, explicitControl: true)
+        }
+    }
+    func perform(_ command: EditorCommand, explicitControl: Bool = false) {
+        guard canPerform(command,fromPalette: explicitControl), let store else { return }
+        if command == .palette {
+            paletteEndpoint = selectedID; paletteProject = store.selectedID; paletteOriginWindow = NSApp.keyWindow; paletteVisible = true; return
+        }
         switch command {
-        case .toggle: selected.driver.toggle()
-        case .back: selected.skip(-store.playbackPreferences.skipSeconds)
-        case .forward: selected.skip(store.playbackPreferences.skipSeconds)
-        case .comment: beginComment(selected)
+        case .brief: tab = "Brief"
+        case .files: tab = "Files"
+        case .transcript: tab = "Transcript"
+        case .review: tab = "Cut"
+        case .toggle: selected?.driver.toggle()
+        case .back: selected?.skip(-store.playbackPreferences.skipSeconds)
+        case .forward: selected?.skip(store.playbackPreferences.skipSeconds)
+        case .comment: if let selected { beginComment(selected) }
+        case .stop: selected?.driver.pause()
+        case .reverse: (selected?.driver as? ReviewPlaybackControl)?.shuttle(-1)
+        case .play: (selected?.driver as? ReviewPlaybackControl)?.shuttle(1)
+        case .previousFrame: selected?.step(-1)
+        case .nextFrame: selected?.step(1)
+        case .timecode: showTimecode = true
+        case .detach,.fullScreen,.pictureInPicture:
+            guard let selected, let session = store.reviewPlayers[selected.id] else { return }
+            if command == .detach { session.presentation.toggleDetach() }
+            if command == .fullScreen { session.presentation.toggleFullScreen() }
+            if command == .pictureInPicture { session.presentation.showNativeControls() }
+        default: onWorkspaceCommand?(command)
         }
     }
     func beginComment(_ endpoint: ReviewPlaybackEndpoint) {
@@ -53,6 +108,11 @@ import Observation
             controller.releaseLease = { [weak voice] in voice?.endFrameComment(lease) }
             editor = controller
         } catch { voice.endFrameComment(lease); store.notice = error.localizedDescription }
+    }
+    func restoreInlineSelection() {
+        guard let id = inlineEndpointID else { return }
+        if let session = store?.reviewPlayers[id] { intendedVersionID = session.version.id }
+        select(id)
     }
     func dismissEditor() { editor = nil }
     func edit(_ record: SavedFrameComment, project: Project) {
@@ -73,15 +133,15 @@ import Observation
 /// A native menu target rechecks the actual key window and first responder at
 /// dispatch, including field editors. No event monitor or text-field shortcut.
 @MainActor final class PlaybackMenuCoordinator: NSObject, NSMenuItemValidation {
-    enum Command: Int { case toggle = 0, back, forward, comment }
+    typealias Command = EditorCommand
     static let shared = PlaybackMenuCoordinator()
     private let windows = NSMapTable<NSWindow, ReviewWindowRouter>(keyOptions: .weakMemory,valueOptions: .weakMemory)
     private var guards: [ObjectIdentifier: PlaybackWindowCloseGuard] = [:]
     static func isTextEditing(_ responder: NSResponder?) -> Bool {
         responder is NSTextInputClient || responder is NSTextView || responder is NSTextField
     }
-    func register(_ window: NSWindow, router: ReviewWindowRouter) {
-        router.window = window; windows.setObject(router,forKey: window)
+    func register(_ window: NSWindow, router: ReviewWindowRouter, primary: Bool = true) {
+        if primary { router.window = window }; windows.setObject(router,forKey: window)
         if let guarder = guards[ObjectIdentifier(window)] {
             guarder.router = router
             if window.delegate !== guarder { guarder.previous = window.delegate; window.delegate = guarder }
@@ -91,6 +151,7 @@ import Observation
         }
         installMenu()
     }
+    func owns(_ window: NSWindow,router: ReviewWindowRouter) -> Bool { windows.object(forKey: window) === router }
     private var router: ReviewWindowRouter? { NSApp.keyWindow.flatMap { windows.object(forKey: $0) } }
     @objc func act(_ sender: NSMenuItem) { if let command = Command(rawValue: sender.tag) { router?.perform(command) } }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -98,20 +159,27 @@ import Observation
            let interval = router?.store?.playbackPreferences.skipSeconds {
             item.title = "Skip \(command == .back ? "Backward" : "Forward") \(interval) Seconds"
         }
-        return router?.enabled == true
+        return Command(rawValue: item.tag).map { router?.canPerform($0) == true } ?? false
     }
     func installMenu() {
         guard let menu = NSApp.mainMenu, menu.item(withTag: 0x434C5042) == nil else { return }
         let root = NSMenuItem(title: "Playback",action: nil,keyEquivalent: ""); root.tag = 0x434C5042
         let playback = NSMenu(title: "Playback"); root.submenu = playback
-        let specs: [(String,String,NSEvent.ModifierFlags,Command)] = [
-            ("Play / Pause","p",[.command,.option],.toggle),
-            ("Skip Backward 5 Seconds",String(UnicodeScalar(NSLeftArrowFunctionKey)!),[.command,.option],.back),
-            ("Skip Forward 5 Seconds",String(UnicodeScalar(NSRightArrowFunctionKey)!),[.command,.option],.forward),
-            ("Pause and Add Frame Comment…","m",[.command,.option,.control],.comment)]
-        for (title,key,modifiers,command) in specs {
-            let item = NSMenuItem(title: title,action: #selector(act(_:)),keyEquivalent: key)
-            item.target = self; item.tag = command.rawValue; item.keyEquivalentModifierMask = modifiers
+        for command in Command.allCases {
+            let shortcut: (String,NSEvent.ModifierFlags)
+            switch command {
+            case .toggle: shortcut = ("p",[.command,.option])
+            case .back: shortcut = (String(UnicodeScalar(NSLeftArrowFunctionKey)!),[.command,.option])
+            case .forward: shortcut = (String(UnicodeScalar(NSRightArrowFunctionKey)!),[.command,.option])
+            case .comment: shortcut = ("m",[.command,.option,.control])
+            case .palette: shortcut = ("p",[.command,.shift])
+            case .timecode: shortcut = ("t",[.command,.option])
+            case .brief,.files,.transcript,.review: shortcut = (String(command.rawValue-Command.brief.rawValue+1),[.command,.option])
+            case .focusAssets,.focusVideo,.focusFeedback: shortcut = (String(command.rawValue-Command.focusAssets.rawValue+1),[.command,.option,.control])
+            default: shortcut = ("",[])
+            }
+            let item = NSMenuItem(title: command.title,action: #selector(act(_:)),keyEquivalent: shortcut.0)
+            item.target = self; item.tag = command.rawValue; item.keyEquivalentModifierMask = shortcut.1
             playback.addItem(item)
         }
         menu.insertItem(root,at: max(1,menu.numberOfItems-1))
@@ -122,7 +190,12 @@ import Observation
         if let guarder = guards.removeValue(forKey: ObjectIdentifier(window)), window.delegate === guarder { window.delegate = guarder.previous }
         if router.window === window { router.window = nil }
     }
-    func closed(_ window: NSWindow) { windows.removeObject(forKey: window); guards.removeValue(forKey: ObjectIdentifier(window)) }
+    func closed(_ window: NSWindow) {
+        if let router = windows.object(forKey: window), router.window === window {
+            router.window = nil
+            for session in router.store?.reviewPlayers.values.filter({ $0.ownerID == router.id }) ?? [] { session.ownerDidClose() }
+        }
+        windows.removeObject(forKey: window); guards.removeValue(forKey: ObjectIdentifier(window)) }
 }
 
 @MainActor private final class PlaybackWindowCloseGuard: NSObject, NSWindowDelegate {
@@ -135,6 +208,7 @@ import Observation
     }
     func windowDidBecomeKey(_ notification: Notification) {
         previous?.windowDidBecomeKey?(notification)
+        if let window = notification.object as? NSWindow, window === router?.window, router?.ownsSheetContext == false { router?.restoreInlineSelection() }
         PlaybackMenuCoordinator.shared.installMenu()
     }
     func windowWillClose(_ notification: Notification) {

@@ -46,7 +46,7 @@ struct Clauto_EditorApp: App {
                     .padding(.horizontal, 24).padding(.vertical, 14).background(ClautoDesign.paper)
                 ClautoRule()
                 SetupView(store: store)
-            }.frame(width: 680, height: 680).foregroundStyle(ClautoDesign.ink).preferredColorScheme(.light)
+            }.frame(width: 680, height: 680).foregroundStyle(ClautoDesign.ink).preferredColorScheme(ClautoThemeStore.shared.preferredColorScheme)
         }.windowStyle(.hiddenTitleBar)
     }
 }

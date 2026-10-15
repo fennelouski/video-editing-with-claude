@@ -32,6 +32,12 @@ final class EditorStore {
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var reviewPlayers: [UUID: ReviewPlayerSession] = [:]
+    func reviewPlayer(project: Project,version: CutVersion,url: URL,ownerID: UUID) -> ReviewPlayerSession {
+        if let session = reviewPlayers.values.first(where: { $0.ownerID == ownerID && $0.version.id == version.id && $0.project.id == project.id && $0.url == url }) { return session }
+        let session = ReviewPlayerSession(project: project,version: version,url: url,store: self,ownerID: ownerID)
+        reviewPlayers[session.id] = session; return session
+    }
     let playbackPreferences: ReviewPlaybackPreferences
     @ObservationIgnored private let voiceProvider = DictateReviewAdapter()
     @ObservationIgnored private let repository = ProjectRepository()

@@ -71,8 +71,8 @@ import Testing
         let menus = NSApp.mainMenu?.items.filter { $0.tag == 0x434C5042 } ?? []
         #expect(menus.count == 1)
         let items = try #require(menus.first?.submenu?.items)
-        #expect(items.count == 4)
-        #expect(Set(items.map { "\($0.keyEquivalent):\($0.keyEquivalentModifierMask.rawValue)" }).count == 4)
+        #expect(items.count == EditorCommand.allCases.count)
+        #expect(Set(items.filter { !$0.keyEquivalent.isEmpty }.map { "\($0.keyEquivalent):\($0.keyEquivalentModifierMask.rawValue)" }).count == items.filter { !$0.keyEquivalent.isEmpty }.count)
         #expect(items[3].keyEquivalentModifierMask == [.command,.option,.control])
         let frozen = try await ReviewFrameCaptureService().capture(f.request(),project: f.project)
         let draft = FrameCommentDraft(request: frozen.request,frame: frozen)
@@ -103,7 +103,7 @@ import Testing
         let roots = NSApp.mainMenu?.items.filter { $0.tag == 0x434C5042 } ?? []
         #expect(roots.count == 1)
         let commands = try #require(roots.first?.submenu?.items)
-        #expect(commands.count == 4 && commands[3].keyEquivalentModifierMask == [.command,.option,.control])
+        #expect(commands.count == EditorCommand.allCases.count && commands[3].keyEquivalentModifierMask == [.command,.option,.control])
         func equivalents(_ menu: NSMenu) -> [String] {
             menu.items.flatMap { item in
                 var values = item.keyEquivalent.isEmpty ? [] : ["\(item.keyEquivalent):\(item.keyEquivalentModifierMask.rawValue)"]
@@ -111,7 +111,7 @@ import Testing
             }
         }
         let all = equivalents(try #require(NSApp.mainMenu))
-        for command in commands { #expect(all.filter { $0 == "\(command.keyEquivalent):\(command.keyEquivalentModifierMask.rawValue)" }.count == 1) }
+        for command in commands where !command.keyEquivalent.isEmpty { #expect(all.filter { $0 == "\(command.keyEquivalent):\(command.keyEquivalentModifierMask.rawValue)" }.count == 1) }
         let window = NSWindow(contentRect: CGRect(x: 0,y: 0,width: 600,height: 400),styleMask: [.titled,.closable],backing: .buffered,defer: false)
         window.isReleasedWhenClosed = false; defer { window.close() }
         let old = ReviewWindowRouter(), replacement = ReviewWindowRouter()

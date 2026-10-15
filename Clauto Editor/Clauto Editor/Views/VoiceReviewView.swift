@@ -10,21 +10,20 @@ struct VoiceReviewView: View {
     let seek: (Double) -> Void
     let prepareCandidatePlayback: (UUID) -> Bool
     @State private var visibleNotes = 50
-    @State private var typedText = ""
-    @State private var typedStart = ""
-    @State private var typedEnd = ""
-    @State private var typedAction = VoiceRangeAction.protect
+    @Bindable private var composer: VoiceTypedComposer
+    init(controller: VoiceReviewController,versionID: UUID,engine: URL,selected: Bool,select: @escaping () -> Void,seek: @escaping (Double) -> Void,prepareCandidatePlayback: @escaping (UUID) -> Bool) {
+        self.controller = controller; self.versionID = versionID; self.engine = engine; self.selected = selected
+        self.select = select; self.seek = seek; self.prepareCandidatePlayback = prepareCandidatePlayback
+        self.composer = controller.typedComposer(for: versionID)
+    }
 
     var body: some View {
-        ClautoSection("Voice review") {
+        ClautoSection("Feedback") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Review with headphones. Speak while watching or paused; each note keeps its saved version and speech-onset time.")
-                    .font(ClautoDesign.body)
                 HStack {
-                    Button(selected ? "This player is selected for Voice Review" : "Use this player for Voice Review", action: select)
-                        .disabled(selected).accessibilityIdentifier("voiceReviewSelectPlayer")
+                    if !selected { Button("Use this video", action: select).accessibilityIdentifier("voiceReviewSelectPlayer") }
                 }
-                HStack {
+                VStack(alignment: .leading,spacing: 8) {
                     Picker("Microphone", selection: Binding(get: { controller.selectedDeviceUID }, set: controller.chooseDevice)) {
                         Text("Choose a microphone").tag("")
                         if !controller.selectedDeviceUID.isEmpty && !controller.devices.contains(where: { $0.id == controller.selectedDeviceUID }) {
@@ -32,7 +31,7 @@ struct VoiceReviewView: View {
                         }
                         ForEach(controller.devices) { Text($0.name).tag($0.id) }
                     }.disabled(controller.active).accessibilityIdentifier("voiceReviewMicrophone")
-                    Button("Refresh inputs") { Task { await controller.refreshAccess() } }
+                    Button("Refresh") { Task { await controller.refreshAccess() } }
                         .disabled(controller.active).accessibilityIdentifier("voiceReviewRefreshInputs")
                 }
                 if let access = controller.access {
@@ -57,13 +56,15 @@ struct VoiceReviewView: View {
                             .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
                     }
                 }
-                HStack {
-                    Button("Start Voice Review") { controller.start() }
+                VStack(alignment: .leading,spacing: 8) {
+                    HStack {
+                    Button("Mic On") { controller.start() }
                         .disabled(!selected || !controller.canStart || controller.target?.versionID != versionID).accessibilityIdentifier("voiceReviewStart")
-                    Button("Stop and Finalize") { Task { _ = await controller.stop() } }
+                    Button("Mic Off") { Task { _ = await controller.stop() } }
                         .disabled(!controller.canStop || controller.mode == .finishing).accessibilityIdentifier("voiceReviewStop")
-                    Button("Cancel capture") { Task { _ = await controller.stop(cancel: true) } }
+                    Button("Cancel") { Task { _ = await controller.stop(cancel: true) } }
                         .disabled(!controller.canStop || controller.mode == .finishing).accessibilityIdentifier("voiceReviewCancelCapture")
+                    }.buttonStyle(.bordered).controlSize(.small)
                     Text(controller.mode.rawValue.capitalized).font(ClautoDesign.caption)
                         .accessibilityLabel("Voice review status").accessibilityValue(controller.mode.rawValue)
                 }
@@ -71,7 +72,7 @@ struct VoiceReviewView: View {
                     ProgressView("Microphone level", value: Double(controller.level), total: 1)
                         .accessibilityIdentifier("voiceReviewMicrophoneLevel")
                 }
-                Text("Audio is transcribed on this Mac. Transcripts, editing drafts and review history are retained. Drafts become instructions only after Save. Completed notes prepare separate candidate instructions while you continue; a new cut still needs approved rendering and verification.")
+                Text("On-device speech · transcripts and review history retained. Use headphones.")
                     .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 if let error = controller.error {
                     Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
@@ -83,20 +84,26 @@ struct VoiceReviewView: View {
                         Button("Retry Save") { Task { await controller.retryStorage() } }.accessibilityIdentifier("voiceReviewRetrySave")
                     }.font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
                 }
-                ClautoDisclosure("Add feedback without a microphone") {
-                    TextField("Feedback", text: $typedText).accessibilityIdentifier("voiceTypedFeedback")
-                    Picker("Explicit review action", selection: $typedAction) {
+                ClautoDisclosure("Typed feedback") {
+                    TextField("Feedback", text: $composer.text).accessibilityIdentifier("voiceTypedFeedback")
+                    Picker("Explicit review action", selection: $composer.action) {
                         Text("Protect this range").tag(VoiceRangeAction.protect)
                         Text("Remove this range").tag(VoiceRangeAction.remove)
                     }
-                    HStack {
-                        TextField("Start seconds", text: $typedStart).accessibilityLabel("Typed feedback start seconds")
-                        TextField("End seconds", text: $typedEnd).accessibilityLabel("Typed feedback end seconds")
+                    VStack(alignment: .leading) {
+                        TextField("Start seconds", text: $composer.start).accessibilityLabel("Typed feedback start seconds")
+                        TextField("End seconds", text: $composer.end).accessibilityLabel("Typed feedback end seconds")
                         Button("Save typed review note") {
-                            guard let start = Double(typedStart), let end = Double(typedEnd) else { controller.error = "Enter explicit start and end times in seconds."; return }
-                            let submitted = typedText
-                            Task { await controller.addTyped(text: submitted,action: typedAction,start: start,end: end) }
-                        }.disabled(!selected || controller.target?.versionID != versionID || typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            guard let start = Double(composer.start), let end = Double(composer.end) else { controller.error = "Enter explicit start and end times in seconds."; return }
+                            guard let expectedTarget = controller.target, expectedTarget.versionID == versionID else { controller.error = "Select this saved video before saving its feedback."; return }
+                            let submitted = composer.text, action = composer.action, submittedStart = composer.start, submittedEnd = composer.end
+                            composer.saving = true
+                            Task {
+                                let saved = await controller.addTyped(text: submitted,action: action,start: start,end: end,expectedTarget: expectedTarget)
+                                composer.saving = false
+                                if saved, composer.text == submitted, composer.action == action, composer.start == submittedStart, composer.end == submittedEnd { composer.text = "" }
+                            }
+                        }.disabled(composer.saving || !selected || controller.target?.versionID != versionID || composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .accessibilityIdentifier("voiceSaveTypedFeedback")
                     }
                 }
@@ -172,13 +179,13 @@ private struct VoiceReviewNoteRow: View {
             TextEditor(text: Binding(get: { text }, set: { text = $0; changed() }))
                 .frame(minHeight: 58, maxHeight: 110).font(ClautoDesign.body)
                 .accessibilityLabel("Voice feedback transcript").accessibilityIdentifier("voiceReviewTranscript-" + note.id.uuidString)
-            Picker("Feedback meaning", selection: Binding(get: { intent }, set: { intent = $0; changed() })) {
+            Picker("Meaning", selection: Binding(get: { intent }, set: { intent = $0; changed() })) {
                 Text("Protect / like").tag(VoiceIntent.protect)
                 Text("Change / dislike").tag(VoiceIntent.change)
-                Text("Needs clarification").tag(VoiceIntent.unclear)
+                Text("Clarify").tag(VoiceIntent.unclear)
             }.accessibilityIdentifier("voiceReviewIntent-" + note.id.uuidString)
-            Picker("Explicit candidate action", selection: Binding(get: { action },set: { action = $0; changed() })) {
-                Text("Unresolved — choose an action").tag(Optional<VoiceRangeAction>.none)
+            Picker("Action", selection: Binding(get: { action },set: { action = $0; changed() })) {
+                Text("Choose action").tag(Optional<VoiceRangeAction>.none)
                 Text("Protect range").tag(Optional(VoiceRangeAction.protect))
                 Text("Remove range").tag(Optional(VoiceRangeAction.remove))
             }.accessibilityIdentifier("voiceReviewAction-"+note.id.uuidString)
@@ -188,16 +195,16 @@ private struct VoiceReviewNoteRow: View {
                 Button("Reload latest note") { controller.discardDraft(note.id); reload() }
             }
             HStack {
-                Button("Save transcript") { save(anchor: nil) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseRevision != note.revision)
-                Button("Cancel processing") { Task { await controller.cancel(note) } }.disabled(note.state == .cancelled)
-                Button("Retry preparation") { Task { await controller.retry(note) } }.disabled(!note.isFinal || ![.failed,.cancelled].contains(note.state))
-            }
+                Button("Save") { save(anchor: nil) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseRevision != note.revision)
+                Button("Cancel") { Task { await controller.cancel(note) } }.disabled(note.state == .cancelled)
+                Button("Retry") { Task { await controller.retry(note) } }.disabled(!note.isFinal || ![.failed,.cancelled].contains(note.state))
+            }.buttonStyle(.bordered).controlSize(.small)
             ClautoDisclosure("Timing and transcript history") {
                 Picker("Saved version for this feedback", selection: Binding(get: { targetID }, set: { targetID = $0; changed() })) {
                     Text("Choose a saved version").tag(Optional<UUID>.none)
                     ForEach(controller.document.targets) { Text("v\($0.versionNumber)").tag(Optional($0.id)) }
                 }
-                HStack {
+                VStack(alignment: .leading,spacing: 8) {
                     TextField("Start seconds", text: Binding(get: { start }, set: { start = $0; changed() })).accessibilityLabel("Feedback start seconds")
                     TextField("End seconds (optional)", text: Binding(get: { end }, set: { end = $0; changed() })).accessibilityLabel("Feedback end seconds, optional")
                     Button("Resolve timing and save") {

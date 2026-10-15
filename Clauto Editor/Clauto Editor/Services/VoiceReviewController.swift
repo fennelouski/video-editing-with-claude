@@ -12,6 +12,15 @@ struct VoiceLivePlayhead: Sendable {
 
 /// One project-owned controller outlives changing VersionReview view identities.
 /// MainActor owns UI/player sampling; repositories/processors own background work.
+/// Per-version composer ownership survives pane collapse and view replacement.
+@MainActor @Observable final class VoiceTypedComposer {
+    var text = ""
+    var start = ""
+    var end = ""
+    var action = VoiceRangeAction.protect
+    var saving = false
+}
+
 @MainActor @Observable
 final class VoiceReviewController {
     enum Mode: String { case idle, starting, recording, finishing, failed }
@@ -29,6 +38,11 @@ final class VoiceReviewController {
     private(set) var renderProgress = ""
     private(set) var candidatePlaybackID: UUID?
     private(set) var frameCommentLease: UUID?
+    var typedComposers: [UUID:VoiceTypedComposer] = [:]
+    func typedComposer(for version: UUID) -> VoiceTypedComposer {
+        if let value = typedComposers[version] { return value }
+        let value = VoiceTypedComposer(); typedComposers[version] = value; return value
+    }
     var error: String?
     var selectedDeviceUID: String
     var locale: String
@@ -153,15 +167,16 @@ final class VoiceReviewController {
 
     func record(_ sample: VoiceLivePlayhead, kind: VoiceTransportKind = .sample, token: UUID?) {
         guard token == viewToken, sample.host.isFinite, sample.seconds.isFinite else { return }
+        let event = kind == .sample && latest?.rate != nil && latest?.rate != sample.rate ? VoiceTransportKind.rateChanged : kind
         latest = sample
         guard let id = sessionID else { return }
-        if pendingWrites > 32 && kind == .sample { return }
+        if pendingWrites > 32 && event == .sample { return }
         if pendingWrites > 256 { error = "Voice review storage cannot keep up. Capture stopped; resolve incomplete feedback."; Task { _ = await stop(cancel: true) }; return }
-        if kind != .sample { epoch = UUID() }
+        if event != .sample { epoch = UUID() }
         let boundTarget = sample.available && kind != .seekRequested && kind != .unavailable ? target?.id : nil
         let generation = epoch
         enqueue { repo in try await repo.observe(session: id, host: sample.host, seconds: max(0,sample.seconds), rate: sample.rate,
-            target: boundTarget, epoch: generation, kind: kind) }
+            target: boundTarget, epoch: generation, kind: event) }
     }
 
     func start() {
@@ -283,9 +298,10 @@ final class VoiceReviewController {
     }
     func cancel(_ note: VoiceReviewNote) async { _ = await enqueue { try await $0.cancel(note: note.id) }.value }
     func retry(_ note: VoiceReviewNote) async { _ = await enqueue { try await $0.retry(note: note.id) }.value }
-    func addTyped(text: String, action: VoiceRangeAction, start: Double, end: Double) async {
-        guard let target else { error = "Select the watched player before adding feedback."; return }
-        _ = await enqueue(retainFailure: false) { try await $0.addTyped(text: text,action: action,anchor: .init(targetID: target.id,seconds: start,endSeconds: end)) }.value
+    @discardableResult func addTyped(text: String, action: VoiceRangeAction, start: Double, end: Double, expectedTarget: VoiceReviewTarget) async -> Bool {
+        guard let target else { error = "Select the watched player before adding feedback."; return false }
+        guard expectedTarget == target else { error = "The selected video changed. Your draft is retained; select its original version and save again."; return false }
+        return await enqueue(retainFailure: false) { try await $0.addTyped(text: text,action: action,anchor: .init(targetID: target.id,seconds: start,endSeconds: end)) }.value
     }
     func prepareEditPlan(_ candidate: VoiceRevisionCandidate) async { _ = await enqueue(retainFailure: false) { try await $0.prepareEditPlan(candidate.id) }.value }
     func approveEditPlan(_ candidate: VoiceRevisionCandidate) async {

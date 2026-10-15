@@ -9,6 +9,9 @@ struct SetupView: View {
             VStack(alignment: .leading, spacing: 28) {
                 HStack(spacing: 12) { ClautoIcon(.settings, size: 27); Text("Your workspace").font(ClautoDesign.heading) }
                 Text("Keep footage and editing files on your project drive. This build checks installed tools; installation and model downloads remain in development.").foregroundStyle(ClautoDesign.quiet)
+                Picker("Theme",selection: Binding(get: { ClautoThemeStore.shared.selected },set: { ClautoThemeStore.shared.choose($0) })) {
+                    ForEach(ClautoThemeID.allCases) { theme in Text(theme.label).tag(theme) }
+                }.accessibilityIdentifier("clautoThemePicker")
                 ClautoSection("Folders") {
                     folderRow("Projects", url: store.projectRoot) { store.setFolders(projects: $0) }
                     ClautoRule()
