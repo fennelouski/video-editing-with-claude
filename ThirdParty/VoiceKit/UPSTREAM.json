@@ -1,0 +1,45 @@
+{
+  "source": "/Users/nathanfennel/Documents/GitHub/voicekit",
+  "commit": "093289b2acbd37f3851d9583b6da0dc4800f0832",
+  "license": "MIT; Nathan Fennel2025",
+  "original_file_sha256": {
+    "Sources/VoiceKit/Audio/AudioInputSelection.swift": "9f36e7d70129801b4cbc68ae2097da7d40624272c01959703f6670509f865189",
+    "Sources/VoiceKit/Audio/BackupRecorder.swift": "094f6774fabf30c92020de68da61d58e93b741b6bc812018dc2d0ae644d56e22",
+    "Sources/VoiceKit/Audio/BufferConverter.swift": "7c737e1c73f70cda13bd63c24ae80fb7c61b7210919454666302894907170e8e",
+    "Sources/VoiceKit/Audio/CaptureHeartbeat.swift": "bea59acee7e3c9b9d21f01b55c563caa2a86c4265576a33933c8fedb2124a027",
+    "Sources/VoiceKit/Audio/ObjCException.swift": "a7e5e4f1a49e55ac5c97a8fdde57bdb88fdcffdc866d4d7897db788ef95efdc1",
+    "Sources/VoiceKit/Audio/RMSCalculator.swift": "706a4c75a4ee31e0e323957f708854fdcfea30d0f8157c0989b450a6104991f3",
+    "Sources/VoiceKit/Audio/SafeTap.swift": "9f54410ed2233e48504b5b2cc078da18910a1f133ba02c2a87d8fad3e969b5cf",
+    "Sources/VoiceKit/Protocols/TranscriptionProvider.swift": "c484874105ab96f993e5d370477115c4c326a5aea2c7a8a036c9145d16e7bb79",
+    "Sources/VoiceKit/Recognition/RecognitionError.swift": "65adabf80bd6ab50661db70474226a1de6ca4ebc2af034e26f2044e8db3fad5d",
+    "Sources/VoiceKit/Recognition/RecognitionSession.swift": "b88d8ab9baf054439be3806cd0a56c36c60ffad566e26c0e40f131269a9e5822",
+    "Sources/VoiceKit/Recognition/SpeechRecognitionService.swift": "4bb395f9f3637081e404138a789603320fbd20cd15d5752996ab0ed8ea07236b",
+    "Sources/VoiceKit/Recognition/TranscriptionResult.swift": "1165a59a73013d2cfd6ffb9777f5e691bfb8af19ec159a6e9f818f7f58a14ee4",
+    "Sources/VoiceKit/Recognition/FileTranscriber.swift": "0c1cc239279ad1e00561d0b3305f12c5b06a0abc16d9a726e1f21bd77d8a7c39",
+    "Sources/VKObjC/VKObjC.m": "fe9eaef938db8522aed34a2ec7f7d4c46291b7c5b92049aab8b0244e7cb76f18",
+    "Sources/VKObjC/include/VKObjC.h": "74b4ae9ed68e769539b1cc985a157d237936628c80869100d06bd25a15b48129",
+    "LICENSE": "ed42ff5448582dfb062438fbc09ce58ff94bea4510a715fce1b437c88ad528f4"
+  },
+  "clauto_changes": [
+    "Explicit no-prompt/no-download/no-device-fallback policy; installed on-device models only",
+    "Time-indexed transcription and authoritative converted analyzer-frame / tap-host capture stamps",
+    "Owned converted analyzer inputs with explicit bufferStartTime and discontinuity signaling"
+  ],
+  "vendored_file_sha256": {
+    "Sources/VKObjC/VKObjC.m": "fe9eaef938db8522aed34a2ec7f7d4c46291b7c5b92049aab8b0244e7cb76f18",
+    "Sources/VKObjC/include/VKObjC.h": "74b4ae9ed68e769539b1cc985a157d237936628c80869100d06bd25a15b48129",
+    "Sources/VoiceKit/Audio/AudioInputSelection.swift": "9f36e7d70129801b4cbc68ae2097da7d40624272c01959703f6670509f865189",
+    "Sources/VoiceKit/Audio/BackupRecorder.swift": "094f6774fabf30c92020de68da61d58e93b741b6bc812018dc2d0ae644d56e22",
+    "Sources/VoiceKit/Audio/BufferConverter.swift": "7c737e1c73f70cda13bd63c24ae80fb7c61b7210919454666302894907170e8e",
+    "Sources/VoiceKit/Audio/CaptureHeartbeat.swift": "bea59acee7e3c9b9d21f01b55c563caa2a86c4265576a33933c8fedb2124a027",
+    "Sources/VoiceKit/Audio/ObjCException.swift": "a7e5e4f1a49e55ac5c97a8fdde57bdb88fdcffdc866d4d7897db788ef95efdc1",
+    "Sources/VoiceKit/Audio/RMSCalculator.swift": "706a4c75a4ee31e0e323957f708854fdcfea30d0f8157c0989b450a6104991f3",
+    "Sources/VoiceKit/Audio/SafeTap.swift": "9f54410ed2233e48504b5b2cc078da18910a1f133ba02c2a87d8fad3e969b5cf",
+    "Sources/VoiceKit/Protocols/TranscriptionProvider.swift": "c484874105ab96f993e5d370477115c4c326a5aea2c7a8a036c9145d16e7bb79",
+    "Sources/VoiceKit/Recognition/FileTranscriber.swift": "91ef8aa48776564d5913dce96f15fa7eb5d39bec824ca096c9343fc5bc513c92",
+    "Sources/VoiceKit/Recognition/RecognitionError.swift": "65adabf80bd6ab50661db70474226a1de6ca4ebc2af034e26f2044e8db3fad5d",
+    "Sources/VoiceKit/Recognition/RecognitionSession.swift": "65621a8c6ba83890677d14313bde5ccdbb3b2764b08bc3086267ec8ff63b4307",
+    "Sources/VoiceKit/Recognition/SpeechRecognitionService.swift": "ea95f2653c7bb85123d09810ed5b097071a0560d9ec54b869e4f6dad65c0bce6",
+    "Sources/VoiceKit/Recognition/TranscriptionResult.swift": "1165a59a73013d2cfd6ffb9777f5e691bfb8af19ec159a6e9f818f7f58a14ee4"
+  }
+}

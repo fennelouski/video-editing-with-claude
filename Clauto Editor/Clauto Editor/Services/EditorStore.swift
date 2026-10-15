@@ -30,6 +30,8 @@ final class EditorStore {
     var runningProjectID: UUID?
     var exportingPDF = false
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
+    var voiceReviews: [UUID: VoiceReviewController] = [:]
+    @ObservationIgnored private let voiceProvider = DictateReviewAdapter()
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
     @ObservationIgnored private let workflow = WorkflowRepository()
@@ -57,6 +59,29 @@ final class EditorStore {
         let controller = TranscriptReviewController(project: project)
         transcriptReviews[project.id] = controller
         return controller
+    }
+
+    func voiceReview(for project: Project) -> VoiceReviewController? {
+        if let existing = voiceReviews[project.id] { return existing }
+        do {
+            let controller = try VoiceReviewController(project: project, provider: voiceProvider, defaults: defaults)
+            voiceReviews[project.id] = controller; return controller
+        } catch { notice = error.localizedDescription; return nil }
+    }
+
+    func bindVoiceReview(version: CutVersion, project: Project, token: UUID, sampler: @escaping @MainActor () -> VoiceLivePlayhead) async {
+        guard let controller = voiceReview(for: project) else { return }
+        await controller.load()
+        do { await controller.attach(try await workflow.voiceReviewTarget(version, project: project), token: token, sampler: sampler) }
+        catch { controller.error = error.localizedDescription }
+    }
+
+    var hasPendingReviewWork: Bool { hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) }
+
+    func flushReviewWorkForExit() async -> Bool {
+        var voicesSaved = true
+        for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
+        return await flushTranscriptReviewsForExit() && voicesSaved
     }
 
     var hasPendingTranscriptSaves: Bool { transcriptReviews.values.contains { $0.dirty || $0.saving || $0.loading } }

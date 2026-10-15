@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
         A10000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* Sparkle */; };
+        A20000000000000000000001 /* VoiceKit in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000002 /* VoiceKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +58,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 A10000000000000000000001 /* Sparkle in Frameworks */,
+                A20000000000000000000001 /* VoiceKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +120,7 @@
 			name = "Clauto Editor";
 			packageProductDependencies = (
                 A10000000000000000000002 /* Sparkle */,
+                A20000000000000000000002 /* VoiceKit */,
 			);
 			productName = "Clauto Editor";
 			productReference = D8E50E23307E619200A4B56F /* Clauto Editor.app */;
@@ -202,7 +205,7 @@
 			mainGroup = D8E50E1A307E619200A4B56F;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-            packageReferences = (A10000000000000000000003 /* Sparkle */);
+            packageReferences = (A10000000000000000000003 /* Sparkle */, A20000000000000000000003 /* Local VoiceKit */);
 			productRefGroup = D8E50E24307E619200A4B56F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -282,12 +285,16 @@
             requirement = {kind = upToNextMajorVersion; minimumVersion = 2.6.0; };
         };
 /* End XCRemoteSwiftPackageReference section */
+/* Begin XCLocalSwiftPackageReference section */
+        A20000000000000000000003 /* Local VoiceKit */ = {isa = XCLocalSwiftPackageReference; relativePath = ../ThirdParty/VoiceKit; };
+/* End XCLocalSwiftPackageReference section */
 /* Begin XCSwiftPackageProductDependency section */
         A10000000000000000000002 /* Sparkle */ = {
             isa = XCSwiftPackageProductDependency;
             package = A10000000000000000000003 /* Sparkle */;
             productName = Sparkle;
         };
+        A20000000000000000000002 /* VoiceKit */ = {isa = XCSwiftPackageProductDependency; package = A20000000000000000000003; productName = VoiceKit; };
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -422,6 +429,7 @@
 				DEVELOPMENT_TEAM = EJLR2RPSV2;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+                ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -459,6 +467,7 @@
 				DEVELOPMENT_TEAM = EJLR2RPSV2;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+                ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;

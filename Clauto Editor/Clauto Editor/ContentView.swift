@@ -12,6 +12,14 @@ struct ContentView: View {
         HStack(spacing: 0) {
             projectRail.frame(width: 226)
             VStack(spacing: 0) {
+                ForEach(Array(store.voiceReviews.values.filter(\.active)), id: \.project.id) { controller in
+                    HStack {
+                        Text("Microphone active · \(controller.project.manifest.name) · \(controller.mode.rawValue)").font(ClautoDesign.caption)
+                        Spacer()
+                        Button("Stop Voice Review") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
+                            .accessibilityIdentifier("voiceReviewGlobalStop")
+                    }.padding(12).background(ClautoDesign.soft).accessibilityElement(children: .contain)
+                }
                 if let notice = store.notice {
                     HStack(alignment: .top, spacing: 12) {
                         ClautoIcon(.conversation, size: 20)

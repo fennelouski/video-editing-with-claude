@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import AVFoundation
 
 struct EditRun: Codable, Identifiable, Sendable {
     enum State: String, Codable, Sendable { case prepared, running, needsReview, needsAssets, failed, cancelled, complete }
@@ -794,6 +795,36 @@ actor WorkflowRepository {
     }
 
     private struct FeedbackTarget { var version: CutVersion; var duration: Double; var sha: String }
+    func voiceReviewTarget(_ requested: CutVersion, project: Project,
+                           durationLoader: @Sendable (URL) async throws -> Double = { try await AVURLAsset(url: $0).load(.duration).seconds }) async throws -> VoiceReviewTarget {
+        let base = "cuts/" + requested.folderName + "/"
+        // Pin before decoding the version or awaiting AVFoundation. Revalidate the
+        // complete input set afterward so no mixed snapshot can be registered.
+        let metadata = try VoiceReviewProvenance.inspect(base + "clauto-version.json", project: project)
+        let bound = try feedbackTarget(requested.id, project: project), version = bound.version
+        guard requested.number == version.number,
+              let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4"),
+              let timeline = version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }),
+              let script = version.approvedScript else { throw WorkflowFailure.invalid("Choose a saved version with a preview, approved inputs and verified timeline before voice review.") }
+        let plans = version.artifacts.filter { $0.hasPrefix("plan/") && $0.hasSuffix(".plan.json") }
+        guard plans.count == 1 else { throw WorkflowFailure.invalid("The saved edit's approved plan is unavailable.") }
+        let plan = try VoiceReviewProvenance.inspect(base + plans[0], project: project)
+        guard plan.sha256 == version.approvedPlanHash else { throw WorkflowFailure.invalid("The saved edit's approved plan changed.") }
+        let xml = try VoiceReviewProvenance.inspect(base + timeline, project: project)
+        guard xml.sha256 == bound.sha else { throw ProjectFailure.invalidProject }
+        let brief = try VoiceReviewProvenance.inspect(base + "inputs/brief.md", project: project)
+        guard brief.sha256 == version.briefHash else { throw WorkflowFailure.invalid("The saved edit's approved brief changed.") }
+        let approvedScript = try VoiceReviewProvenance.inspect(base + script, project: project)
+        let movie = try VoiceReviewProvenance.inspect(base + preview, project: project)
+        let previewDuration = try await durationLoader(VoiceReviewProvenance.url(movie.relativePath, project: project))
+        guard previewDuration.isFinite, abs(previewDuration - bound.duration) <= 1.0 / 24.0 else { throw WorkflowFailure.invalid("The saved preview duration does not match its verified timeline. Restore a matching preview before voice review.") }
+        for artifact in [metadata, plan, xml, brief, approvedScript, movie] { try VoiceReviewProvenance.check(artifact, project: project) }
+        return VoiceReviewTarget(id: UUID(), projectID: project.id, versionID: version.id, versionNumber: version.number,
+            versionMetadataSHA256: metadata.sha256,
+            timeline: xml, preview: movie,
+            approvedPlanSHA256: version.approvedPlanHash, approvedPlanPath: base + plans[0], approvedScriptSHA256: approvedScript.sha256, approvedScriptPath: base + script,
+            approvedBriefSHA256: brief.sha256, engineVersion: version.engineVersion, duration: bound.duration)
+    }
     private func validFeedbackRange(start: Double, end: Double?, duration: Double) -> Bool {
         start.isFinite && start >= 0 && start <= duration && (end == nil || (end!.isFinite && end! >= start && end! <= duration))
     }

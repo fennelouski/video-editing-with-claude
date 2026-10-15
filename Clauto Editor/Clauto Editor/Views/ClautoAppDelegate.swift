@@ -7,14 +7,14 @@ import AppKit
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if awaitingReviewSave { return .terminateLater }
-        guard let store, store.hasPendingTranscriptSaves else { return .terminateNow }
+        guard let store, store.hasPendingReviewWork else { return .terminateNow }
         awaitingReviewSave = true
         Task {
-            let saved = await store.flushTranscriptReviewsForExit()
+            let saved = await store.flushReviewWorkForExit()
             if saved { finish(sender, terminate: true); return }
             let alert = NSAlert()
-            alert.messageText = "Transcript review changes have not saved"
-            alert.informativeText = "Keep editing to retry the save or preserve a pending draft copy. Quitting without saving discards only the unsaved review changes; earlier checkpoints remain."
+            alert.messageText = "Review work has not saved"
+            alert.informativeText = "Keep editing to retry transcript or voice-review saves. Quitting without saving discards pending changes; earlier checkpoints and reviewed cuts remain."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Keep Editing")
             alert.addButton(withTitle: "Quit Without Saving")

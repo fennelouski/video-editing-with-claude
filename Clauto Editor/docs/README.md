@@ -12,6 +12,8 @@ describes the video; Claude does the editing; the user reacts and asks for chang
 | [UX.md](UX.md) | Screens and flows: setup, new project, brief, drag and drop, iterate |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the app drives Claude Code, project folder format, installer, security |
 | [ROADMAP.md](ROADMAP.md) | Milestones in build order, with what "done" means for each |
+| [IMPLEMENTATION.md](IMPLEMENTATION.md) | Tested milestones, remaining requirements and acceptance limits |
+| [VOICE_REVIEW.md](VOICE_REVIEW.md) | Explicit local voice review, saved-version timing, durable feedback and candidate instructions |
 
 ## The one-paragraph version
 

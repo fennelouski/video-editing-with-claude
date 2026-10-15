@@ -364,3 +364,22 @@ Production gates and existing cuts remain untouched. Exact supported behavior,
 synthetic decoded-output tests, storage-failure simulations and the check-time
 identity limitation are in `SOURCE_SPAN_RENDERING.md`. Native GUI production
 application and actual editorial/fact approval remain pending.
+
+
+## Asynchronous voice-review increment (15 October)
+
+[VOICE_REVIEW.md](VOICE_REVIEW.md) records the requirements, reused VoiceKit source,
+implementation and limits. Explicit player/device selection and microphone controls,
+speech-onset timing, seeks/pauses/version changes, stable notes/transcript history,
+durable editing drafts, failure recovery and serialized local candidate preparation
+are implemented. Distinct immutable instruction artifacts protect the reviewed cut.
+Actual candidate timeline editing and rendered movie delivery remain unfinished;
+NAS/source and all editorial/production approval gates are unchanged.
+
+Final native validation reports 137 registered cases (131 passed, six opt-ins skipped),
+including 29 mocked voice-review cases. Debug builds without launch. Debug and Release
+microphone entitlements and signatures are checked separately in the handoff. Actual
+microphone capture, permission prompts, model downloads, interactive VoiceOver,
+private footage processing and new cut generation were not performed. Independent
+review details and precise final evidence are in the task-local handoff rather than
+implied by earlier milestone acceptance counts above.
