@@ -9,6 +9,7 @@ script.
 from __future__ import annotations
 
 import json
+import zipfile
 
 import pytest
 
@@ -304,6 +305,75 @@ def test_has_cue_marker_survives_unreadable_files(tmp_path):
     bad.write_bytes(b"this is not a zip archive")
     assert S3.has_cue_marker(bad) is False
     assert S3.has_cue_marker(tmp_path / "does-not-exist.md") is False
+
+
+@pytest.mark.parametrize('fault', ['duplicate', 'missing_document', 'doctype', 'oversized', 'wrong_root'])
+def test_word_package_refuses_ambiguous_or_unbounded_xml(tmp_path, fault):
+    path = tmp_path / 'script.docx'
+    document = '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>'
+    if fault == 'doctype':
+        document = '<!DOCTYPE document [<!ENTITY bad "expanded">]>' + document
+    elif fault == 'oversized':
+        document = 'x' * (16 * 1024 * 1024 + 1)
+    elif fault == 'wrong_root':
+        document = '<not_a_word_document/>'
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as package:
+        if fault != 'missing_document':
+            package.writestr('word/document.xml', document)
+        if fault == 'duplicate':
+            with pytest.warns(UserWarning, match='Duplicate name'):
+                package.writestr('word/document.xml', document)
+    with pytest.raises((ValueError, KeyError)):
+        S3.parse_docx(path)
+
+
+@pytest.mark.parametrize('with_comment', [True, False])
+def test_word_source_and_anchored_comment_remain_unchanged(tmp_path, with_comment):
+    path = tmp_path / 'selected.docx'
+    namespace = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    document = f'<w:document xmlns:w="{namespace}"><w:body><w:p><w:commentRangeStart w:id="7"/><w:r><w:t>Synthetic source words</w:t></w:r><w:commentRangeEnd w:id="7"/></w:p></w:body></w:document>'
+    comments = f'<w:comments xmlns:w="{namespace}"><w:comment w:id="7"><w:p><w:r><w:t>[[NOTE: preserve the recorded source]]</w:t></w:r></w:p></w:comment></w:comments>'
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as package:
+        package.writestr('word/document.xml', document)
+        if with_comment:
+            package.writestr('word/comments.xml', comments)
+    original = path.read_bytes()
+    cues = S3.parse_docx(path)
+    assert len(cues) == int(with_comment)
+    if with_comment:
+        assert cues[0].kind == 'NOTE' and cues[0].anchor == 'Synthetic source words'
+    assert S3.has_cue_marker(path) is with_comment
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize('encoding,bom', [('utf-8', False), ('utf-16-le', False), ('utf-16-le', True), ('utf-16-be', False), ('utf-16-be', True)])
+@pytest.mark.parametrize('part', ['document', 'comments'])
+@pytest.mark.parametrize('declarations', [False, True])
+def test_word_xml_declarations_are_encoding_aware_without_losing_unicode(tmp_path, encoding, bom, part, declarations):
+    path = tmp_path / 'unicode.docx'
+    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    document = f'<w:document xmlns:w="{ns}"><w:body><w:p><w:commentRangeStart w:id="1"/><w:r><w:t>Café 京都</w:t></w:r><w:commentRangeEnd w:id="1"/></w:p></w:body></w:document>'
+    comments = f'<w:comments xmlns:w="{ns}"><w:comment w:id="1"><w:p><w:r><w:t>[[NOTE: note="Café 京都"]]</w:t></w:r></w:p></w:comment></w:comments>'
+    chosen = document if part == 'document' else comments
+    if declarations:
+        chosen = '<!DOCTYPE root [<!ENTITY unsafe "expanded">]>' + chosen.replace('Café 京都', '&unsafe;')
+    chosen = f'<?xml version="1.0" encoding="{"UTF-8" if encoding == "utf-8" else "UTF-16"}"?>' + chosen
+    data = chosen.encode(encoding)
+    if bom:
+        data = (b'\xff\xfe' if encoding == 'utf-16-le' else b'\xfe\xff') + data
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as package:
+        package.writestr('word/document.xml', data if part == 'document' else document.encode())
+        package.writestr('word/comments.xml', data if part == 'comments' else comments.encode())
+    original = path.read_bytes()
+    if declarations:
+        with pytest.raises(ValueError, match='declarations'):
+            S3.parse_docx(path)
+        assert S3.has_cue_marker(path) is False
+    else:
+        cues = S3.parse_docx(path)
+        assert len(cues) == 1 and cues[0].anchor == 'Café 京都' and 'Café 京都' in cues[0].notes
+        assert S3.has_cue_marker(path) is True
+    assert path.read_bytes() == original
 
 
 # --------------------------------------------------------------------------------------

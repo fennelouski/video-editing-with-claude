@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from xml.etree import ElementTree as ET
+from xml.parsers import expat
 
 import cli
 import config as C
@@ -156,6 +157,37 @@ def parse_markdown(path: Path) -> list[Cue]:
     return cues
 
 
+def _docx_xml_member(package: zipfile.ZipFile, name: str):
+    entries = package.infolist()
+    if len(entries) > 2048 or len(set(package.namelist())) != len(entries):
+        raise ValueError("The Word script has too many or duplicate package entries")
+    info = package.getinfo(name)
+    limit = 16 * 1024 * 1024
+    if info.is_dir() or info.flag_bits & 1 or info.file_size > limit:
+        raise ValueError("The Word script XML is encrypted or exceeds 16 MiB")
+    with package.open(info) as member:
+        data = member.read(limit + 1)
+    if len(data) > limit or len(data) != info.file_size:
+        raise ValueError("The Word script XML is oversized")
+    # Let the XML parser decode the declared encoding before checking declarations.
+    # A byte regex misses UTF-16/32; handlers abort before any entity expansion.
+    def reject_declaration(*_args):
+        raise ValueError("The Word script XML contains unsupported declarations")
+    parser = expat.ParserCreate()
+    parser.StartDoctypeDeclHandler = reject_declaration
+    parser.EntityDeclHandler = reject_declaration
+    parser.ExternalEntityRefHandler = reject_declaration
+    try:
+        parser.Parse(data, True)
+    except expat.ExpatError as error:
+        raise ValueError("The Word script XML is not supported") from error
+    root = ET.fromstring(data)
+    expected = "document" if name == "word/document.xml" else "comments"
+    if root.tag != f"{{{W_NS['w']}}}{expected}":
+        raise ValueError("The selected package has an unsupported Word XML root")
+    return root
+
+
 def parse_docx(path: Path) -> list[Cue]:
     """
     Read Word comments straight out of the package. python-docx doesn't expose comments,
@@ -163,11 +195,10 @@ def parse_docx(path: Path) -> list[Cue]:
     """
     cues: list[Cue] = []
     with zipfile.ZipFile(path) as z:
-        names = set(z.namelist())
-        if "word/comments.xml" not in names:
+        doc_xml = _docx_xml_member(z, "word/document.xml")
+        if "word/comments.xml" not in set(z.namelist()):
             return cues
-        comments_xml = ET.fromstring(z.read("word/comments.xml"))
-        doc_xml = ET.fromstring(z.read("word/document.xml"))
+        comments_xml = _docx_xml_member(z, "word/comments.xml")
 
     # comment id -> comment text
     comments: dict[str, str] = {}
@@ -343,13 +374,11 @@ def has_cue_marker(path: Path) -> bool:
             with zipfile.ZipFile(path) as z:
                 if "word/comments.xml" not in set(z.namelist()):
                     return False
-                text = "".join(
-                    t.text or ""
-                    for t in ET.fromstring(z.read("word/comments.xml")).iter(f"{{{W_NS['w']}}}t")
-                )
+                _docx_xml_member(z, "word/document.xml")
+                text = "".join(t.text or "" for t in _docx_xml_member(z, "word/comments.xml").iter(f"{{{W_NS['w']}}}t"))
         else:
             text = path.read_text(encoding="utf-8", errors="replace")
-    except (OSError, ValueError, zipfile.BadZipFile, ET.ParseError):
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile, ET.ParseError):
         return False
     return any(m.group("kind").upper() in VALID_KINDS for m in MARKER.finditer(text))
 

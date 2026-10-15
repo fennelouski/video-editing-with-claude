@@ -54,6 +54,9 @@ struct ProjectManifest: Codable, Identifiable, Sendable {
     var durationBounds: VideoDurationBounds? = nil
     var exportResolution: ExportResolution? = nil
     var creativeReferences: [CreativeReference]? = nil
+    var scriptSelection: ProjectScriptReference? = nil
+    var requiresScriptSelection: Bool? = nil
+    var mutationRevision: Int64? = nil
     var outputResolution: ExportResolution { exportResolution ?? .fullHD }
 }
 
@@ -131,7 +134,52 @@ struct Project: Identifiable, Sendable {
     var manifest: ProjectManifest
     var folder: URL
     var brief: Brief
+    /// Captured for this open handle; filesystem identity is never exported or
+    /// serialized into a portable project manifest.
+    var folderIdentity: RenderDirectoryIdentity? = nil
     var id: UUID { manifest.id }
+}
+
+/// Keeps local Brief drafts separate from asynchronous disk acknowledgements.
+/// Persisted revisions order manifest responses without relying on wall clocks.
+struct ProjectPresentationState: Sendable {
+    private struct Draft: Sendable { let token: UUID; let brief: Brief }
+    private struct Key: Hashable, Sendable { let id: UUID; let root: String; let device: Int32?; let inode: UInt64? }
+    private var drafts: [Key:Draft] = [:]
+    private func key(_ project: Project) -> Key { .init(id: project.id,root: project.folder.resolvingSymlinksInPath().standardizedFileURL.path,device: project.folderIdentity?.device,inode: project.folderIdentity?.inode) }
+    static func sameRoot(_ first: Project,_ second: Project) -> Bool {
+        first.id == second.id && first.folder.resolvingSymlinksInPath().standardizedFileURL.path == second.folder.resolvingSymlinksInPath().standardizedFileURL.path && first.folderIdentity == second.folderIdentity
+    }
+    static func requireUnambiguousOpen(_ project: Project,among projects: [Project]) throws {
+        guard !projects.contains(where: { $0.id == project.id && !sameRoot($0,project) }) else {
+            throw WorkflowFailure.invalid("This copy shares its project ID with another folder already listed in Clauto. The requested copy was not opened; the current project folder is unchanged. Opening separate copies with the same ID is not supported yet.")
+        }
+    }
+    var hasUnsavedBriefs: Bool { !drafts.isEmpty }
+    func pendingBrief(for project: Project) -> Brief? { drafts[key(project)]?.brief }
+    func requireCutInput(_ reopened: Project,chosen: Project) throws {
+        guard Self.sameRoot(chosen,reopened) else {
+            throw WorkflowFailure.invalid("The selected project folder changed before the cut could start. No run was prepared. Reopen the intended project before trying again.")
+        }
+        guard pendingBrief(for: chosen) == nil else {
+            throw WorkflowFailure.invalid("Your latest Brief is still unsaved. No run was prepared. Save those changes before starting a cut.")
+        }
+    }
+    mutating func submit(_ brief: Brief,for project: Project) -> UUID {
+        let token = UUID(); drafts[key(project)] = .init(token: token,brief: brief); return token
+    }
+    @discardableResult mutating func acknowledge(_ token: UUID,for project: Project) -> Bool {
+        let key = key(project)
+        guard drafts[key]?.token == token else { return false }
+        drafts.removeValue(forKey: key); return true
+    }
+    func present(_ incoming: Project,over current: Project?) -> Project {
+        var next = incoming
+        if let current, Self.sameRoot(current,incoming),
+           (current.manifest.mutationRevision ?? 0) > (incoming.manifest.mutationRevision ?? 0) { next = current }
+        if let draft = drafts[key(incoming)] { next.brief = draft.brief }
+        return next
+    }
 }
 
 struct Brief: Equatable, Sendable {

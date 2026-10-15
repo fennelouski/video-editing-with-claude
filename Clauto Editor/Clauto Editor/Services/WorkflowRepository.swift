@@ -22,6 +22,9 @@ struct EditRun: Codable, Identifiable, Sendable {
     var outputSettingsSchema: Int? = nil
     var creativeReferenceHashes: [String: String]? = nil
     var creativeReferenceSnapshotSHA256: String? = nil
+    var scriptInputSHA256: String? = nil
+    var scriptInputName: String? = nil
+    var scriptSelectionReceiptSHA256: String? = nil
 }
 
 struct StageEventRecord: Codable, Identifiable, Sendable {
@@ -57,6 +60,8 @@ struct CutVersion: Codable, Identifiable, Sendable {
     var durationBounds: VideoDurationBounds? = nil
     var exportResolution: ExportResolution? = nil
     var aspect: String? = nil
+    var scriptInputSHA256: String? = nil
+    var scriptSelectionReceiptSHA256: String? = nil
     func preferredArtifact(_ suffix: String) -> String? {
         if let prefix = primaryOutputPrefix, [".heard.txt", ".edl.json", ".preview.mp4", ".mp4"].contains(suffix) {
             return artifacts.contains(prefix + suffix) ? prefix + suffix : nil
@@ -132,6 +137,7 @@ actor WorkflowRepository {
     }
 
     func validate(_ run: EditRun, project: Project) throws {
+        _ = try ProjectMutationLease.checkedRoot(project)
         try TranscriptProductionGate.requireLegacyPipelineAllowed(project: project)
         guard run.projectID == project.id, try projectFolder(for: run).resolvingSymlinksInPath().standardizedFileURL.path == project.folder.resolvingSymlinksInPath().standardizedFileURL.path else { throw ProjectFailure.invalidProject }
     }
@@ -159,9 +165,7 @@ actor WorkflowRepository {
             guard cache.hasPrefix("/"), !project.folder.path.hasPrefix("/Volumes/Videos/") || URL(fileURLWithPath: cache).resolvingSymlinksInPath().path.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") else { throw ProjectFailure.invalidProject }
             try ProjectRepository.validateDrive(URL(fileURLWithPath: cache))
         } else { throw WorkflowFailure.invalid("Choose a model cache before running.") }
-        guard let script = settings["approved_script"], script.hasPrefix("/"),
-              URL(fileURLWithPath: script).resolvingSymlinksInPath().path.hasPrefix((try safe("inputs/script", in: run.folder)).resolvingSymlinksInPath().path + "/"),
-              fm.fileExists(atPath: script) else { throw WorkflowFailure.invalid("The saved script is unavailable. Approve a script and start a new run.") }
+        try validateScriptInput(run,project: project,settings: settings)
         if let assembly = settings["assembly"] {
             guard URL(fileURLWithPath: assembly).standardizedFileURL == (try safe("inputs/narration-order.json", in: run.folder)).standardizedFileURL else { throw ProjectFailure.invalidProject }
             let data = try Data(contentsOf: URL(fileURLWithPath: assembly))
@@ -206,7 +210,41 @@ actor WorkflowRepository {
         return settings
     }
 
+    private func validateScriptInput(_ run: EditRun,project: Project,settings: [String:String]) throws {
+        guard let path = settings["approved_script"], path.hasPrefix("/"),
+              URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix((try safe("inputs/script",in: run.folder)).resolvingSymlinksInPath().path+"/"),
+              fm.fileExists(atPath: path) else { throw WorkflowFailure.invalid("The saved script is unavailable. Choose a script and start a new run.") }
+        var scriptBytes: Data?
+        if let expected = run.scriptInputSHA256 {
+            guard let name = run.scriptInputName, name == URL(fileURLWithPath: name).lastPathComponent,
+                  name != ".", name != "..",
+                  URL(fileURLWithPath: path).standardizedFileURL == (try safe("inputs/script/"+name,in: run.folder)).standardizedFileURL,
+                  settings["script_input_sha256"] == expected else { throw ProjectFailure.invalidProject }
+            let bytes: Data
+            do { bytes = try SourceRenderDirectory.open(run.folder).child("inputs").child("script").read(name,limit: ProjectScriptSelectionStore.limit) }
+            catch is CancellationError { throw CancellationError() }
+            catch { throw WorkflowFailure.invalid("This run's saved script is unavailable or changed. Start a new run with the intended script.") }
+            guard TranscriptSourceMap.sha(bytes) == expected else {
+                throw WorkflowFailure.invalid("This run's saved script changed. Start a new run with the intended script.")
+            }
+            scriptBytes = bytes
+        } else if settings["script_input_sha256"] != nil || run.scriptInputName != nil { throw ProjectFailure.invalidProject }
+        let selectionURL = try safe("inputs/script-selection.json",in: run.folder)
+        if run.scriptSelectionReceiptSHA256 != nil || settings["script_selection_sha256"] != nil || fm.fileExists(atPath: selectionURL.path) {
+            let data = try SourceRenderDirectory.open(run.folder).child("inputs").read("script-selection.json",limit: 64*1024)
+            try TranscriptJSONKeys.validate(data)
+            let selected = try decoder.decode(ProjectScriptReceipt.self,from: data)
+            guard let expected = run.scriptSelectionReceiptSHA256, settings["script_selection_sha256"] == expected,
+                  TranscriptSourceMap.sha(data) == expected, selected.schemaVersion == 1, selected.projectID == project.id,
+                  selected.purpose == ProjectScriptSelectionStore.purpose, selected.sha256 == run.scriptInputSHA256,
+                  selected.byteCount == scriptBytes?.count, selected.filename == run.scriptInputName else {
+                throw WorkflowFailure.invalid("This run's script selection changed. Start a new run with the intended script.")
+            }
+        }
+    }
+
     func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) throws -> EditRun {
+        _ = try ProjectMutationLease.checkedRoot(project)
         guard project.manifest.importedReviewOnly != true else { throw WorkflowFailure.invalid("This imported movie project supports feedback and separate review previews. Its original camera/graphics timeline remains reference evidence; a new production cut is not authorized here.") }
         try TranscriptProductionGate.requireLegacyPipelineAllowed(project: project)
         try project.manifest.durationBounds?.validate()
@@ -247,13 +285,30 @@ actor WorkflowRepository {
         defer { if !prepared { try? fm.removeItem(at: folder) } }
         let inputs = folder.appendingPathComponent("inputs")
         try fm.createDirectory(at: inputs, withIntermediateDirectories: true)
-        try fm.copyItem(at: URL(fileURLWithPath: paths["script"]!), to: inputs.appendingPathComponent("script"))
-        let scripts = try fm.contentsOfDirectory(at: inputs.appendingPathComponent("script"), includingPropertiesForKeys: nil)
-            .filter { ["md", "txt", "docx"].contains($0.pathExtension.lowercased()) && !$0.lastPathComponent.hasPrefix("~$") }
-        guard let selectedScript = scripts.first(where: { $0.lastPathComponent == "script.md" }) ?? (scripts.count == 1 ? scripts.first : nil) else {
-            throw WorkflowFailure.invalid("Choose one script for this cut, or use the Brief's approved script. Multiple documents cannot be selected by filename order.")
+        let selectedScript: URL
+        var scriptSelectionSHA: String?
+        if let snapshot = try ProjectScriptSelectionStore.read(project: project) {
+            let target = inputs.appendingPathComponent("script")
+            try fm.createDirectory(at: target,withIntermediateDirectories: false)
+            selectedScript = target.appendingPathComponent(snapshot.receipt.filename)
+            try snapshot.bytes.write(to: selectedScript,options: .withoutOverwriting)
+            try snapshot.receiptBytes.write(to: inputs.appendingPathComponent("script-selection.json"),options: .withoutOverwriting)
+            scriptSelectionSHA = snapshot.reference.receiptSHA256
+        } else {
+            let scripts = try fm.contentsOfDirectory(at: URL(fileURLWithPath: paths["script"]!), includingPropertiesForKeys: nil)
+                .filter { ["md", "txt", "docx"].contains($0.pathExtension.lowercased()) && !$0.lastPathComponent.hasPrefix("~$") }
+            guard let legacy = scripts.first(where: { $0.lastPathComponent == "script.md" }) ?? (scripts.count == 1 ? scripts.first : nil) else {
+                throw WorkflowFailure.invalid("Choose a script in Files, or use the script in Brief, before making this cut.")
+            }
+            let bytes = try SourceRenderDirectory.open(project.folder).child("script").read(legacy.lastPathComponent,limit: ProjectScriptSelectionStore.limit)
+            let target = inputs.appendingPathComponent("script")
+            try fm.createDirectory(at: target,withIntermediateDirectories: false)
+            selectedScript = target.appendingPathComponent(legacy.lastPathComponent)
+            try bytes.write(to: selectedScript,options: .withoutOverwriting)
         }
         paths["approved_script"] = try safe("inputs/script/" + selectedScript.lastPathComponent, in: folder).path
+        let scriptSHA = TranscriptSourceMap.sha(try SourceRenderDirectory.open(folder).child("inputs").child("script").read(selectedScript.lastPathComponent,limit: ProjectScriptSelectionStore.limit))
+        paths["script_input_sha256"] = scriptSHA; paths["script_selection_sha256"] = scriptSelectionSHA
         try fm.copyItem(at: project.folder.appendingPathComponent("brief.md"), to: inputs.appendingPathComponent("brief.md"))
         let references = try ProjectRepositoryReferenceSnapshot.read(project)
         for key in ["style_guide", "taste_principles"] { paths.removeValue(forKey: key); paths.removeValue(forKey: key + "_sha256") }
@@ -310,6 +365,8 @@ actor WorkflowRepository {
         let referenceHashes = Dictionary(uniqueKeysWithValues: ["style_guide", "taste_principles"].compactMap { key in paths[key + "_sha256"].map { (key, $0) } })
         run.creativeReferenceHashes = referenceHashes.isEmpty ? nil : referenceHashes
         run.creativeReferenceSnapshotSHA256 = referenceSnapshotSHA256
+        run.scriptInputSHA256 = scriptSHA; run.scriptSelectionReceiptSHA256 = scriptSelectionSHA
+        run.scriptInputName = selectedScript.lastPathComponent
         try save(run)
         prepared = true
         return run
@@ -424,6 +481,7 @@ actor WorkflowRepository {
     func snapshot(_ run: EditRun, project: Project) throws -> CutVersion {
         try validate(run, project: project)
         let settings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+        try validateScriptInput(run,project: project,settings: settings)
         let frozenBounds = try settings["duration_bounds"].map { try decoder.decode(VideoDurationBounds.self, from: Data($0.utf8)) }
         guard frozenBounds == run.durationBounds else { throw WorkflowFailure.invalid("This run's duration limits changed. Start a new run with the intended limits.") }
         try validateOutputSettings(run, settings: settings)
@@ -536,8 +594,16 @@ actor WorkflowRepository {
             let planObject = try JSONSerialization.jsonObject(with: Data(try plan(run).text.utf8)) as? [String: Any]
             guard let script = planObject?["script"] as? String, script == URL(fileURLWithPath: script).lastPathComponent,
                   artifacts.contains("inputs/script/" + script) else { throw WorkflowFailure.invalid("The approved script is missing from the run snapshot.") }
+            if let sha = run.scriptInputSHA256 {
+                guard script == run.scriptInputName,
+                      TranscriptSourceMap.sha(try SourceRenderDirectory.open(folder).child("inputs").child("script").read(script,limit: ProjectScriptSelectionStore.limit)) == sha else { throw WorkflowFailure.invalid("The saved version's script differs from its selected run input.") }
+                if let receiptSHA = run.scriptSelectionReceiptSHA256 {
+                    guard TranscriptSourceMap.sha(try SourceRenderDirectory.open(folder).child("inputs").read("script-selection.json",limit: 64*1024)) == receiptSHA else { throw ProjectFailure.invalidProject }
+                }
+                try validateScriptInput(run,project: project,settings: settings)
+            }
             let prefix = assembled ? "roughcut/assembly/selected" : nil
-            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix, durationBounds: run.durationBounds, exportResolution: run.exportResolution, aspect: run.aspect)
+            let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix, durationBounds: run.durationBounds, exportResolution: run.exportResolution, aspect: run.aspect,scriptInputSHA256: run.scriptInputSHA256,scriptSelectionReceiptSHA256: run.scriptSelectionReceiptSHA256)
             try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"), options: .atomic)
             try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
             return version

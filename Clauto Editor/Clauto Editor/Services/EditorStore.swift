@@ -46,6 +46,7 @@ final class EditorStore {
     @ObservationIgnored private let exporter = HandoffExportService()
     @ObservationIgnored private let derivativeRunner = ProcessRunner()
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var presentationState = ProjectPresentationState()
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
 
@@ -109,13 +110,18 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
+        // Retry retained Brief drafts, then wait for their actual acknowledgements.
+        for project in projects {
+            if let brief = presentationState.pendingBrief(for: project) { save(brief,for: project.id) }
+        }
+        for task in Array(saves.values) { await task.value }
         var voicesSaved = true
         for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
-        return await flushTranscriptReviewsForExit() && voicesSaved
+        return await flushTranscriptReviewsForExit() && voicesSaved && !presentationState.hasUnsavedBriefs && !working
     }
 
     func resumeReviewWorkAfterCancelledExit() {
@@ -130,8 +136,8 @@ final class EditorStore {
 
     func restore() async {
         for path in defaults.stringArray(forKey: recentKey) ?? [] {
-            do { let project = try await repository.open(URL(fileURLWithPath: path)); update(project) }
-            catch { notice = "A recent project is unavailable. Reconnect its drive and use Open Project." }
+            do { let project = try await repository.open(URL(fileURLWithPath: path)); try ProjectPresentationState.requireUnambiguousOpen(project,among: projects); update(project) }
+            catch { notice = "A recent project could not be opened. \(error.localizedDescription)" }
         }
     }
 
@@ -146,20 +152,23 @@ final class EditorStore {
     }
 
     func open(_ folder: URL) async {
-        do { let project = try await repository.open(folder); update(project); selectedID = project.id; remember() }
+        do { let project = try await repository.open(folder); try ProjectPresentationState.requireUnambiguousOpen(project,among: projects); update(project); selectedID = project.id; remember() }
         catch { notice = error.localizedDescription }
     }
 
     func save(_ brief: Brief, for id: UUID) {
         guard var project = projects.first(where: { $0.id == id }) else { return }
+        let token = presentationState.submit(brief,for: project)
         project.brief = brief; update(project)
         saves[id]?.cancel()
         saves[id] = Task {
             do {
                 try await Task.sleep(for: .milliseconds(250))
                 let saved = try await repository.saveBrief(brief, project: project)
-                // The disk write may finish while a newer edit is pending; leave its draft alone.
-                if projects.first(where: { $0.id == id })?.brief == brief { update(saved) }
+                // Old acknowledgements cannot clear a newer local draft or roll
+                // back a later manifest response. Failed drafts remain owned.
+                if presentationState.acknowledge(token,for: project) { saves.removeValue(forKey: id) }
+                update(saved)
             } catch is CancellationError { }
             catch { notice = "Your brief could not be saved. \(error.localizedDescription)" }
         }
@@ -299,20 +308,40 @@ final class EditorStore {
     }
 
     func approveScript(_ text: String, project: Project) async {
-        guard runningProjectID == nil else { return }
+        guard runningProjectID == nil, !working else { return }
+        working = true; defer { working = false }
         do {
-            try await repository.approveScript(text, project: project)
-            notice = "Approved script saved. New runs will use it."; noticeTitle = "Script saved"
+            update(try await repository.approveScript(text, project: project))
+            notice = "New cuts will use this saved script. Earlier versions keep their scripts."; noticeTitle = "Script saved"
         }
         catch { notice = error.localizedDescription }
     }
+    func selectScript(_ file: ProjectFile,project: Project) async {
+        guard runningProjectID == nil, !working else { return }
+        working = true; defer { working = false }
+        do {
+            update(try await repository.selectScript(file,project: project))
+            notice = "New cuts will use a saved copy of \(file.name). Earlier versions keep their scripts."; noticeTitle = "Script selected"
+        } catch { notice = error.localizedDescription }
+    }
+    func replaceScript(_ file: ProjectFile,with source: URL,project: Project) async {
+        guard runningProjectID == nil, !working else { notice = "Wait for the current update before replacing this script."; return }
+        working = true; defer { working = false }
+        do {
+            update(try await repository.replaceScript(file,with: source,project: project))
+            notice = "New cuts will use the replacement script. Previous copies and cut inputs are retained."; noticeTitle = "Script replaced"
+        } catch { notice = error.localizedDescription }
+    }
 
     func beginCut(label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) async {
-        guard let chosen = selected, runningProjectID == nil, exportingDerivativeProjectID == nil, !checking else { return }
+        guard let chosen = selected, runningProjectID == nil, exportingDerivativeProjectID == nil, !checking, !working else { return }
         runningProjectID = chosen.id; defer { runningProjectID = nil }
         do {
             if let save = saves[chosen.id] { await save.value }
             let project = try await repository.open(chosen.folder)
+            // Reopening after an awaited save must retain the originally chosen
+            // physical project, rather than blessing a replacement at its path.
+            try presentationState.requireCutInput(project,chosen: chosen)
             let run = try await workflow.prepare(project: project, engine: engineRoot, label: label, primaryID: primaryID, narrationIDs: narrationIDs)
             runs[project.id] = run
             await execute(run, project: project, start: 1, stop: 3)
@@ -404,8 +433,8 @@ final class EditorStore {
     }
 
     private func update(_ project: Project) {
-        if let index = projects.firstIndex(where: { $0.id == project.id }) { projects[index] = project }
-        else { projects.append(project) }
+        if let index = projects.firstIndex(where: { $0.id == project.id }) { projects[index] = presentationState.present(project,over: projects[index]) }
+        else { projects.append(presentationState.present(project,over: nil)) }
     }
     private func remember() { defaults.set(projects.map { $0.folder.path }, forKey: recentKey) }
 }

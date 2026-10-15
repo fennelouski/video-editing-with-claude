@@ -66,7 +66,7 @@ private actor DerivativeProtocolRunner: CommandRunning {
 }
 
 struct WorkflowTests {
-    private func fixture() async throws -> (URL, URL, Project) {
+    private func fixture(legacyScriptName: String? = nil) async throws -> (URL, URL, Project) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-workflow-\(UUID())")
         let engine = root.appendingPathComponent("engine")
         try FileManager.default.createDirectory(at: engine.appendingPathComponent("templates"), withIntermediateDirectories: true)
@@ -76,7 +76,9 @@ struct WorkflowTests {
         let clip = root.appendingPathComponent("clip.MOV")
         try Data("synthetic-original".utf8).write(to: clip)
         project = try await repo.add([clip], to: project)
-        try await repo.approveScript("Hello. [[NOTE: fixture]]", project: project)
+        if let legacyScriptName {
+            try "Hello. [[NOTE: fixture]]".write(to: project.folder.appendingPathComponent("script/"+legacyScriptName),atomically: true,encoding: .utf8)
+        } else { project = try await repo.approveScript("Hello. [[NOTE: fixture]]", project: project) }
         return (root, engine, project)
     }
 
@@ -632,8 +634,7 @@ struct WorkflowTests {
     }
 
     @Test func uppercaseApprovedScriptSurvivesVersionSnapshot() async throws {
-        let (root, engine, project) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        try FileManager.default.moveItem(at: project.folder.appendingPathComponent("script/script.md"), to: project.folder.appendingPathComponent("script/APPROVED.MD"))
+        let (root, engine, project) = try await fixture(legacyScriptName: "APPROVED.MD"); defer { try? FileManager.default.removeItem(at: root) }
         let disk = WorkflowRepository()
         var run = try await disk.prepare(project: project, engine: engine, label: "Uppercase")
         try plan(run); try outputs(run, project: project)

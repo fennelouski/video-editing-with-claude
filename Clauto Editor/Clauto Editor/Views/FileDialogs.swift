@@ -2,6 +2,15 @@ import AppKit
 import UniformTypeIdentifiers
 
 @MainActor enum FileDialogs {
+    static func script() async -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.plainText] + ["md","docx"].compactMap { UTType(filenameExtension: $0) }
+        panel.prompt = "Use Replacement"
+        return await withCheckedContinuation { continuation in
+            panel.begin { response in continuation.resume(returning: response == .OK ? panel.url:nil) }
+        }
+    }
     static func transcript() async -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false

@@ -13,8 +13,8 @@ import AppKit
             let saved = await store.flushReviewWorkForExit()
             if saved { finish(sender, terminate: true); return }
             let alert = NSAlert()
-            alert.messageText = "Review work has not saved"
-            alert.informativeText = "Keep editing to retry transcript, voice-review, or frame-comment saves. Quitting without saving discards pending changes; earlier checkpoints and reviewed cuts remain."
+            alert.messageText = "Changes have not finished saving"
+            alert.informativeText = "Keep editing to finish project updates or retry Brief, transcript, voice-review, or frame-comment saves. Quitting without saving discards pending changes; earlier checkpoints and reviewed cuts remain."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Keep Editing")
             alert.addButton(withTitle: "Quit Without Saving")

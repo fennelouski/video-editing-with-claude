@@ -325,3 +325,78 @@ retention. Pure rolling-history regression supplements the source lifecycle revi
 Synthetic acceptance exercises raw final speech -> exact proposed range -> existing
 approval -> verified local movie, preserving original feedback and source identity.
 Native recognition/player/VoiceOver acceptance remains held with the foreground.
+
+## Saved script inputs and explicit replacement (15 October, M12)
+
+- [x] Choose the exact Markdown, UTF-8 text or Word document in Files, or save
+  text from Brief. A checksummed immutable selection publishes through the project
+  manifest last. Brief selection never overwrites a user's existing script.md.
+- [x] Replace a script explicitly, including an updated Word document saved at
+  the same source path. Keep its logical file ID, original bytes, previous project
+  copy, selection receipt and all prepared run inputs. Stale file rows refuse a
+  later replacement rather than silently selecting different content.
+- [x] New runs copy only the selected script and its receipt, pin both hashes,
+  and check the input on resume and before cut publication. Existing production,
+  transcript and plan approval gates remain. Selecting a script is input choice,
+  not approval of its claims or permission to render a production cut.
+- [x] A removed, missing or changed selection requires choosing a script again;
+  it cannot revive an old alphabetical/legacy draft. Legacy projects with no saved
+  selection history keep their previous discovery behavior, with new runs hashed.
+- [x] Conventional Word document/comment XML is read without rewriting the ZIP.
+  Duplicate entries, oversized/encrypted parts, declarations and unsupported roots
+  are refused. Swift selection bounds the source to 16 MiB and checks the ZIP
+  signature; complete content validation occurs in the engine, not in the picker.
+- [ ] Native picker/layout/VoiceOver acceptance is held with the foreground.
+  Word preview/summary, broader Office format support, paired source-span approval
+  and applying reviewed source spans remain separate unfinished work.
+
+Synthetic coverage includes same-path Word edits with changed comments, prior-run
+preservation, stale rows, interrupted/invalid selections, copied-source edits,
+symlink refusal, missing/tampered receipts, manifest pointer loss, rehashed run
+settings, concurrent Brief autosave, uppercase legacy input, and existing saved
+cut provenance. No private media, recognition assets or native UI were exercised.
+
+M12 v2 closes independent UTF-16 declaration and cross-repository lost-selection
+findings with parser-level declaration rejection, shared manifest mutation locking
+and regression fixtures. Rejected v1 evidence is retained.
+
+M12 v3 keeps unsaved Brief ownership separate from script acknowledgements and
+orders persisted responses by a lock-protected revision. Old callbacks cannot
+replace newer Brief words or a later script selection. Quit flushing waits for
+retained Brief drafts; failed saves remain explicit. Native dialog acceptance is
+held, and the rejected v2 acknowledgement-race evidence is retained.
+
+M12 v4 binds this state to the canonical project folder as well as UUID. A second
+different folder with the same listed UUID is explicitly refused during Open or
+restore; it never redirects a requested copy's edits to the original. Same-folder
+aliases remain allowed. Deliberate project duplication remains unfinished.
+
+M12 v5 adds ephemeral physical directory identity to that scope and refuses stale
+project writes after same-path replacement. Canonical comparison uses path strings
+instead of URL directory-slash hints, with a real symlink alias regression. No
+device/inode value is added to portable project JSON; native NAS reconnect
+acceptance remains held.
+
+M12 v6 keeps canonical open handles and reloads through the already-locked root
+descriptor, verifying its project ID/physical identity before mutation. A retargeted
+alias during contention cannot move another project's identity into the locked
+folder. The synthetic two-project test checks the untouched destination bytes.
+
+M12 v7 closes SS-08: Start Cut checks the originally chosen project against the
+reopened physical root after awaiting Brief autosave, before preparing any run.
+A same-path replacement or changed project ID is refused. A retained unsaved Brief
+also blocks preparation, so a failed autosave cannot silently feed older words
+into the cut. Synthetic root-replacement and draft-acknowledgement checks cover
+the policy; native Start Cut interaction remains held.
+
+## New spatial/person feedback requirements (15 October)
+
+- [ ] Extend existing circle/ellipse marks with highlight and freehand tools,
+  selection, edit/undo and typed or dictated region notes. Preserve original
+  dictation, exact version/frame and normalized coordinates. Frame-bound marks
+  do not imply tracking. Verify inline/popout/fullscreen and keyboard alternatives.
+- [ ] Add project-local user-named people and @mention disambiguation. Anonymous
+  on-device detections must not infer identity; uncertain associations need user
+  confirmation, correction/unassign and deliberate export control. Full tracking
+  and merge/split behavior require separate implementation and acceptance.
+

@@ -71,10 +71,10 @@ by a local development venv overlay; the owner's checkout/venv is not modified.
 | M3 audio/music ambiguity | Implemented | What-is-this menu relocates project reference, never original |
 | M3 folder intake and explicit group drop | Implemented | References supported files individually; no linked-directory discovery assumption |
 | M3 aspect/model project preferences | Implemented | Manifest + paths.json persist settings |
-| M3 script approval and explicit selection | Implemented | Brief text becomes project-owned script.md; a run pins its snapshot instead of selecting an older alphabetical draft |
+| M3 script input and explicit selection | Implemented, synthetic acceptance | Brief text or an explicitly chosen MD/TXT/DOCX becomes an immutable project input. New runs pin that copy and its receipt; earlier run inputs stay unchanged. Input selection grants no editorial/factual/production approval. |
 | M3 project creative references | Implemented, bounded local acceptance | Exact-byte style/taste documents retain role, SHA and Library provenance; native intake, immutable version copies, legacy sidecar recovery and frozen run snapshots tested. Reference documents do not enter narration discovery. |
 | Script-first independent review and stage ordering | Engine/CLI implemented; native draft review implemented, paired approval pending | Native Transcript tab adds exact-catalog-bound stable rows, keep/exclude, order, comments, separate graphic fields, immutable checkpoints/undo and review-only export. Paired ledger approval and applying source spans remain pending. Source-index/script-SHA ledger, human-evidence gate and ten actual round limit stay separate. See SCRIPT_FIRST_WORKFLOW.md and TRANSCRIPT_REVIEW.md. |
-| M3 docx reading/summary and Replace | Pending | DOCX intake and engine comments parsing are preserved; GUI preview/summary/replace are absent |
+| M3 docx reading/summary and Replace | Partial | Explicit replacement, including changes at the same original path, preserves earlier project copies, Word bytes/comments and prepared runs. Bounded engine XML/comment parsing is tested. GUI content preview/summary and full OOXML validation remain. |
 | Projects duplicate/archive/thumbnails | Pending | Create, list, open and recent-project restore implemented |
 | M4 local first-cut orchestration | Implemented, synthetic acceptance passed | Actual cached large-v3 transcription/read-back, stages 1–3 pause, explicit plan approval, strict asset gate, alpha rendering, captions and saved version tested on NAS |
 | M4 ordered narration from several clips | Implemented, synthetic acceptance passed | Explicit GUI order, frozen schema-2 source/key manifest, real assembled read-back, original source/time provenance, aggregate evidence required before saving; two-source cached-model acceptance passed |
@@ -545,3 +545,101 @@ M11 review correction: number words accept a hyphen only for an exact recognized
 tens-plus-unit compound such as twenty-one. Leading, trailing, repeated, spaced
 or negative-word hyphens are refused; they cannot silently become positive edits.
 Independent rejected v1 parser evidence and its earlier build remain preserved.
+
+## Saved script inputs and explicit replacement (15 October, M12)
+
+- [x] Choose the exact Markdown, UTF-8 text or Word document in Files, or save
+  text from Brief. A checksummed immutable selection publishes through the project
+  manifest last. Brief selection never overwrites a user's existing script.md.
+- [x] Replace a script explicitly, including an updated Word document saved at
+  the same source path. Keep its logical file ID, original bytes, previous project
+  copy, selection receipt and all prepared run inputs. Stale file rows refuse a
+  later replacement rather than silently selecting different content.
+- [x] New runs copy only the selected script and its receipt, pin both hashes,
+  and check the input on resume and before cut publication. Existing production,
+  transcript and plan approval gates remain. Selecting a script is input choice,
+  not approval of its claims or permission to render a production cut.
+- [x] A removed, missing or changed selection requires choosing a script again;
+  it cannot revive an old alphabetical/legacy draft. Legacy projects with no saved
+  selection history keep their previous discovery behavior, with new runs hashed.
+- [x] Conventional Word document/comment XML is read without rewriting the ZIP.
+  Duplicate entries, oversized/encrypted parts, declarations and unsupported roots
+  are refused. Swift selection bounds the source to 16 MiB and checks the ZIP
+  signature; complete content validation occurs in the engine, not in the picker.
+- [ ] Native picker/layout/VoiceOver acceptance is held with the foreground.
+  Word preview/summary, broader Office format support, paired source-span approval
+  and applying reviewed source spans remain separate unfinished work.
+
+Synthetic coverage includes same-path Word edits with changed comments, prior-run
+preservation, stale rows, interrupted/invalid selections, copied-source edits,
+symlink refusal, missing/tampered receipts, manifest pointer loss, rehashed run
+settings, concurrent Brief autosave, uppercase legacy input, and existing saved
+cut provenance. No private media, recognition assets or native UI were exercised.
+
+M12 v2 review corrections: Word XML uses encoding-aware Expat declaration handlers
+before ElementTree parsing. UTF-8 and UTF-16 LE/BE document/comment fixtures,
+with/without BOM, reject DTD/entity declarations and preserve ordinary Unicode.
+All ProjectRepository manifest writers now hold a shared per-project advisory
+lock from the fresh manifest read through atomic publication. Separate actors
+cannot silently overwrite a successful script choice with a stale Brief manifest.
+Contention waits up to two seconds, with cancellation; a longer conflict reports
+that the change was not saved. The rejected v1 and its evidence remain unchanged.
+
+M12 v3 closes SS-03: Brief drafts have local ownership tokens, independent of
+script-save responses. Every manifest mutation increments an optional persisted
+revision under the shared lock; the store ignores an older acknowledged project
+and overlays its still-owned Brief draft. An old save cannot clear a newer draft.
+Quit flushing retries retained Brief drafts and waits for acknowledgements; active
+project updates or failed saves keep the unsaved-work decision explicit. Pure
+state regressions and the independent no-window controller probe cover ordering;
+the native quit dialog and picker remain unobserved during the foreground hold.
+
+M12 v4 closes SS-04: draft ownership and revision comparisons include the canonical
+project folder, not only its UUID. Opening/restoring a second different folder
+with an already-listed project UUID explicitly refuses the copy before selecting
+or updating it. No edit is silently redirected to the original folder. Filesystem
+aliases of the same canonical folder remain usable. Opening same-ID backup copies
+alongside the original remains unsupported until a deliberate project duplication
+workflow assigns distinct identities and review histories.
+
+M12 v5 closes SS-05/06: an open Project captures its physical directory device/
+inode in ephemeral state. This identity never enters its portable manifest.
+Replacing a folder at the same pathname cannot borrow the old folder's draft,
+hide the restored selection behind an old revision, or accept a stale project
+mutation/new-run/resume request. Presentation comparisons use normalized canonical
+path strings plus physical identity, so a genuine symlink alias with a different
+URL directory hint remains the same project. Same-ID copies or replaced roots
+already listed in the current session are explicitly refused before selection;
+fresh session restoration captures the intended current folder. Native behavior
+after an actual NAS reconnect remains unobserved during the foreground hold.
+
+M12 v6 closes SS-07: create/open return canonical pinned-root handles. Writers
+reload manifest and Brief through the directory descriptor already held by their
+lease, then verify the fresh project ID and physical identity against that lease.
+Remaining intake destinations use its canonical root. Retargeting an input alias
+while a write waits cannot mix another project's metadata into the locked folder.
+Manifest publication also verifies the supplied root scope. Brief reads are
+bounded to 64 MiB; malformed/non-UTF-8 or replaced input is refused. Synthetic
+contention coverage asserts both project identities and the other manifest bytes.
+
+M12 v7 closes SS-08: Start Cut checks the originally chosen project against the
+reopened physical root after awaiting Brief autosave, before preparing any run.
+A same-path replacement or changed project ID is refused. A retained unsaved Brief
+also blocks preparation, so a failed autosave cannot silently feed older words
+into the cut. Synthetic root-replacement and draft-acknowledgement checks cover
+the policy; native Start Cut interaction remains held.
+
+## Newly requested review tools (15 October)
+
+| Requirement | Current state | Next acceptance |
+|---|---|---|
+| Circle/ellipse on an exact paused saved frame | Implemented in earlier frame-comment milestone | Latest native inline/popout/fullscreen and accessibility pass held |
+| Highlight/freehand, selectable regions, typed/dictated tagged notes | Requested; circle/ellipse, typed frame text, saved revisions and mark undo exist | Extend normalized geometry, retain raw dictation/version/frame provenance, test edit/undo/reopen and accessible coordinate alternatives |
+| Project-local people with user-assigned names and @mentions | Requested; not implemented | Anonymous on-device detection, stable local IDs, explicit name/uncertain-match confirmation, typed/spoken disambiguation, correction/unassign and export control |
+
+Spatial annotations are frame-bound unless a separately verified tracking record
+exists. People processing must not infer real identities or use external face or
+identity services. Full tracking, merge/split and cross-frame continuity are not
+claimed by the existing frame-comment implementation. These additions must not
+delay delivery of already reviewed Pizza playback/feedback features.
+

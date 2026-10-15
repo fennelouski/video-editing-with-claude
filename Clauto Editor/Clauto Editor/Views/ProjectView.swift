@@ -148,11 +148,16 @@ private struct BriefView: View {
                     ClautoField(label: "Graphics", text: $brief.graphics, placeholder: "What belongs on screen?")
                 }
                 ClautoSection("Script", detail: "Review the wording and factual claims before using an annotated script.") {
+                    if let selected = project.manifest.scriptSelection {
+                        Text("For new cuts: \(selected.sourceName). Earlier versions keep their saved scripts.").font(ClautoDesign.caption).textSelection(.enabled)
+                    } else if project.manifest.requiresScriptSelection == true {
+                        Text("Choose a script in Files, or save the script below, for your next cut.").font(ClautoDesign.caption)
+                    }
                     ClautoTextArea(text: $brief.script, label: "Script").frame(height: 114)
-                    ClautoAction("Use as approved script", icon: .check) {
+                    ClautoAction("Use script for new cuts", icon: .check) {
                         let submitted = brief.script, captured = project
                         Task { await store.approveScript(submitted, project: captured) }
-                    }.disabled(brief.script.isEmpty || store.runningProjectID != nil)
+                    }.disabled(brief.script.isEmpty || store.runningProjectID != nil || store.working)
                 }
                 ClautoField(label: "Things to avoid", text: $brief.avoid, placeholder: "Anything this cut should leave out")
                 Text("Your brief saves automatically. The video house style stays Sage & Oat, cut cardboard and marker on paper.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
@@ -227,6 +232,9 @@ private struct FilesView: View {
                 ForEach(FileGroup.allCases) { group in
                     ClautoSection(group.rawValue) {
                         VStack(alignment: .leading, spacing: 12) {
+                            if group == .scripts, let selected = project.manifest.scriptSelection {
+                                Text("Using a saved copy of \(selected.sourceName) for new cuts.").font(ClautoDesign.caption).textSelection(.enabled)
+                            }
                             Button("Choose \(group.rawValue)…") {
                                 Task { await store.intake(await FileDialogs.files(), group: group, copy: copyMedia) }
                             }.disabled(store.working || store.runningProjectID == project.id)
@@ -263,10 +271,20 @@ private struct FilesView: View {
                 Text(file.originalPath).font(ClautoDesign.type(11)).foregroundStyle(ClautoDesign.quiet).lineLimit(1).clautoHelp(file.originalPath)
             }
             Spacer()
+            if file.displayedGroup == .scripts {
+                ClautoAction(project.manifest.scriptSelection?.sourceFileID == file.id ? "Use this copy" : "Use for new cuts",icon: .check,kind: .quiet) {
+                    Task { await store.selectScript(file,project: project) }
+                }.disabled(!exists || store.working || store.runningProjectID != nil)
+                    .accessibilityLabel("Use \(file.name) as the saved script for new cuts")
+                ClautoAction("Replace…",icon: .open,kind: .quiet) {
+                    Task { if let source = await FileDialogs.script() { await store.replaceScript(file,with: source,project: project) } }
+                }.disabled(store.working || store.runningProjectID != nil)
+                    .accessibilityLabel("Replace \(file.name) with an updated script; keep earlier copies")
+            }
             if file.group == .audio || file.group == .music {
                 ClautoChoice(title: file.needsRole ? "Choose a role" : "Role", selection: Binding(get: { file.group }, set: { role in Task { await store.assign(role, file: file) } }), options: [(FileGroup.music, "Music"), (.audio, "Recorded audio")]).frame(width: 145).disabled(store.working)
             }
-            ClautoAction("Reveal", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
+            ClautoAction("Reveal", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([file.copied ? url:URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
                 .accessibilityLabel("Reveal \(file.name) in Finder")
             ClautoAction("Remove", icon: .close, kind: .quiet) { Task { await store.remove(file) } }.disabled(store.working || store.runningProjectID == project.id)
                 .accessibilityLabel("Remove \(file.name) from project")
