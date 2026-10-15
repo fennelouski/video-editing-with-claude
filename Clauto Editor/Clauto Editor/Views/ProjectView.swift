@@ -10,7 +10,9 @@ struct ProjectView: View {
     @State private var message = ""
     @State private var compactHistoryExpanded = false
 
-    init(store: EditorStore, project: Project, initialTab: String = "Brief") {
+    let initialTranscriptReviewGates: Bool
+    init(store: EditorStore, project: Project, initialTab: String = "Brief", initialTranscriptReviewGates: Bool = false) {
+        self.initialTranscriptReviewGates = initialTranscriptReviewGates
         self.store = store; self.project = project
         _draft = State(initialValue: project.brief)
         _tab = State(initialValue: initialTab)
@@ -43,7 +45,7 @@ struct ProjectView: View {
                     Group {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
-                        else if tab == "Transcript" { TranscriptReviewView(store: store, project: project) }
+                        else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
                         else { CutView(store: store) }
                     }.frame(maxHeight: .infinity)
                     if tab != "Transcript" {

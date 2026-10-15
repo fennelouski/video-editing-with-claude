@@ -329,3 +329,24 @@ retains the original engine contract and records only completed derivatives.
 Unsupported animated transforms/volume, nested/transition effects or missing
 source spans fail with a review message. GUI acceptance and support for additional
 timeline effects remain pending. The app does not open Final Cut during export.
+
+
+## Native source-span review checkpoint (15 October)
+
+`TRANSCRIPT_REVIEW.md` records the integrated requirements and remaining gates.
+The native source map now preserves arbitrary passage order using original clip
+coordinates and exact saved revision/catalog hashes. Local source verification
+checks complete media and declared original-transcript bytes, actual audio-segment
+coverage and file drift. Bounded original-passage previews use separate transport
+identity for each revision/span, completed exact seeks and forward-only controls.
+Playback is verified at check time; it does not consume immutable frozen bytes.
+
+An explicit local source-review acknowledgment is separate from authenticated
+human fact review, paired editorial approval, graphic approval and rendering.
+A durable project association blocks legacy whole-clip prepare/resume/snapshot
+paths after transcript review intake, including damaged-pointer recovery cases.
+No new cut is started. Fourteen synthetic source-map regressions plus the existing
+core cases pass; 91 routine cases pass with five opt-ins skipped. Actual saved
+catalog mapping passed separately in a new NAS QA project without media reads,
+Sheet access or rendering. Native playback/seek/drift-pause and broader graphical
+accessibility acceptance remain pending.

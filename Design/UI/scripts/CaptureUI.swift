@@ -92,6 +92,21 @@ struct ControlGallery: View {
         evidence.append(try await capture(ContentView(store: store, initialProjectTab: "Transcript"), name: "transcript-project-minimum", width: 900, height: 640, output: output))
         evidence.append(try await capture(TranscriptWorkspace(controller: transcript, initialSelectedID: catalog.rows[0].id), name: "transcript-inspector-wide", width: 1100, height: 860, output: output))
         evidence.append(try await capture(TranscriptWorkspace(controller: transcript, initialSelectedID: catalog.rows[0].id), name: "transcript-inspector-minimum", width: 630, height: 640, output: output))
+        await transcript.prepareSourceMap()
+        evidence.append(try await capture(TranscriptWorkspace(controller: transcript, reviewGatesExpanded: true), name: "transcript-source-gates-wide", width: 1100, height: 860, output: output))
+        evidence.append(try await capture(TranscriptWorkspace(controller: transcript, reviewGatesExpanded: true), name: "transcript-source-gates-minimum", width: 630, height: 640, output: output))
+        evidence.append(try await capture(ContentView(store: store, initialTranscriptReviewGates: true, initialProjectTab: "Transcript"), name: "transcript-source-gates-full-app-minimum", width: 900, height: 640, output: output))
+        do {
+            let sourceURL = URL(fileURLWithPath: catalog.sources[0].path), original = try Data(contentsOf: sourceURL)
+            defer { try? original.write(to: sourceURL) }
+            try FileManager.default.removeItem(at: sourceURL)
+            await transcript.verifySource(catalog.rows[0].id)
+            guard transcript.failure?.contains("missing") == true else { throw CaptureFailure.failed("Missing synthetic source must refuse preview") }
+            evidence.append(try await capture(TranscriptWorkspace(controller: transcript, initialSelectedID: catalog.rows[0].id), name: "transcript-source-missing-minimum", width: 630, height: 640, output: output))
+        }
+        transcript.failure = String(repeating: "Synthetic long verification failure. Reconnect the source and verify this saved checkpoint again. ", count: 8)
+        evidence.append(try await capture(ContentView(store: store, initialTranscriptReviewGates: true, initialProjectTab: "Transcript"), name: "transcript-source-gates-long-failure", width: 900, height: 640, output: output))
+        transcript.failure = nil
         for (name, width, height, tab) in [
             ("brief-wide", 1440, 900, "Brief"),
             ("brief-minimum", 900, 640, "Brief"),

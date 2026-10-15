@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: EditorStore
+    var initialTranscriptReviewGates = false
     var initialProjectTab = "Brief"
     @State private var showNewProject = false
     @State private var showSetup = false
@@ -23,7 +24,7 @@ struct ContentView: View {
                     }.padding(16).background(ClautoDesign.soft).accessibilityElement(children: .contain)
                 }
                 if let project = store.selected {
-                    ProjectView(store: store, project: project, initialTab: initialProjectTab).id(project.id)
+                    ProjectView(store: store, project: project, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id)
                 } else {
                     VStack(alignment: .leading, spacing: 28) {
                         ClautoEmpty(title: "Your next cut starts here.", detail: "Describe the video. Bring your footage. Keep every version while you work toward the right cut.")

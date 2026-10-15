@@ -4,10 +4,11 @@ import AppKit
 struct TranscriptReviewView: View {
     @Bindable var store: EditorStore
     let project: Project
+    var reviewGatesExpanded = false
     @State private var controller: TranscriptReviewController?
     var body: some View {
         Group {
-            if let controller { TranscriptWorkspace(controller: controller) }
+            if let controller { TranscriptWorkspace(controller: controller, reviewGatesExpanded: reviewGatesExpanded) }
             else { ClautoActivity(label: "Opening transcript review…").padding(28) }
         }
         .task(id: project.id) {
@@ -25,9 +26,12 @@ struct TranscriptWorkspace: View {
     @State private var selectedID: String?
     @State private var visibleRows: [TranscriptDisplayRow] = []
     @State private var compactInspectorOpen = false
+    @State private var mappingsReviewed = false
+    @State private var orderAndNotesReviewed = false
+    @State private var showReviewGates: Bool
 
-    init(controller: TranscriptReviewController, initialSelectedID: String? = nil) {
-        self.controller = controller
+    init(controller: TranscriptReviewController, initialSelectedID: String? = nil, reviewGatesExpanded: Bool = false) {
+        self.controller = controller; _showReviewGates = State(initialValue: reviewGatesExpanded)
         // Explicit one-time selection seed for a newly opened review surface.
         _selectedID = State(initialValue: initialSelectedID)
         _compactInspectorOpen = State(initialValue: initialSelectedID != nil)
@@ -37,6 +41,7 @@ struct TranscriptWorkspace: View {
         VStack(alignment: .leading, spacing: 0) {
             header.padding(24)
             if let failure = controller.failure {
+                ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(failure).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
                     HStack {
@@ -46,8 +51,11 @@ struct TranscriptWorkspace: View {
                         } else { Button("Reload review") { Task { await controller.load() } } }
                     }.disabled(controller.loading || controller.saving)
                 }.padding(.horizontal, 24).padding(.bottom, 16)
+                }.frame(maxHeight: 100).scrollIndicators(.visible)
             }
             if controller.session != nil {
+                if showReviewGates { sourceReviewPanel }
+                else {
                 filters.padding(.horizontal, 24).padding(.bottom, 16)
                 ClautoRule()
                 GeometryReader { geometry in
@@ -78,6 +86,7 @@ struct TranscriptWorkspace: View {
                         }
                     }
                 }
+                }
             } else if controller.loading {
                 ClautoActivity(label: "Checking the saved source rows…").padding(24)
                 Spacer()
@@ -92,7 +101,8 @@ struct TranscriptWorkspace: View {
         .disabled(controller.loading)
         .onChange(of: controller.session?.state.revisionID, initial: true) { refresh() }
         .onChange(of: controller.session?.state.rowOrder) { refresh() }
-        .onChange(of: controller.generationForDisplay) { refresh() }
+        .onChange(of: controller.generationForDisplay) { mappingsReviewed = false; orderAndNotesReviewed = false; refresh() }
+        .onChange(of: controller.session?.state.revisionID) { mappingsReviewed = false; orderAndNotesReviewed = false }
         .onChange(of: query) { refresh() }
         .onChange(of: scope) { refresh() }
     }
@@ -130,6 +140,9 @@ struct TranscriptWorkspace: View {
             }
             Text("Choices save with this project. Exporting prepares a review package; it does not approve speech or change a cut.")
                 .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).fixedSize(horizontal: false, vertical: true)
+            if controller.session != nil && !showReviewGates {
+                Button("Source map and review gates") { showReviewGates = true }
+            }
             if controller.loading { ClautoActivity(label: controller.operationDescription) }
             if let url = controller.exportedURL {
                 Button("Reveal exported selections") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -137,6 +150,42 @@ struct TranscriptWorkspace: View {
             if let url = controller.recoveredDraftURL {
                 Button("Reveal preserved pending draft") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
+        }
+    }
+
+    private var sourceReviewPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button("Back to passages") { showReviewGates = false }.padding(.horizontal, 24).padding(.bottom, 14)
+            ClautoRule()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Source map and review gates").font(ClautoDesign.type(18, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                    Button("Prepare ordered source map") { Task { await controller.prepareSourceMap() } }
+                        .accessibilityIdentifier("prepareTranscriptSourceMap")
+                    if let map = controller.sourceMap {
+                        Text("\(map.spans.count) kept source spans · " + String(format: "%.2f s untrimmed selections", map.untrimmedSelectionSeconds))
+                            .font(ClautoDesign.caption)
+                        Text("These are source-selection coordinates, not a rendered cut or finished runtime.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                    }
+                    if let url = controller.sourceMapURL { Button("Reveal source map") { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
+                    ClautoToggle(title: "I reviewed the original clip mappings", isOn: $mappingsReviewed)
+                    ClautoToggle(title: "I reviewed the speech order and notes", isOn: $orderAndNotesReviewed)
+                    Button("Record local source review") {
+                        let revision = controller.session!.state.revisionID
+                        let generation = controller.generationForDisplay
+                        let mappings = mappingsReviewed, orderAndNotes = orderAndNotesReviewed
+                        Task { await controller.acknowledgeSources(expectedRevision: revision, expectedGeneration: generation,
+                            mappingsReviewed: mappings, orderAndNotesReviewed: orderAndNotes) }
+                    }.disabled(!mappingsReviewed || !orderAndNotesReviewed || controller.dirty || controller.saving)
+                        .accessibilityIdentifier("acknowledgeTranscriptSourceReview")
+                    if controller.sourceAcknowledgement != nil {
+                        Text("Local source review recorded for this checkpoint.").font(ClautoDesign.caption)
+                    }
+                    if let url = controller.sourceAcknowledgementURL { Button("Reveal local acknowledgment") { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
+                    Text("This records a local mapping/order review. Listening, human identity, editorial agreement and fact approval are not attested. Applying or rendering these choices is blocked until the remaining gates are integrated.")
+                        .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).fixedSize(horizontal: false, vertical: true)
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            }.scrollIndicators(.visible).accessibilityIdentifier("transcriptSourceReviewGates")
         }
     }
 
@@ -247,6 +296,17 @@ private struct TranscriptPassageInspector: View {
                     Text(row.section).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                     Text(row.text).font(ClautoDesign.body).textSelection(.enabled)
                     if !row.uncertainty.isEmpty { Text(row.uncertainty).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
+                }
+                ClautoSection("Source preview") {
+                    Button("Verify & preview original passage") { Task { await controller.verifySource(row.id) } }
+                        .disabled(controller.session?.state.decisions[row.id]?.keep != true)
+                        .accessibilityIdentifier("verifyTranscriptSource")
+                    if let ticket = controller.sourcePlayback, ticket.span.id == row.id {
+                        TranscriptSourcePreview(controller: controller, ticket: ticket).id(ticket.id)
+                    } else {
+                        Text("Keep this passage, then check its local source bytes and audio coverage before previewing.")
+                            .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                    }
                 }
                 ClautoSection("Story order") {
                     HStack {

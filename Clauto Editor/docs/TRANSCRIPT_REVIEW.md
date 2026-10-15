@@ -20,6 +20,10 @@ selected rows to the rendering pipeline.
 | Undo and competing writers | Undo restores earlier choices into a new checkpoint. File locking and revision comparison refuse stale writes. A pending draft can be preserved separately before reloading another writer's choices. |
 | Normal application quit | A narrow AppKit hook waits for pending review saves and operations. Failed unsaved writes require Keep Editing or an explicit Quit Without Saving choice. Core wait/refusal behavior is tested; native termination/dialog interaction remains unverified. |
 | Selection export | Unique project-owned JSON containing ordered kept rows and every row's annotations, full source mapping, catalog/revision hashes, and source-boundary flags. Explicitly review-only and never approval. |
+| Ordered source map | Exact saved revision and catalog byte hashes bind ordered source spans. A→B→A retains the original clip paths, inclusive word indices and original In/Out seconds. Half-open concatenation offsets are untrimmed review coordinates, never a rendered-cut runtime. Every selected word must fit its source span. |
+| Source verification and preview | Streams the full local media SHA, rejects changes during reading, checks actual AVFoundation duration and non-empty audio-segment coverage, and verifies the declared original transcript snapshot/hash/words. Passage-relative forward playback and seeking are bound to the full revision/span receipt and exact completed seek. Local AVAsset references are restricted. |
+| Explicit local acknowledgment | Both mapping and speech-order/notes checkboxes must be explicitly chosen for the exact clicked checkpoint. All kept originals are reverified before an immutable map and receipt are saved. This acknowledges only local source mapping/order/notes review; it does not attest listening, identity, scientific correctness, paired editorial agreement, or permission to render. |
+| Render gates | A durable project association blocks whole-clip prepare, resume/settings and snapshot paths that cannot represent these choices. Missing/damaged review pointers or metadata ancestors do not silently restore legacy rendering. Exporting a package or recording the limited acknowledgment cannot unlock a cut. |
 | Responsive native view | Wide list/inspector; compact list uses a passage-notes detail view with a Back action. Only synthetic offscreen composition has been checked. |
 
 Source and choices are under `notes/transcript-review/<review-id>/`. The current
@@ -38,13 +42,43 @@ not silently clip speech or certify a transcript as verbatim listening.
 
 The imported catalog's full byte hash binds the saved draft, so retranscription
 cannot silently reuse the same media-derived row IDs with different wording.
-The import/export does not re-hash source media. Its media and transcript SHA values
-are the saved catalog's provenance, not a claim of fresh media verification.
+Catalog import and ordinary selection/map export do not read original media. Their
+SHA values are catalog provenance. The separate Verify & Preview and Record Local
+Source Review actions perform fresh, full local verification. If no original
+transcript path is declared, a media-only preview is possible, but full source
+acknowledgment is refused. A declared missing or altered snapshot is an error.
 
 The whole-clip narration order in the current pipeline cannot express arbitrary
 source-span ordering. The review export therefore stays independent of `narrationIDs`.
 Saving or exporting choices never updates `script.md`, begins a cut, changes a
 saved version, or asserts final human/independent-ledger approval.
+
+## Source map and playback identity limits
+
+A map uses `source-map-<UUID>.json` in the review exports directory. Local review
+receipts and their hash-bound current pointer live under the same review UUID;
+older receipts remain inspectable after an edit, but cannot acknowledge a later
+checkpoint. Keep/order/comment/graphic changes clear current preview and receipt
+state. Reordered rows are never translated into whole-clip `narrationIDs`.
+
+Media verification checks a regular file descriptor and path identity before and
+after a complete SHA-256 read, including inode, size, modification and change time.
+The declared original transcript path, its resolved file signature, byte hash and
+word timings remain bound to the pinned catalog. Missing media, different bytes,
+repointed aliases and uncovered audio intervals are refused.
+
+Playback is **verified at check time**, not an immutable-byte transport. AVPlayer
+reopens a local path. Before Play and during periodic checks the editor rechecks
+review and file identity and pauses on detected drift. This cannot prevent every
+in-place change between checks. No interactive source playback, seek/replay,
+drift-pause latency, VoiceOver or listening acceptance is claimed by this milestone.
+A synthetic asset probe verifies metadata and coverage, not intelligibility.
+
+The first valid catalog import writes `.clauto/transcript-review-required.json`.
+A failed later import may leave that conservative association in place; retry the
+catalog or inspect project recovery rather than automatically clearing the gate.
+No source-span rendering integration, final editorial ledger or human fact-review
+implementation is implied. The older Brief/graphic-plan approvals remain separate.
 
 ## Verification and limits
 
@@ -54,18 +88,27 @@ saved version, or asserts final human/independent-ledger approval.
   containment, competing writers, filtered identity, delayed project-bound edits,
   oversized-write refusal, backwards timing, edits during actual I/O, and pending
   saves/Undo during exit.
-- The final full core checkpoint passed 77 routine tests; five opt-ins were skipped
-  (82 registered cases). All 18 routine transcript tests pass; their real-catalog
-  opt-in is separately exercised locally on the NAS.
+- The latest full core checkpoint passes 91 routine tests; five opt-ins are skipped
+  (96 registered cases). Fourteen source-map regressions add actual synthetic PCM
+  and delayed-audio probes, A→B→A and half-open boundaries, duplicate identities,
+  interior-word overruns, empty choices, missing/replaced/changed-during-hash media,
+  transcript hash/word/alias binding, stale in-flight checks, delayed acknowledgment
+  clicks, reconnect recovery, damaged receipt/map refusal, and damaged/dangling
+  metadata gates. A deterministic progress callback coordinates the real-I/O race;
+  the test does not depend on a sleep completing before hashing.
 - Opt-in local acceptance imported the actual saved yeast catalog: 27 sources,
   914 rows and 11,900 words. Ordering and separate annotations survived reopen,
-  and selection export succeeded. The catalog's input hash remained unchanged.
-  This used a new explicitly labelled QA project on the NAS, with no Sheet access,
+  and selection export succeeded. The source-map increment also compiled 913 kept
+  spans with original coordinates in a new labelled QA copy; the raw boundary
+  overrun row was excluded only in that QA review. The catalog's input hash remained
+  unchanged. Logical selection seconds were not used as rendered-runtime evidence.
+  This used new explicitly labelled QA projects on the NAS, with no Sheet access,
   source-media reads/writes, provider calls or cut render/approval.
 - The Debug native app build and strict bundle signature check passed without
   launching an app or changing foreground ownership.
-- Four new synthetic offscreen view captures check the integrated Transcript tab
-  and selected inspector at wide/minimum widths. They do not establish actual
+- Synthetic offscreen captures check the integrated Transcript tab, selected
+  inspector, scrollable source gates inside the full minimum-size app, long errors,
+  and a physically missing synthetic source. They do not establish actual
   pointer, keyboard traversal, drag, VoiceOver or source-playback acceptance.
 
 The opt-in acceptance requires `CLAUTO_TRANSCRIPT_CATALOG` and
@@ -79,7 +122,7 @@ Private catalog contents and QA exports are not committed to the repository.
 - Trusted human fact decisions and paired writer/reviewer agreement in the GUI.
 - Within-passage word selection, split/trim, drag reorder, redo/history browsing,
   and returning a revised catalog while preserving existing decisions explicitly.
-- Source playback with fresh media-identity verification and audio-boundary checks.
+- Interactive acceptance of the implemented bounded source preview, and a future immutable-byte playback transport if stronger byte pinning is required.
 - Foreground keyboard, pointer/drop and VoiceOver acceptance. Final source listening,
   rendered pacing and subjective editorial quality remain separate checks.
 - Native termination/dialog interaction acceptance. The implemented quit hook
