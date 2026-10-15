@@ -634,7 +634,7 @@ the policy; native Start Cut interaction remains held.
 | Requirement | Current state | Next acceptance |
 |---|---|---|
 | Circle/ellipse on an exact paused saved frame | Implemented in earlier frame-comment milestone | Latest native inline/popout/fullscreen and accessibility pass held |
-| Highlight/freehand, selectable regions, typed/dictated tagged notes | Requested; circle/ellipse, typed frame text, saved revisions and mark undo exist | Extend normalized geometry, retain raw dictation/version/frame provenance, test edit/undo/reopen and accessible coordinate alternatives |
+| Highlight/freehand, selectable regions, typed/dictated tagged notes | M13 adds highlights/freehand, selectable editable regions and typed labels/notes; direct region dictation remains pending | Extend normalized geometry, retain raw dictation/version/frame provenance, test edit/undo/reopen and accessible coordinate alternatives |
 | Project-local people with user-assigned names and @mentions | Requested; not implemented | Anonymous on-device detection, stable local IDs, explicit name/uncertain-match confirmation, typed/spoken disambiguation, correction/unassign and export control |
 
 Spatial annotations are frame-bound unless a separately verified tracking record
@@ -643,3 +643,31 @@ identity services. Full tracking, merge/split and cross-frame continuity are not
 claimed by the existing frame-comment implementation. These additions must not
 delay delivery of already reviewed Pizza playback/feedback features.
 
+## M13: drawing and typed region notes
+
+Saved-frame comments now support highlight rectangles, bounded freehand strokes
+and click-to-pin circular details alongside earlier circles/ellipses. Regions
+have stable IDs, individual labels/typed notes, selection, coordinate resize,
+delete and undo/redo. Delayed field callbacks retain their original region ID
+and cannot retarget a newly selected or deleted mark. Earlier records omit the
+new optional fields and retain their encoded bytes.
+
+The stored request preserves exact saved-version movie/timeline/input provenance,
+rational playback clock, decoded frame time, PNG hash and normalized geometry
+inside the video, excluding letterbox bars. This is the saved edit's frame; an
+original-camera time mapping is not implied. Revised comments retain the earlier
+record and frozen image. No video is modified or production approval inferred.
+
+Source-level controls include a mark list, bounds fields and an explicit point
+list as keyboard alternatives to dragging. Synthetic tests cover geometry, old
+record compatibility, region text preservation, delayed callbacks, resize/undo
+and saved revision provenance. Native gestures, layout, inline/popout/fullscreen
+focus and VoiceOver remain unobserved during the foreground hold. Direct region
+dictation with retained raw ASR, candidate-frame notes, project-local person IDs,
+name disambiguation, anonymous detection and tracking remain pending. See
+`SPATIAL_FRAME_NOTES.md` for bounds and the acceptance scope.
+
+M13 v2 corrections: preserve closed freehand loops, pin frame-comment I/O to the
+original physical project root, and retain immutable save attempts across failure.
+Late region edits cannot reuse a committed record ID; retries preserve the earlier
+revision and then save newer words. Native interaction acceptance remains held.

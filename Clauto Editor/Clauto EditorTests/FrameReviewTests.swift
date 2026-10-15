@@ -252,7 +252,10 @@ struct FrameReviewTests {
         #expect(voice.beginFrameComment(lease)); #expect(!voice.canPresentCandidate && !voice.canStart)
         #expect(!voice.beginCandidatePlayback(UUID()))
         try controller.begin(f.request()); controller.releaseLease = { voice.endFrameComment(lease) }
-        try await Task.sleep(for: .milliseconds(150)); controller.draft?.text = "Written frame feedback"
+        let readyDeadline = ContinuousClock.now + .seconds(5)
+        while controller.preparing && ContinuousClock.now < readyDeadline { try await Task.sleep(for: .milliseconds(5)) }
+        try #require(controller.draft?.frame != nil && !controller.preparing)
+        controller.draft?.text = "Written frame feedback"
         async let one = controller.save(); async let two = controller.save()
         #expect(await one); #expect(await two)
         #expect(try await controller.repository.list().count == 1)

@@ -93,7 +93,7 @@ actor FrameCommentRepository {
         decoder = JSONDecoder(); decoder.dateDecodingStrategy = .millisecondsSince1970
     }
     private func root(create: Bool) throws -> SourceRenderDirectory {
-        try SourceRenderDirectory.open(project.folder).child("notes").child("frame-comments",create: create)
+        try ProjectMutationLease.checkedRoot(project).child("notes").child("frame-comments",create: create)
     }
     private func validatePNG(_ png: Data, sha: String, width: Int, height: Int) throws {
         guard !png.isEmpty, png.count <= Self.pngLimit, TranscriptSourceMap.sha(png) == sha,
@@ -146,6 +146,7 @@ actor FrameCommentRepository {
         let folder = try parent.child(record.id.uuidString,create: true)
         try writeExpected(frame.png,name: "frame.png",folder: folder)
         let bytes = try encoder.encode(record)
+        guard bytes.count <= 1024*1024 else { throw WorkflowFailure.invalid("This frame comment is too large. Keep the notes and drawing shorter before saving.") }
         try writeExpected(bytes,name: "comment.json",folder: folder)
         try VoiceReviewProvenance.check(frame.request.target,project: project)
         guard try source.voiceHash(movie.lastPathComponent,limit: VoiceMasterByteContract.sourceLimit) == frame.request.target.preview.sha256 else { throw ProjectFailure.invalidProject }
@@ -184,7 +185,8 @@ actor FrameCommentRepository {
         return (record,.init(request: record.request,png: png,pngSHA256: record.framePNG_SHA256,width: record.width,height: record.height,actualTime: record.actualFrameTime))
     }
     func list() throws -> [SavedFrameComment] {
-        let path = project.folder.appendingPathComponent("notes/frame-comments")
+        let projectRoot = try ProjectMutationLease.checkedRoot(project)
+        let path = projectRoot.url.appendingPathComponent("notes/frame-comments")
         guard FileManager.default.fileExists(atPath: path.path) else { return [] }
         let parent = try root(create: false)
         let names = try FileManager.default.contentsOfDirectory(atPath: parent.url.path)

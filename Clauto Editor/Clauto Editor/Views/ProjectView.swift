@@ -591,7 +591,7 @@ struct VersionReview: View {
                 HStack {
                     Button(playbackRouter.selectedID == endpoint.id ? "Shortcuts use this player" : "Use this player for shortcuts") { playbackRouter.select(endpoint.id) }
                         .disabled(playbackRouter.selectedID == endpoint.id).accessibilityIdentifier("selectPlaybackPlayer")
-                    Button("Pause and Comment / Circle…") { playbackRouter.select(endpoint.id); playbackRouter.beginComment(endpoint) }
+                    Button("Pause and Mark a Detail…") { playbackRouter.select(endpoint.id); playbackRouter.beginComment(endpoint) }
                         .disabled(!endpoint.ready || voice?.canPresentCandidate != true).accessibilityIdentifier("addFrameComment")
                 }
                 Text("⌘⌥P play/pause · ⌘⌥← / → skip · ⌃⌥⌘M pause and comment · Space when the video has focus")
@@ -600,7 +600,12 @@ struct VersionReview: View {
                     ForEach(comments.comments.filter { $0.request.target.versionID == version.id }) { comment in
                         HStack(alignment: .top) {
                             Button(String(format: "Frame %d · %.6fs", comment.request.frame.frameIndex,comment.request.frame.seconds)) { requestSeek(comment.request.frame.seconds) }
-                            Text(comment.text).textSelection(.enabled)
+                            VStack(alignment: .leading,spacing: 4) {
+                                if !comment.text.isEmpty { Text(comment.text).textSelection(.enabled) }
+                                ForEach(comment.annotations.filter { $0.note != nil }) { mark in
+                                    Text("\(mark.tag ?? mark.kind.label): \(mark.note ?? "")").textSelection(.enabled)
+                                }
+                            }
                             Text("\(comment.annotations.count) marks").font(ClautoDesign.caption)
                             Spacer()
                             Button("Open / Revise") { playbackRouter.edit(comment,project: project) }

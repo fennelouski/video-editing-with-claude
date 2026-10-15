@@ -391,12 +391,20 @@ the policy; native Start Cut interaction remains held.
 
 ## New spatial/person feedback requirements (15 October)
 
-- [ ] Extend existing circle/ellipse marks with highlight and freehand tools,
-  selection, edit/undo and typed or dictated region notes. Preserve original
-  dictation, exact version/frame and normalized coordinates. Frame-bound marks
-  do not imply tracking. Verify inline/popout/fullscreen and keyboard alternatives.
+- [x] Source/synthetic: extend saved-frame circles/ellipses with highlights,
+  freehand, click pins, stable selectable regions, typed labels/notes and
+  resize/delete/undo. Preserve exact saved version/frame/PNG and normalized
+  coordinates. Keyboard bounds/point-list alternatives are present in source.
+- [ ] Direct region dictation must retain raw ASR and pin speech to the original
+  region/frame. Candidate-frame notes and native inline/popout/fullscreen,
+  gestures and VoiceOver acceptance remain pending. Frame-bound marks do not
+  imply tracking or an original-camera source-time mapping.
 - [ ] Add project-local user-named people and @mention disambiguation. Anonymous
   on-device detections must not infer identity; uncertain associations need user
   confirmation, correction/unassign and deliberate export control. Full tracking
   and merge/split behavior require separate implementation and acceptance.
 
+M13 v2 corrections: preserve closed freehand loops, pin frame-comment I/O to the
+original physical project root, and retain immutable save attempts across failure.
+Late region edits cannot reuse a committed record ID; retries preserve the earlier
+revision and then save newer words. Native interaction acceptance remains held.

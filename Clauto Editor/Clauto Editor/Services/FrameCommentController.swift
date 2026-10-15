@@ -1,14 +1,25 @@
 import Foundation
+import CoreGraphics
 import Observation
+
+struct FrameCommentSaveAttempt: Equatable, Sendable {
+    let id: UUID
+    let supersedesID: UUID?
+    let text: String
+    let annotations: [FrameEllipse]
+}
 
 @MainActor @Observable final class FrameCommentDraft: Identifiable {
     let id = UUID()
     let request: FrameCommentRequest
-    let supersedesID: UUID?
+    private(set) var supersedesID: UUID?
+    private(set) var pendingSave: FrameCommentSaveAttempt?
+    private var nextSaveID: UUID?
     var text: String
     var history: FrameAnnotationHistory
     var selectedShapeID: UUID?
     var tool = FrameAnnotationKind.ellipse
+    var selecting = false
     private(set) var frame: FrozenReviewFrame?
     init(request: FrameCommentRequest, text: String = "", shapes: [FrameEllipse] = [], supersedes: UUID? = nil, frame: FrozenReviewFrame? = nil) {
         self.request = request; self.text = text; history = .init(shapes: shapes); supersedesID = supersedes; self.frame = frame
@@ -21,10 +32,54 @@ import Observation
         let shape = FrameEllipse(id: UUID(),kind: kind,bounds: bounds)
         try shape.validate(width: frame.width,height: frame.height); try history.add(shape); selectedShapeID = shape.id
     }
+    func addStroke(_ points: [CGPoint],video: CGRect) throws {
+        guard let frame, let shape = VideoAnnotationGeometry.stroke(points,video: video,image: .init(width: frame.width,height: frame.height)) else { throw WorkflowFailure.invalid("Draw inside the captured video.") }
+        try history.add(shape); selectedShapeID = shape.id
+    }
+    func updateSelected(tag: String,note: String) throws {
+        guard let selectedShapeID else { return }
+        try updateRegion(selectedShapeID,tag: tag,note: note)
+    }
+    func updateRegion(_ id: UUID,tag: String,note: String) throws {
+        guard frame != nil, let index = history.shapes.firstIndex(where: { $0.id == id }) else { return }
+        var shapes = history.shapes
+        shapes[index].tag = tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil:tag
+        shapes[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil:note
+        // Retain all draft wording, including over-limit input. Save validates;
+        // a field edit must never silently truncate or replace the user's words.
+        try history.replace(shapes)
+    }
+    func resizeSelected(_ bounds: NormalizedVideoRect) throws {
+        guard let frame, let selectedShapeID, let old = history.shapes.first(where: { $0.id == selectedShapeID }) else { return }
+        let points = old.points?.map { NormalizedVideoPoint(x: bounds.x+($0.x-old.bounds.x)/old.bounds.width*bounds.width,y: bounds.y+($0.y-old.bounds.y)/old.bounds.height*bounds.height) }
+        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note)
+        try next.validate(width: frame.width,height: frame.height)
+        try history.replace(history.shapes.map { $0.id == old.id ? next:$0 })
+    }
     func removeSelected() throws { if let selectedShapeID { try history.remove(selectedShapeID); self.selectedShapeID = nil } }
     func undo() { history.undo(); selectedShapeID = nil }
     func redo() { history.redo(); selectedShapeID = nil }
-    var canSave: Bool { frame != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.utf8.count <= 16_384 }
+    var validationIssue: String? {
+        guard let frame else { return "Wait for the captured frame." }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || history.shapes.contains(where: { $0.note != nil }) else { return "Add a frame or region note before saving." }
+        guard text.utf8.count <= 16_384 else { return "Keep the frame note within 16384 UTF-8 bytes. Your draft remains open." }
+        do { for shape in history.shapes { try shape.validate(width: frame.width,height: frame.height) }; return nil }
+        catch { return error.localizedDescription }
+    }
+    var canSave: Bool { validationIssue == nil }
+    var canAttemptSave: Bool { pendingSave != nil || canSave }
+    func beginSave() throws -> FrameCommentSaveAttempt {
+        if let pendingSave { return pendingSave }
+        guard canSave else { throw WorkflowFailure.invalid(validationIssue ?? "Add a note before saving.") }
+        let snapshot = FrameCommentSaveAttempt(id: nextSaveID ?? id,supersedesID: supersedesID,text: text,annotations: history.shapes)
+        pendingSave = snapshot; return snapshot
+    }
+    func acknowledgeSaved(_ snapshot: FrameCommentSaveAttempt) throws {
+        guard pendingSave == snapshot else { throw ProjectFailure.invalidProject }
+        // Retries retain an exact payload/ID until acknowledged. Any newer
+        // wording then gets its own revision rather than reusing a consumed ID.
+        pendingSave = nil; supersedesID = snapshot.id; nextSaveID = UUID()
+    }
 }
 @MainActor @Observable final class FrameCommentController: Identifiable {
     nonisolated let id: UUID
@@ -36,13 +91,14 @@ import Observation
     private(set) var saving = false
     var error: String?
     @ObservationIgnored private let capture: any ReviewFrameCapturing
+    @ObservationIgnored private let saveCheckpoint: @Sendable () async throws -> Void
     @ObservationIgnored private var preparation: Task<Void,Never>?
     @ObservationIgnored private var preparationID: UUID?
     @ObservationIgnored private var draftEpoch = UUID()
     @ObservationIgnored private var saveTask: Task<Bool,Never>?
     @ObservationIgnored var releaseLease: (() -> Void)?
-    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService()) {
-        id = project.id; self.project = project; self.capture = capture; repository = .init(project: project)
+    init(project: Project, capture: any ReviewFrameCapturing = ReviewFrameCaptureService(), saveCheckpoint: @escaping @Sendable () async throws -> Void = {}) {
+        id = project.id; self.project = project; self.capture = capture; self.saveCheckpoint = saveCheckpoint; repository = .init(project: project)
     }
     var hasPendingWork: Bool { draft != nil || preparing || saveTask != nil }
     func load() async { do { comments = try await repository.list() } catch { self.error = error.localizedDescription } }
@@ -77,18 +133,26 @@ import Observation
     }
     @discardableResult func save() async -> Bool {
         if let saveTask { return await saveTask.value }
-        guard let draft, let frame = draft.frame, draft.canSave else { error = "Add a written comment before saving. A circle alone is not an editing instruction."; return false }
-        let text = draft.text, annotations = draft.history.shapes
-        saving = true
+        guard let draft, let frame = draft.frame, draft.canAttemptSave else { error = "Add a frame or region note before saving. A mark alone is not an editing instruction."; return false }
+        saving = true; error = nil
         let task = Task { () -> Bool in
             defer { saving = false; saveTask = nil }
             do {
-                let record = try await repository.save(frame: frame,text: text,annotations: annotations,supersedes: draft.supersedesID,id: draft.id)
-                // A committed save stays acknowledged even if a subsequent
-                // directory refresh fails. Never retry an already saved draft.
-                comments.removeAll { $0.id == record.supersedesID }; comments.append(record)
-                if self.draft?.id == draft.id, draft.text == text, draft.history.shapes == annotations { self.draft = nil; releaseLease?(); releaseLease = nil }
-                else { error = "An earlier draft was saved; newer edits are still open." }
+                // Finish an uncertain earlier attempt exactly before saving
+                // newer words as its child. Two passes bound continuous edits.
+                for pass in 0..<2 {
+                    let snapshot = try draft.beginSave()
+                    try await saveCheckpoint()
+                    let record = try await repository.save(frame: frame,text: snapshot.text,annotations: snapshot.annotations,supersedes: snapshot.supersedesID,id: snapshot.id)
+                    try draft.acknowledgeSaved(snapshot)
+                    comments.removeAll { $0.id == record.id || $0.id == record.supersedesID }; comments.append(record)
+                    guard self.draft?.id == draft.id else { return true }
+                    if draft.text == snapshot.text, draft.history.shapes == snapshot.annotations {
+                        self.draft = nil; releaseLease?(); releaseLease = nil; return true
+                    }
+                    if pass == 1 || !draft.canSave { break }
+                }
+                error = "An earlier revision was saved; newer edits remain open and can be saved."
                 return true
             } catch { self.error = error.localizedDescription; return false }
         }
