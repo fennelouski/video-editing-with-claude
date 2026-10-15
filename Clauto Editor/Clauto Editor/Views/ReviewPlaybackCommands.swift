@@ -118,7 +118,7 @@ import Observation
     func edit(_ record: SavedFrameComment, project: Project) {
         guard editor == nil, let store, let voice = store.voiceReview(for: project) else { return }
         let controller = store.frameComment(for: project), lease = UUID()
-        guard !controller.hasPendingWork, voice.beginFrameComment(lease) else { store.notice = "Finish the open review or stop voice capture first."; return }
+        guard !controller.hasPendingWork, voice.beginFrameComment(lease) else { store.notice = "Finish or close the open frame or candidate review first."; return }
         selected?.driver.pause()
         do {
             // Reserve pending state before scheduling any disk I/O; Cancel or

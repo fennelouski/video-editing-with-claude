@@ -438,3 +438,28 @@ packet preparation is the next requirement. Microphone off remains a privacy
 control; it must not be required to begin processing feedback. Broader original
 product requirements above and native accessibility acceptance remain tracked,
 and no publication or live external conversation service is implied.
+
+## Continuous steering (15 October)
+
+The next increment removes microphone shutdown as a prerequisite for feedback
+processing. Cards save continuously; 120 seconds without meaningful feedback seals
+an immutable numbered packet and starts local proposal preparation. New feedback
+continues while work runs and supersedes stale proposals. Unsubmitted drafts are
+retained as context and never become instructions. Idle scheduling is durable,
+transactional, idempotent, and independent of playback-clock or meter activity.
+Paused-frame comments can coexist with capture; explicit timing boundaries remain.
+
+Exact cut-plan compilation is automatic for supported, resolved packets. Rendering
+still uses the previously implemented explicit exact-plan approval. Full automatic
+candidate rendering/version selection and recognition while watching a candidate
+need further work; existing provenance boundaries are retained. No live external
+conversation or semantic editor is enabled by this increment.
+
+App-first completion remains the priority. The remaining original-product work
+includes script/source-span apply and DOCX replacement flows, scientific escalation
+cards, project duplicate/archive/thumbnails, broader watch/invalidation and style
+packs, clean-user setup, and native interaction/accessibility acceptance. Live
+Claude transport, signed public distribution and update delivery also need their
+appropriate runtime/environment checks; no external private context or publication
+is authorized by the local development work. The requirements table above records
+individual implementation and acceptance limits rather than claiming completion.

@@ -29,6 +29,7 @@ import AppKit
 
     private func finish(_ app: NSApplication, terminate: Bool) {
         awaitingReviewSave = false
+        if !terminate { store?.resumeReviewWorkAfterCancelledExit() }
         app.reply(toApplicationShouldTerminate: terminate)
     }
 }

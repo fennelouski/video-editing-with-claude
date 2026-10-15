@@ -168,3 +168,55 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
 - Nathan's continuous steering requirement supersedes the earlier stop/finalize
   workflow: live feedback should continue while roughly two minutes of inactivity
   forms a packet for longer work. That next increment remains pending here.
+
+## Milestone 8 — continuous steering and idle packets
+
+- Live partial/final cards keep saving while capture remains on. Meaningful speech
+  revisions, manual note changes, merge/split operations and draft edits restart a
+  120-second feedback deadline. Playback clocks, microphone levels, identical ASR
+  repeats and save acknowledgements do not. Microphone off is a privacy control;
+  it is not required to begin packet/proposal preparation.
+- A project transaction seals one immutable numbered packet containing the exact
+  visible notes, revisions, original words, final/unfinished status, anchors and
+  issues. Unsubmitted typed/transcript drafts remain visibly non-instructional
+  context. Duplicate transactions across repositories return the same packet.
+  Later packets retain earlier protections alongside new feedback.
+- Candidate claims bind the packet and exact saved movie/note revisions, with one
+  existing processing lease. Fresh feedback remains live while a job runs; stale
+  output is retained as superseded history and the next quiet packet can proceed.
+  Paused-frame comments no longer require microphone shutdown; their transport
+  pause still creates the existing explicit timing boundary.
+- Pending autosaves prevent an old timer or intervening clock write from sealing
+  pre-keystroke feedback. Quit cancels the idle timer and saves drafts without
+  waiting two minutes. Reopen resumes the saved deadline without starting capture.
+- After a resolved packet, deterministic local proposal preparation starts
+  automatically. Exact edit-plan compilation follows automatically for supported
+  movies. Unfinished/ambiguous timing, draft context and conflicting instructions
+  require clarification. No synthetic ASR finalization or free-text semantic edit
+  guessing occurs. Existing explicit exact-plan approval and rendering gates stay
+  intact; automatic rendering/version promotion and feedback while watching a
+  rendered candidate remain subsequent work. Candidate playback currently requires
+  capture to be off to protect its distinct timing/provenance.
+- Core tests use synthetic providers and injected short delays; deterministic
+  repository tests verify the full 120-second boundary, concurrent packet/claim
+  behavior, immutable protection context, drafts, active capture, supersession and
+  quit/restart. No native app, speech API, foreground or private-media operation
+  was performed. Native UX and the full ten-part design remain unaccepted.
+
+M8 independent-review corrections: packet-bound input and completion require the
+entire current packet, including its activity revision, provisional speech and
+draft context. The first local draft keystroke cancels owned preparation and queues
+invalidation before its delayed autosave. A generation-owned half-second lease
+watch resumes a ready packet after another repository releases its worker, without
+resetting the idle date or stopping foreign work. Quit cancels/joins this watcher;
+Keep Editing explicitly resumes durable packet scheduling without restarting capture.
+These cases have independent regression tests and supersede the first M8 freeze.
+
+Typed drafts now have an explicit Discard confirmation. Discard compares the exact
+persisted base, freezes and tracks its transaction through quit, and records a
+bounded tombstone so delayed autosaves or stale submissions cannot revive that
+draft ID. Exact retries return the same discard; conflicts retain both local and
+saved text. Truly empty typed context no longer blocks a proposal. Superseding a
+prepared packet returns unowned unchanged notes to ready, allowing a replacement
+after temporary draft context is cleared. The busy-lease watcher retries temporary
+read failures at its bounded interval and clears its matching generation on exit.

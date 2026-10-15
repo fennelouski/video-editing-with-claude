@@ -118,6 +118,10 @@ final class EditorStore {
         return await flushTranscriptReviewsForExit() && voicesSaved
     }
 
+    func resumeReviewWorkAfterCancelledExit() {
+        for controller in voiceReviews.values { controller.resumeAfterCancelledExit() }
+    }
+
     var hasPendingTranscriptSaves: Bool { transcriptReviews.values.contains { $0.dirty || $0.saving || $0.loading } }
 
     func flushTranscriptReviewsForExit() async -> Bool {

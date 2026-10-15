@@ -11,6 +11,7 @@ struct VoiceReviewView: View {
     let prepareCandidatePlayback: (UUID) -> Bool
     @State private var visibleNotes = 50
     @State private var reloadTypedDraft = false
+    @State private var discardTypedDraft = false
     @Bindable private var composer: VoiceTypedComposer
     init(controller: VoiceReviewController,versionID: UUID,engine: URL,selected: Bool,select: @escaping () -> Void,seek: @escaping (Double) -> Void,prepareCandidatePlayback: @escaping (UUID) -> Bool) {
         self.controller = controller; self.versionID = versionID; self.engine = engine; self.selected = selected
@@ -56,8 +57,19 @@ struct VoiceReviewView: View {
                     ProgressView("Microphone level", value: Double(controller.level), total: 1)
                         .accessibilityIdentifier("voiceReviewMicrophoneLevel")
                 }
-                Text("Feedback saves as you speak.")
+                Text("Keep steering. Feedback saves as you speak.")
                     .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                if controller.nextPacketAt != nil {
+                    Text("Next update after two quiet minutes.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                        .accessibilityIdentifier("voiceSteeringWaiting")
+                }
+                if controller.waitingForPreparation {
+                    Text("Waiting for the current update…").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                }
+                if let packet = controller.document.feedbackPackets?.last {
+                    Text("Update \(packet.number) · \(packet.notes.filter { !$0.cancelled }.count) comments" + (packet.needsAttention > 0 ? " · \(packet.needsAttention) need clarification":" · saved"))
+                        .font(ClautoDesign.caption).textSelection(.enabled).accessibilityIdentifier("voiceSteeringPacket")
+                }
                 if let error = controller.error {
                     Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
                         .accessibilityIdentifier("voiceReviewError")
@@ -81,6 +93,13 @@ struct VoiceReviewView: View {
                             controller.submitTypedComposer(versionID)
                         }.disabled(composer.saving || !selected || controller.target?.versionID != versionID || composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .accessibilityIdentifier("voiceSaveTypedFeedback")
+                    }
+                    if composer.hasEdits {
+                        Button("Discard draft…") { discardTypedDraft = true }
+                            .confirmationDialog("Discard this unfinished feedback?",isPresented: $discardTypedDraft) {
+                                Button("Discard draft",role: .destructive) { controller.discardTypedComposer(versionID) }
+                            }
+                            .accessibilityIdentifier("voiceDiscardTypedDraft")
                     }
                     if let issue = composer.storageIssue {
                         Text(issue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)

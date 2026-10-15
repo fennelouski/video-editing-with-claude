@@ -210,6 +210,7 @@ struct VoiceRevisionCandidate: Codable, Identifiable, Sendable {
     var editApprovalRelativePath: String?
     var editApprovalSHA256: String?
     var renderedPreview: VoiceCandidatePreview?
+    var feedbackPacketID: UUID?
     var appliedToCut = false
     var productionAuthorized = false
 }
@@ -245,6 +246,7 @@ struct VoiceTypedDraft: Codable, Equatable, Sendable {
     var end = ""
     var action = VoiceRangeAction.protect
     var target: VoiceReviewTarget?
+    var hasContent: Bool { !text.isEmpty || !start.isEmpty || !end.isEmpty }
     func validate(project: UUID) throws {
         guard revision > 0, revision < 1_000_000_000, text.count <= 20_000,
               start.count <= 100, end.count <= 100,
@@ -270,6 +272,9 @@ struct VoiceReviewDocument: Codable, Sendable {
     var drafts: [VoiceTranscriptDraft]? // Optional for ledgers created before draft retention.
     var typedDrafts: [VoiceTypedDraft]?
     var typedSubmissions: [VoiceTypedSubmission]?
+    var typedDiscards: [VoiceTypedDiscard]?
+    var steering: VoiceSteeringState?
+    var feedbackPackets: [VoiceFeedbackPacket]?
 
     mutating func storeSpeech(_ result: VoiceSpeechResult, sessionID: UUID, attemptID: UUID, now: Date, refreshNow: Bool = true) throws {
         guard let session = sessions.first(where: { $0.id == sessionID && $0.attemptID == attemptID }),
@@ -359,9 +364,87 @@ struct VoiceReviewDocument: Codable, Sendable {
             }
         }
         for i in candidates.indices where [.processing,.prepared].contains(candidates[i].state) {
+            if let packetID = candidates[i].feedbackPacketID,
+               feedbackPackets?.last?.id != packetID || hasUnpacketedFeedback {
+                candidates[i].state = .superseded; candidates[i].detail = "New steering arrived; this earlier packet remains in history."
+                continue
+            }
             if candidates[i].noteRevisions.contains(where: { ref in !notes.contains(where: { $0.id == ref.id && $0.revision == ref.revision && $0.issues.isEmpty && $0.state != .cancelled }) }) {
                 candidates[i].state = .superseded; candidates[i].detail = "Feedback changed; this candidate is retained in history."
             }
         }
+        // A superseded proposal must not strand unchanged protections in a
+        // prepared state after temporary draft context is resolved/discarded.
+        for i in notes.indices where notes[i].state == .prepared && notes[i].issues.isEmpty {
+            if !candidates.contains(where: { [.processing,.prepared].contains($0.state) && $0.noteRevisions.contains { $0.id == notes[i].id && $0.revision == notes[i].revision } }) { notes[i].state = .ready }
+        }
+    }
+}
+
+struct VoiceTypedDiscard: Codable, Equatable, Sendable {
+    let draftID: UUID
+    let versionID: UUID
+    let revision: Int
+    let submissionID: UUID
+    let snapshotSHA256: String
+}
+
+/// Only user feedback changes the idle deadline. Decoder clocks and save
+/// acknowledgements may improve timing, but are never new editorial feedback.
+struct VoiceSteeringState: Codable, Equatable, Sendable {
+    var revision = 0
+    var lastActivity: Date?
+}
+struct VoiceFeedbackSnapshot: Codable, Equatable, Sendable {
+    let id: UUID
+    let revision: Int
+    let text: String
+    let transcript: String
+    let isFinal: Bool
+    let cancelled: Bool
+    let intent: VoiceIntent
+    let action: VoiceRangeAction?
+    let anchor: VoiceNoteAnchor?
+    let issues: [String]
+    init(_ note: VoiceReviewNote) {
+        id = note.id; revision = note.revision; text = note.text; transcript = note.transcript
+        isFinal = note.isFinal; cancelled = note.state == .cancelled
+        intent = note.intent; action = note.action; anchor = note.effectiveAnchor; issues = note.issues
+    }
+}
+/// Immutable context, including unfinished words. Drafts are evidence only;
+/// candidate instructions still require finalized, resolved note revisions.
+struct VoiceFeedbackPacket: Codable, Identifiable, Equatable, Sendable {
+    let id: UUID
+    let number: Int
+    let created: Date
+    let activityRevision: Int
+    let notes: [VoiceFeedbackSnapshot]
+    let drafts: [VoiceTranscriptDraft]
+    let typedDrafts: [VoiceTypedDraft]
+    var needsAttention: Int { notes.filter { !$0.cancelled && (!$0.isFinal || !$0.issues.isEmpty) }.count + drafts.count + typedDrafts.filter { $0.hasContent }.count }
+}
+extension VoiceReviewDocument {
+    var feedbackSnapshot: [VoiceFeedbackSnapshot] { notes.filter { ($0.supersededBy ?? []).isEmpty }.map(VoiceFeedbackSnapshot.init) }
+    var hasUnpacketedFeedback: Bool {
+        let values = feedbackSnapshot
+        guard !values.isEmpty || !(drafts ?? []).isEmpty || !(typedDrafts ?? []).isEmpty else { return false }
+        guard let packet = feedbackPackets?.last else { return true }
+        return packet.activityRevision != steering?.revision || packet.notes != values || packet.drafts != (drafts ?? []) || packet.typedDrafts != (typedDrafts ?? [])
+    }
+    mutating func feedbackChanged(now: Date = Date()) {
+        var value = steering ?? .init(); value.revision += 1
+        // Wall clock corrections cannot move a saved deadline backwards.
+        value.lastActivity = max(value.lastActivity ?? now,now); steering = value
+    }
+    @discardableResult mutating func sealFeedback(now: Date, idleInterval: TimeInterval) throws -> UUID? {
+        guard idleInterval.isFinite, idleInterval >= 0, now.timeIntervalSince1970.isFinite else { throw ProjectFailure.invalidProject }
+        guard let activity = steering?.lastActivity, now >= activity.addingTimeInterval(idleInterval) else { return nil }
+        if !hasUnpacketedFeedback { return feedbackPackets?.last?.id }
+        var packets = feedbackPackets ?? []
+        guard packets.count < 1_000 else { throw WorkflowFailure.invalid("Feedback history is full. Preserve this review before starting another project.") }
+        let packet = VoiceFeedbackPacket(id: UUID(),number: packets.count+1,created: now,activityRevision: steering?.revision ?? 0,
+            notes: feedbackSnapshot,drafts: drafts ?? [],typedDrafts: typedDrafts ?? [])
+        packets.append(packet); feedbackPackets = packets; return packet.id
     }
 }

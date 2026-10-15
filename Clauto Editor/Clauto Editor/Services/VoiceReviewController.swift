@@ -89,7 +89,7 @@ final class VoiceReviewController {
         restructuringCards.formUnion(ids)
         let write = enqueue(retainFailure: false) { try await $0.restructureCards(request) }
         cardTasks[request.id] = Task { @MainActor in
-            defer { restructuringCards.subtract(ids); cardTasks[request.id] = nil }
+            defer { restructuringCards.subtract(ids); cardTasks[request.id] = nil; kickPreparation() }
             _ = await write.value
         }
     }
@@ -126,6 +126,15 @@ final class VoiceReviewController {
     @ObservationIgnored private var voiceSetupTask: Task<Void, Never>?
     @ObservationIgnored private var voiceSetupGeneration: UUID?
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
+    @ObservationIgnored private var packetTask: Task<Void,Never>?
+    @ObservationIgnored private var packetTaskRevision: Int?
+    @ObservationIgnored private var packetTaskID: UUID?
+    @ObservationIgnored private var flushing = false
+    @ObservationIgnored private let steeringIdleInterval: TimeInterval
+    private(set) var nextPacketAt: Date?
+    private(set) var waitingForPreparation = false
+    @ObservationIgnored private var leaseWatchTask: Task<Void,Never>?
+    @ObservationIgnored private var leaseWatchID: UUID?
     @ObservationIgnored private var pendingStopCancelled = false
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var attemptID: UUID?
@@ -136,7 +145,9 @@ final class VoiceReviewController {
     @ObservationIgnored private var clockSampler: (@MainActor () -> VoiceLivePlayhead)?
 
     init(project: Project, provider: any VoiceReviewDictating = DictateReviewAdapter(), defaults: UserDefaults = .standard,
-         processor: any VoiceCandidateProcessing = LocalVoiceCandidateProcessor()) throws {
+         processor: any VoiceCandidateProcessing = LocalVoiceCandidateProcessor(), steeringIdleInterval: TimeInterval = 120) throws {
+        guard steeringIdleInterval.isFinite, steeringIdleInterval >= 0, steeringIdleInterval <= 86_400 else { throw ProjectFailure.invalidProject }
+        self.steeringIdleInterval = steeringIdleInterval
         self.project = project; self.provider = provider; self.defaults = defaults
         selectedDeviceUID = defaults.string(forKey: "ClautoVoiceReviewMicrophoneUID") ?? ""
         locale = defaults.string(forKey: "ClautoVoiceReviewLocale") ?? Locale.current.identifier
@@ -145,17 +156,17 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var hasPendingWork: Bool { waitingForPreparation || voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
     var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
     var canPresentCandidate: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
     func beginCandidatePlayback(_ token: UUID) -> Bool {
-        guard canPresentCandidate else { error = "Stop and finalize voice capture before playing a review candidate."; return false }
+        guard canPresentCandidate else { error = "Candidate playback is unavailable while this review owns the microphone or an open frame. Feedback continues saving."; return false }
         candidatePlaybackID = token; return true
     }
     func beginFrameComment(_ token: UUID) -> Bool {
-        guard canPresentCandidate else { error = "Stop and finalize voice capture and close the candidate player before adding a frame comment."; return false }
+        guard frameCommentLease == nil, candidatePlaybackID == nil else { error = "Close the open frame or candidate review before adding another frame comment."; return false }
         frameCommentLease = token; return true
     }
     func endFrameComment(_ token: UUID) { if frameCommentLease == token { frameCommentLease = nil } }
@@ -167,7 +178,7 @@ final class VoiceReviewController {
         guard value.projectID == project.id, value.sequence >= document.sequence else { return }; document = value
         if let id = renderingCandidateID, let candidate = document.candidates.first(where: { $0.id == id }) {
             let relevant = document.notes.filter { $0.state != .cancelled && ($0.effectiveAnchor?.targetID == candidate.parent.id || $0.effectiveAnchor == nil) }
-            if candidate.state != .prepared || relevant.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) != candidate.noteRevisions {
+            if candidate.state != .prepared || (candidate.feedbackPacketID != nil && (document.feedbackPackets?.last?.id != candidate.feedbackPacketID || document.hasUnpacketedFeedback)) || relevant.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) != candidate.noteRevisions {
                 renderTask?.cancel(); Task { await previewService.cancel() }
             }
         }
@@ -181,7 +192,8 @@ final class VoiceReviewController {
                 for (version,composer) in typedComposers where !composer.hasEdits && !dirtyTypedVersions.contains(version) {
                     composer.restore(document.typedDrafts?.first { $0.versionID == version })
                 }
-                loaded = true; error = document.sessions.last?.failure; await refreshAccess()
+                apply(try await repository.enableSteering())
+                loaded = true; error = document.sessions.last?.failure; await refreshAccess(); kickPreparation()
             }
             catch { self.error = error.localizedDescription }
         }
@@ -410,15 +422,88 @@ final class VoiceReviewController {
     }
 
     private func kickPreparation() {
-        guard prepareTask == nil, unsavedActions == 0, document.notes.contains(where: { $0.state == .ready }) else { return }
+        guard !flushing, unsavedActions == 0 else { return }
+        guard draftTasks.isEmpty, typedDraftTasks.isEmpty, typedSaveTasks.isEmpty,
+              dirtyTypedVersions.isEmpty, restructuringCards.isEmpty else { feedbackDraftChanged(); return }
+        if document.hasUnpacketedFeedback {
+            let revision = document.steering?.revision ?? 0
+            if packetTask != nil && packetTaskRevision == revision { return }
+            packetTask?.cancel(); packetTaskRevision = revision
+            let generation = UUID(); packetTaskID = generation
+            let deadline = (document.steering?.lastActivity ?? Date()).addingTimeInterval(steeringIdleInterval)
+            nextPacketAt = deadline
+            packetTask = Task { @MainActor in
+                do {
+                    try await Task.sleep(for: .seconds(max(0,deadline.timeIntervalSinceNow)))
+                    try Task.checkCancellation(); _ = await writes?.value; try Task.checkCancellation()
+                    let saved = try await repository.packetFeedback(idleInterval: steeringIdleInterval)
+                    try Task.checkCancellation(); guard packetTaskID == generation else { return }
+                    apply(saved)
+                    packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
+                    kickPreparation()
+                } catch is CancellationError {} catch {
+                    guard packetTaskID == generation else { return }
+                    self.error = error.localizedDescription; packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
+                }
+            }
+            return
+        }
+        packetTask?.cancel(); packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
+        guard prepareTask == nil, document.feedbackPackets?.last?.needsAttention == 0,
+              document.notes.contains(where: { $0.state == .ready }) else { return }
+        let startedWith = document.feedbackSnapshot
         prepareTask = Task {
             var drained = false
-            do { try await worker.drain(); apply(try await repository.load()); scheduleRenderIntent(); drained = true }
-            catch { self.error = error.localizedDescription }
+            do { try await worker.drain(idleInterval: steeringIdleInterval); apply(try await repository.load()); scheduleRenderIntent(); drained = true }
+            catch is CancellationError {} catch { self.error = error.localizedDescription }
             prepareTask = nil
-            // A ready note may have arrived after the worker's final empty claim.
-            if drained && !Task.isCancelled && document.processingJobID == nil { kickPreparation() }
+            if drained && !Task.isCancelled && document.processingJobID != nil && document.notes.contains(where: { $0.state == .ready }) { watchPreparationLease() }
+            // New feedback stays live and receives its own idle packet.
+            if drained && !Task.isCancelled && document.processingJobID == nil && (document.hasUnpacketedFeedback || document.feedbackSnapshot != startedWith) { kickPreparation() }
         }
+    }
+    private func watchPreparationLease() {
+        guard !flushing, leaseWatchTask == nil else { return }
+        let generation = UUID(); leaseWatchID = generation; waitingForPreparation = true
+        leaseWatchTask = Task { @MainActor in
+            defer {
+                if leaseWatchID == generation { leaseWatchTask = nil; leaseWatchID = nil; waitingForPreparation = false }
+            }
+            do {
+                while true {
+                    try await Task.sleep(for: .milliseconds(500)); try Task.checkCancellation()
+                    let saved: VoiceReviewDocument
+                    do { saved = try await repository.load() }
+                    catch is CancellationError { throw CancellationError() }
+                    catch {
+                        try Task.checkCancellation(); self.error = "The current update is temporarily unavailable. Reconnecting…"
+                        continue
+                    }
+                    try Task.checkCancellation()
+                    guard !flushing, leaseWatchID == generation else { return }
+                    if self.error == "The current update is temporarily unavailable. Reconnecting…" { self.error = nil }
+                    apply(saved)
+                    if document.processingJobID == nil || document.hasUnpacketedFeedback {
+                        leaseWatchTask = nil; leaseWatchID = nil; waitingForPreparation = false
+                        kickPreparation(); return
+                    }
+                }
+            } catch is CancellationError {} catch { self.error = error.localizedDescription }
+        }
+    }
+    private func feedbackDraftChanged(reserve: Bool = false) {
+        packetTask?.cancel(); packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
+        if reserve {
+            leaseWatchTask?.cancel(); leaseWatchTask = nil; leaseWatchID = nil; waitingForPreparation = false
+            prepareTask?.cancel(); debounceTask?.cancel()
+            // Reserve invalidation ahead of the delayed autosave. This also
+            // reaches other repository actors before a later approval/write.
+            if prepareTask != nil || renderTask != nil || document.candidates.contains(where: { [.processing,.prepared].contains($0.state) }) {
+                enqueue { try await $0.feedbackActivity() }
+            }
+        }
+        // The 250ms durable autosave will schedule the new deadline. A cancelled
+        // old timer cannot seal a pre-keystroke packet while that write is pending.
     }
     private func scheduleRenderIntent() {
         debounceTask?.cancel()
@@ -427,17 +512,23 @@ final class VoiceReviewController {
         debounceTask = Task {
             do {
                 try await Task.sleep(for: .seconds(2))
-                for id in ids { try Task.checkCancellation(); apply(try await repository.requestRender(candidate: id)) }
+                for id in ids {
+                    try Task.checkCancellation(); apply(try await repository.requestRender(candidate: id))
+                    // Preparing a proposal is automatic. Applying/rendering still
+                    // uses the existing exact-range and approval checks.
+                    apply(try await repository.prepareEditPlan(id))
+                }
             } catch is CancellationError {} catch { self.error = error.localizedDescription }
         }
     }
     func retainDraft(_ draft: VoiceTranscriptDraft) {
+        feedbackDraftChanged(reserve: true)
         drafts[draft.noteID] = draft; draftTasks[draft.noteID]?.cancel()
         draftTasks[draft.noteID] = Task {
             do { try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation() }
             catch { return }
             _ = await enqueue { try await $0.saveDraft(draft) }.value
-            if drafts[draft.noteID] == draft { draftTasks[draft.noteID] = nil }
+            if drafts[draft.noteID] == draft { draftTasks[draft.noteID] = nil; kickPreparation() }
         }
     }
     func discardDraft(_ id: UUID) {
@@ -461,13 +552,14 @@ final class VoiceReviewController {
     }
     private func retainTypedComposer(_ version: UUID) {
         guard let composer = typedComposers[version] else { return }
+        feedbackDraftChanged(reserve: true)
         if let target, target.versionID == version { composer.pin(target) }
         dirtyTypedVersions.insert(version); typedDraftTasks[version]?.cancel()
         let snapshot = composer.snapshot
         typedDraftTasks[version] = Task { @MainActor in
             do { try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation() } catch { return }
             _ = await persistTypedComposer(snapshot,composer: composer)
-            if composer.snapshot == snapshot { typedDraftTasks[version] = nil }
+            if composer.snapshot == snapshot { typedDraftTasks[version] = nil; kickPreparation() }
         }
     }
     private func persistTypedComposer(_ snapshot: VoiceTypedDraft, composer: VoiceTypedComposer) async -> Bool {
@@ -502,10 +594,28 @@ final class VoiceReviewController {
             return try await repository.submitTypedDraft(snapshot,expected: base)
         }
         let task = Task { @MainActor in
-            defer { composer.saving = false; typedSaveTasks[version] = nil }
+            defer { composer.saving = false; typedSaveTasks[version] = nil; kickPreparation() }
             let saved = await write.value
             if saved, composer.snapshot == snapshot { composer.finishSubmission(snapshot); dirtyTypedVersions.remove(version) }
             else if !saved { composer.storageIssue = error ?? "This feedback has not saved. Retry it unchanged." }
+            return saved
+        }
+        typedSaveTasks[version] = task; return task
+    }
+    @discardableResult func discardTypedComposer(_ version: UUID) -> Task<Bool,Never>? {
+        let composer = typedComposer(for: version); guard !composer.saving else { return nil }
+        let snapshot = composer.snapshot
+        typedDraftTasks[version]?.cancel(); typedDraftTasks[version] = nil
+        composer.saving = true; dirtyTypedVersions.insert(version); feedbackDraftChanged(reserve: true)
+        let write = enqueue(retainFailure: false) { repository in
+            let base = await MainActor.run { composer.persisted }
+            return try await repository.discardTypedDraft(snapshot,expected: base)
+        }
+        let task = Task { @MainActor in
+            defer { composer.saving = false; typedSaveTasks[version] = nil; kickPreparation() }
+            let saved = await write.value
+            if saved, composer.snapshot == snapshot { composer.finishSubmission(snapshot); dirtyTypedVersions.remove(version) }
+            else if !saved { composer.storageIssue = error ?? "This draft has not been discarded. Its text is retained." }
             return saved
         }
         typedSaveTasks[version] = task; return task
@@ -514,7 +624,7 @@ final class VoiceReviewController {
         let composer = typedComposer(for: version); guard !composer.saving else { return }
         typedDraftTasks[version]?.cancel(); typedDraftTasks[version] = nil; composer.saving = true
         let task = Task { @MainActor in
-            defer { composer.saving = false; typedSaveTasks[version] = nil }
+            defer { composer.saving = false; typedSaveTasks[version] = nil; kickPreparation() }
             _ = await writes?.value
             do {
                 let saved = try await repository.load(); apply(saved)
@@ -562,7 +672,15 @@ final class VoiceReviewController {
         if sessionID != nil && mode == .failed { _ = await stop(cancel: pendingStopCancelled) }
         kickPreparation()
     }
+    func resumeAfterCancelledExit() {
+        guard loaded, !flushing else { return }
+        // Keep Editing resumes durable work only. Never restart a microphone.
+        kickPreparation()
+    }
     func flushForExit() async -> Bool {
+        flushing = true; defer { flushing = false }
+        leaseWatchTask?.cancel(); await leaseWatchTask?.value; leaseWatchTask = nil; leaseWatchID = nil; waitingForPreparation = false
+        packetTask?.cancel(); await packetTask?.value; packetTask = nil; packetTaskRevision = nil; packetTaskID = nil; nextPacketAt = nil
         voiceSetupTask?.cancel(); await voiceSetupTask?.value
         await cancelRender()
         _ = await stop()

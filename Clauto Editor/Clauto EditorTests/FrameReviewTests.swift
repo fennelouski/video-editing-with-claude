@@ -247,7 +247,7 @@ struct FrameReviewTests {
         let f = try await FrameReviewFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
         let frozen = try await ReviewFrameCaptureService().capture(f.request(),project: f.project)
         let controller = FrameCommentController(project: f.project,capture: DelayedFrameCapture(frozen))
-        let voice = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider()), lease = UUID()
+        let voice = try VoiceReviewController(project: f.project,provider: SyntheticVoiceReviewProvider(), steeringIdleInterval: 0), lease = UUID()
         #expect(voice.beginFrameComment(lease)); #expect(!voice.canPresentCandidate && !voice.canStart)
         #expect(!voice.beginCandidatePlayback(UUID()))
         try controller.begin(f.request()); controller.releaseLease = { voice.endFrameComment(lease) }

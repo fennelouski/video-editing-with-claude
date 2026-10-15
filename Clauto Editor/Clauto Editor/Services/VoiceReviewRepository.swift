@@ -58,7 +58,34 @@ actor VoiceReviewRepository {
     private func validate(_ document: VoiceReviewDocument) throws {
         try document.validateCardLineage()
         try document.validateSpeechSources()
-        let typed = document.typedDrafts ?? [], submissions = document.typedSubmissions ?? []
+        let packets = document.feedbackPackets ?? []
+        guard packets.count <= 1_000, Set(packets.map(\.id)).count == packets.count,
+              packets.enumerated().allSatisfy({ $0.element.number == $0.offset+1 && $0.element.activityRevision >= 0 && $0.element.created.timeIntervalSince1970.isFinite && $0.element.notes.count <= 10_000 && $0.element.drafts.count <= 10_000 && $0.element.typedDrafts.count <= 1_000 }),
+              document.steering == nil || (document.steering!.revision >= 0 && document.steering!.revision <= 1_000_000_000 && (document.steering!.lastActivity?.timeIntervalSince1970.isFinite ?? true)),
+              document.candidates.allSatisfy({ candidate in candidate.feedbackPacketID == nil || packets.contains { $0.id == candidate.feedbackPacketID } }) else { throw ProjectFailure.invalidProject }
+        for packet in packets {
+            guard Set(packet.notes.map(\.id)).count == packet.notes.count,
+                  packet.notes.allSatisfy({ snapshot in snapshot.revision > 0 && snapshot.text.count <= 20_000 && snapshot.transcript.count <= 20_000 && snapshot.issues.count <= 128 && snapshot.issues.allSatisfy { $0.count <= 2_000 } && document.notes.contains(where: { $0.id == snapshot.id && $0.revision >= snapshot.revision }) }) else { throw ProjectFailure.invalidProject }
+            for snapshot in packet.notes {
+                if let anchor = snapshot.anchor {
+                    guard let target = document.targets.first(where: { $0.id == anchor.targetID }), anchor.seconds.isFinite, anchor.seconds >= 0, anchor.seconds <= target.duration,
+                          anchor.endSeconds == nil || (anchor.endSeconds!.isFinite && anchor.endSeconds! >= anchor.seconds && anchor.endSeconds! <= target.duration) else { throw ProjectFailure.invalidProject }
+                }
+            }
+            for draft in packet.typedDrafts { try draft.validate(project: project.id) }
+            guard packet.drafts.allSatisfy({ $0.text.count <= 20_000 && $0.start.count <= 100 && $0.end.count <= 100 && $0.baseRevision > 0 }) else { throw ProjectFailure.invalidProject }
+        }
+        for candidate in document.candidates {
+            if let id = candidate.feedbackPacketID {
+                guard let packet = packets.first(where: { $0.id == id }), packet.created <= candidate.created,
+                      candidate.noteRevisions.allSatisfy({ ref in packet.notes.contains { $0.id == ref.id && $0.revision == ref.revision && $0.isFinal && !$0.cancelled && $0.issues.isEmpty && $0.anchor?.targetID == candidate.parent.id } }) else { throw ProjectFailure.invalidProject }
+            }
+        }
+        let typed = document.typedDrafts ?? [], submissions = document.typedSubmissions ?? [], discarded = document.typedDiscards ?? []
+        guard discarded.count <= 10_000, Set(discarded.map(\.draftID)).count == discarded.count,
+              Set(discarded.map(\.submissionID)).count == discarded.count,
+              discarded.allSatisfy({ $0.revision > 0 && $0.snapshotSHA256.range(of: "^[a-f0-9]{64}$",options: .regularExpression) != nil }),
+              typed.allSatisfy({ draft in !discarded.contains { $0.draftID == draft.id } }) else { throw ProjectFailure.invalidProject }
         guard typed.count <= 1_000, Set(typed.map(\.versionID)).count == typed.count,
               Set(typed.map(\.id)).count == typed.count, Set(typed.map(\.submissionID)).count == typed.count,
               submissions.count <= 10_000, Set(submissions.map(\.noteID)).count == submissions.count,
@@ -92,6 +119,25 @@ actor VoiceReviewRepository {
     }
 
     func load() throws -> VoiceReviewDocument { try locked({ $0 }, save: false) }
+    func enableSteering(now: Date = Date()) throws -> VoiceReviewDocument {
+        try locked { document in
+            if document.steering == nil {
+                document.steering = .init()
+                if document.hasUnpacketedFeedback { document.feedbackChanged(now: now) }
+            }
+            return document
+        }
+    }
+    func feedbackActivity() throws -> VoiceReviewDocument {
+        try locked { document in document.feedbackChanged(); document.refresh(); return document }
+    }
+    private func packetIsCurrent(_ candidate: VoiceRevisionCandidate, in document: VoiceReviewDocument) -> Bool {
+        guard let packetID = candidate.feedbackPacketID else { return true }
+        return document.feedbackPackets?.last?.id == packetID && !document.hasUnpacketedFeedback
+    }
+    func packetFeedback(now: Date = Date(), idleInterval: TimeInterval) throws -> VoiceReviewDocument {
+        try locked { document in document.refresh(); try document.sealFeedback(now: now,idleInterval: idleInterval); return document }
+    }
 
     func recover() throws -> VoiceReviewDocument {
         try locked { document in
@@ -155,7 +201,12 @@ actor VoiceReviewRepository {
     }
 
     func speech(_ result: VoiceSpeechResult, session: UUID, attempt: UUID, now: Date = Date()) throws -> VoiceReviewDocument {
-        try locked { document in try document.speech(result, sessionID: session, attemptID: attempt, now: now); return document }
+        try locked { document in
+            let before = document.notes.map { VoiceNoteRevision(id: $0.id,revision: $0.revision) }
+            try document.speech(result, sessionID: session, attemptID: attempt, now: now)
+            if before != document.notes.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) { document.feedbackChanged(now: now) }
+            return document
+        }
     }
 
     func end(session id: UUID, state: VoiceCaptureState, failure: String? = nil) throws -> VoiceReviewDocument {
@@ -170,12 +221,16 @@ actor VoiceReviewRepository {
     }
 
     func discardDraft(_ id: UUID) throws -> VoiceReviewDocument {
-        try locked { document in document.drafts?.removeAll { $0.noteID == id }; return document }
+        try locked { document in
+            if document.drafts?.contains(where: { $0.noteID == id }) == true { document.drafts?.removeAll { $0.noteID == id }; document.feedbackChanged() }
+            return document
+        }
     }
     func saveDraft(_ draft: VoiceTranscriptDraft) throws -> VoiceReviewDocument {
         try locked { document in
             guard document.notes.contains(where: { $0.id == draft.noteID }), draft.text.count <= 20_000,
                   draft.start.count <= 100, draft.end.count <= 100, draft.baseRevision > 0 else { throw ProjectFailure.invalidProject }
+            if document.drafts?.contains(draft) != true { document.feedbackChanged() }
             var drafts = document.drafts ?? []; drafts.removeAll { $0.noteID == draft.noteID }; drafts.append(draft)
             document.drafts = drafts; return document
         }
@@ -194,7 +249,7 @@ actor VoiceReviewRepository {
             document.notes[i].manuallyEdited = true; document.notes[i].isFinal = true; document.notes[i].state = .ready
             if let anchor { document.notes[i].resolvedAnchor = anchor }
             document.notes[i].history.append(.init(date: Date(), source: anchor == nil ? "User transcript edit" : "User anchor resolution", text: text, revision: document.notes[i].revision))
-            document.refresh(); return document
+            document.feedbackChanged(); document.refresh(); return document
         }
     }
 
@@ -203,25 +258,35 @@ actor VoiceReviewRepository {
             guard let i = document.notes.firstIndex(where: { $0.id == id }) else { throw ProjectFailure.invalidProject }
             document.notes[i].state = .cancelled; document.notes[i].revision += 1
             document.notes[i].history.append(.init(date: Date(), source: "User cancelled processing", text: document.notes[i].text, revision: document.notes[i].revision))
-            document.refresh(); return document
+            document.feedbackChanged(); document.refresh(); return document
         }
     }
 
     func retry(note id: UUID) throws -> VoiceReviewDocument {
         try locked { document in
             guard let i = document.notes.firstIndex(where: { $0.id == id }), document.notes[i].isFinal, (document.notes[i].supersededBy ?? []).isEmpty else { throw WorkflowFailure.invalid("Finalize or edit the saved transcript before retrying preparation. Starting a microphone requires a separate Start action.") }
-            document.notes[i].revision += 1; document.notes[i].state = .ready; document.refresh(); return document
+            document.notes[i].revision += 1; document.notes[i].state = .ready; document.feedbackChanged(); document.refresh(); return document
         }
     }
 
     func restructureCards(_ request: VoiceCardRequest) throws -> VoiceReviewDocument {
-        try locked { document in try document.restructureCards(request); return document }
+        try locked { document in
+            let before = document.cardOperations?.count ?? 0
+            try document.restructureCards(request)
+            if (document.cardOperations?.count ?? 0) != before { document.feedbackChanged() }
+            return document
+        }
     }
 
-    func claim(now: Date = Date()) throws -> VoiceRevisionCandidate? {
+    func claim(now: Date = Date(), idleInterval: TimeInterval? = nil) throws -> VoiceRevisionCandidate? {
         try locked { document in
             document.refresh()
             guard document.processingJobID == nil else { return nil }
+            var packetID: UUID?
+            if let idleInterval {
+                packetID = try document.sealFeedback(now: now,idleInterval: idleInterval)
+                guard packetID != nil, !document.hasUnpacketedFeedback, document.feedbackPackets?.last?.needsAttention == 0 else { return nil }
+            }
             for target in document.targets {
                 let eligible = document.notes.filter { $0.isFinal && $0.issues.isEmpty && $0.effectiveAnchor?.targetID == target.id && [.ready,.processing,.prepared,.failed].contains($0.state) }
                 guard eligible.contains(where: { $0.state == .ready }) else { continue }
@@ -229,7 +294,8 @@ actor VoiceReviewRepository {
                 let refs = eligible.map { VoiceNoteRevision(id: $0.id, revision: $0.revision) }
                 if document.candidates.contains(where: { $0.parent.id == target.id && $0.noteRevisions == refs && [.processing,.prepared].contains($0.state) }) { continue }
                 for i in document.candidates.indices where document.candidates[i].parent.id == target.id && [.processing,.prepared].contains(document.candidates[i].state) { document.candidates[i].state = .superseded }
-                let candidate = VoiceRevisionCandidate(id: UUID(), parent: target, noteRevisions: refs, ownerProcessID: getpid(), created: now, renderNotBefore: now.addingTimeInterval(2))
+                var candidate = VoiceRevisionCandidate(id: UUID(), parent: target, noteRevisions: refs, ownerProcessID: getpid(), created: now, renderNotBefore: now.addingTimeInterval(2))
+                candidate.feedbackPacketID = packetID
                 document.candidates.append(candidate)
                 document.processingJobID = candidate.id
                 for i in document.notes.indices where refs.contains(where: { $0.id == document.notes[i].id }) { document.notes[i].state = .processing }
@@ -241,7 +307,8 @@ actor VoiceReviewRepository {
 
     func candidateInput(_ claim: VoiceRevisionCandidate) throws -> [VoiceCandidateDirective] {
         try locked({ document in
-            try claim.noteRevisions.map { ref in
+            guard packetIsCurrent(claim,in: document) else { throw CancellationError() }
+            return try claim.noteRevisions.map { ref in
                 guard let note = document.notes.first(where: { $0.id == ref.id && $0.revision == ref.revision && $0.issues.isEmpty && $0.state == .processing }),
                       let anchor = note.effectiveAnchor, anchor.targetID == claim.parent.id else { throw CancellationError() }
                 return .init(noteID: note.id, revision: note.revision, intent: note.intent, anchor: anchor, text: note.text, action: note.action)
@@ -259,9 +326,10 @@ actor VoiceReviewRepository {
             }
             guard let c = document.candidates.firstIndex(where: { $0.id == claim.id && $0.state == .processing }) else { releaseUnchangedNotes(); return document }
             let latest = document.notes.filter { $0.isFinal && $0.issues.isEmpty && $0.effectiveAnchor?.targetID == claim.parent.id && [.ready,.processing,.prepared,.failed].contains($0.state) }.map { VoiceNoteRevision(id: $0.id, revision: $0.revision) }
-            guard latest == claim.noteRevisions else { document.candidates[c].state = .superseded; releaseUnchangedNotes(); return document }
+            guard packetIsCurrent(claim,in: document), latest == claim.noteRevisions else { document.candidates[c].state = .superseded; releaseUnchangedNotes(); return document }
             if let failure { document.candidates[c].state = .failed; document.candidates[c].detail = failure }
             else {
+                try Task.checkCancellation()
                 try VoiceReviewProvenance.check(claim.parent, project: project)
                 let expected = try claim.noteRevisions.map { ref -> VoiceCandidateDirective in
                     guard let note = document.notes.first(where: { $0.id == ref.id && $0.revision == ref.revision }), let anchor = note.effectiveAnchor else { throw ProjectFailure.invalidProject }
@@ -270,6 +338,7 @@ actor VoiceReviewRepository {
                 guard directives == expected else { throw WorkflowFailure.invalid("The candidate processor changed a finalized feedback instruction.") }
                 let payload = VoiceCandidateInstructions(id: claim.id, parent: claim.parent, noteRevisions: claim.noteRevisions,
                     directives: directives, created: claim.created, productionAuthorized: false, appliedToCut: false)
+                try Task.checkCancellation()
                 let bytes = try encoder.encode(payload), filename = claim.id.uuidString + ".json"
                 let folder = try directory.child("candidates", create: true)
                 try folder.checkPath(); try root.checkPath()
@@ -310,7 +379,8 @@ extension VoiceReviewRepository {
         guard let i = document.candidates.firstIndex(where: { $0.id == id && $0.state == .prepared }) else { throw WorkflowFailure.invalid("Prepare the latest finalized feedback before reviewing a candidate.") }
         let candidate = document.candidates[i]
         let notes = document.notes.filter { $0.state != .cancelled && ($0.effectiveAnchor?.targetID == candidate.parent.id || $0.effectiveAnchor == nil) }
-        guard notes.allSatisfy({ $0.isFinal && $0.issues.isEmpty }),
+        guard packetIsCurrent(candidate,in: document), (document.drafts ?? []).isEmpty, (document.typedDrafts ?? []).allSatisfy({ !$0.hasContent }),
+              notes.allSatisfy({ $0.isFinal && $0.issues.isEmpty }),
               notes.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) == candidate.noteRevisions,
               let path = candidate.instructionsRelativePath, let sha = candidate.instructionsSHA256,
               try VoiceReviewProvenance.inspect(path,project: project).sha256 == sha else { throw WorkflowFailure.invalid("Feedback changed or remains unresolved. Prepare and approve the latest candidate.") }
@@ -330,17 +400,34 @@ extension VoiceReviewRepository {
             var note = VoiceReviewNote(id: UUID(),sessionID: id,segmentID: "typed-"+UUID().uuidString,audioStart: nil,audioEnd: nil,created: Date(),transcript: "",text: text,isFinal: true,intent: action == .protect ? .protect : .change)
             note.action = action; note.manuallyEdited = true; note.resolvedAnchor = anchor
             note.history.append(.init(date: Date(),source: "User typed feedback; no microphone",text: text,revision: note.revision))
-            document.notes.append(note); document.refresh(); return document
+            document.notes.append(note); document.feedbackChanged(); document.refresh(); return document
         }
     }
     func saveTypedDraft(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?) throws -> VoiceReviewDocument {
         try locked { document in
             try draft.validate(project: project.id)
+            guard !(document.typedDiscards ?? []).contains(where: { $0.draftID == draft.id }) else { throw WorkflowFailure.invalid("This draft was discarded in another window. Copy any text you want to keep, then reload the saved draft.") }
             // An old delayed autosave must not resurrect submitted words.
             if (document.typedSubmissions ?? []).contains(where: { $0.draft.id == draft.id && $0.draft.revision >= draft.revision }) { return document }
             try checkTypedDraftBase(draft,expected: expected,document: document)
             var values = document.typedDrafts ?? []; values.removeAll { $0.versionID == draft.versionID }; values.append(draft)
+            if document.typedDrafts?.contains(draft) != true { document.feedbackChanged() }
             document.typedDrafts = values; return document
+        }
+    }
+    func discardTypedDraft(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?) throws -> VoiceReviewDocument {
+        try locked { document in
+            try draft.validate(project: project.id)
+            let digest = TranscriptSourceMap.sha(try encoder.encode(draft))
+            if let prior = document.typedDiscards?.first(where: { $0.draftID == draft.id }) {
+                guard prior.submissionID == draft.submissionID, prior.revision == draft.revision, prior.snapshotSHA256 == digest else { throw WorkflowFailure.invalid("This discarded draft changed. Copy its text before reloading.") }
+                return document
+            }
+            try checkTypedDraftBase(draft,expected: expected,document: document)
+            var discarded = document.typedDiscards ?? []
+            discarded.append(.init(draftID: draft.id,versionID: draft.versionID,revision: draft.revision,submissionID: draft.submissionID,snapshotSHA256: digest)); document.typedDiscards = discarded
+            document.typedDrafts?.removeAll { $0.id == draft.id }
+            document.feedbackChanged(); document.refresh(); return document
         }
     }
     private func checkTypedDraftBase(_ draft: VoiceTypedDraft, expected: VoiceTypedDraft?, document: VoiceReviewDocument) throws {
@@ -362,6 +449,7 @@ extension VoiceReviewRepository {
                 guard receipt.draft == draft else { throw WorkflowFailure.invalid("This feedback submission changed. Keep its original draft and retry it unchanged.") }
                 return document
             }
+            guard !(document.typedDiscards ?? []).contains(where: { $0.draftID == draft.id }) else { throw WorkflowFailure.invalid("This draft was discarded. Start a new draft before saving feedback.") }
             guard !(document.typedSubmissions ?? []).contains(where: { $0.draft.id == draft.id && $0.draft.revision >= draft.revision }) else {
                 throw WorkflowFailure.invalid("This draft revision was already submitted. Edit a new draft before saving another note.")
             }
@@ -381,7 +469,7 @@ extension VoiceReviewRepository {
             note.history.append(.init(date: Date(),source: "User typed feedback; no microphone",text: draft.text,revision: note.revision))
             document.sessions.append(session); document.notes.append(note)
             var submissions = document.typedSubmissions ?? []; submissions.append(.init(draft: draft,noteID: noteID)); document.typedSubmissions = submissions
-            document.typedDrafts?.removeAll { $0.id == draft.id }; document.refresh(); return document
+            document.typedDrafts?.removeAll { $0.id == draft.id }; document.feedbackChanged(); document.refresh(); return document
         }
     }
     func prepareEditPlan(_ id: UUID) throws -> VoiceReviewDocument {
@@ -502,13 +590,13 @@ actor VoiceCandidateWorker {
     private var running = false
     private var abandonedClaim: VoiceRevisionCandidate?
     init(repository: VoiceReviewRepository, processor: any VoiceCandidateProcessing = LocalVoiceCandidateProcessor()) { self.repository = repository; self.processor = processor }
-    func drain() async throws {
+    func drain(idleInterval: TimeInterval? = nil) async throws {
         guard !running else { return }; running = true; defer { running = false }
         if let abandonedClaim {
             _ = try await repository.complete(abandonedClaim, directives: [], failure: "Prior local preparation stopped before its cleanup could be saved.")
             self.abandonedClaim = nil
         }
-        while let claim = try await repository.claim() {
+        while let claim = try await repository.claim(idleInterval: idleInterval) {
             abandonedClaim = claim
             do {
                 let input = try await repository.candidateInput(claim)

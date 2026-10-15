@@ -339,7 +339,7 @@ struct VoiceReviewTests {
     }
     @MainActor private func controller(project: Project, provider: MockVoiceProvider, target: VoiceReviewTarget, token: UUID = UUID(), seconds: Double = 10) async throws -> VoiceReviewController {
         let defaults = UserDefaults(suiteName: "ClautoVoiceReviewTests-" + UUID().uuidString)!
-        let controller = try VoiceReviewController(project: project, provider: provider, defaults: defaults)
+        let controller = try VoiceReviewController(project: project, provider: provider, defaults: defaults, steeringIdleInterval: 0)
         await controller.load(); controller.chooseDevice("mock-device"); controller.willAttach(token)
         await controller.attach(target, token: token, sampler: { .init(host: 100, seconds: seconds, rate: 0, available: true) })
         return controller
@@ -629,7 +629,7 @@ struct VoiceReviewTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let project = try await ProjectRepository().create(name: "Synthetic typed dispatch",root: root,engine: root,engineVersion: "test")
         let a = try target(project: project,number: 1), b = try target(project: project,number: 2)
-        let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider())
+        let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider(), steeringIdleInterval: 0)
         await controller.load()
         let first = UUID(); controller.willAttach(first)
         await controller.attach(a,token: first,sampler: { .init(host: 100,seconds: 1,rate: 0,available: true) })
@@ -669,7 +669,7 @@ struct VoiceReviewTests {
     }
     @MainActor @Test func attachingFrozenPlayerIdentityAfterFileChangeRefusesFreshRebinding() async throws {
         let (root,project,_,original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider)
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider, steeringIdleInterval: 0)
         await controller.load()
         let movie = project.folder.appendingPathComponent(original.preview.relativePath)
         try Data("Synthetic changed movie after decoder opened".utf8).write(to: movie)
@@ -700,6 +700,300 @@ struct VoiceReviewTests {
         let reopened = try ReviewMovieOpeningIdentity.capture(url: url,project: project)
         try reopened.check(fresh,project: project)
         #expect(throws: (any Error).self) { try ReviewMovieOpeningIdentity.capture(url: project.folder.deletingLastPathComponent().appendingPathComponent("outside.mp4"),project: project) }
+    }
+
+    @Test func feedbackPacketsUseExactIdleDeadlineAndIgnoreClockAndDuplicateSpeech() async throws {
+        let (root,_,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let (id,attempt) = try await seed(repository,target: target), now = Date(timeIntervalSince1970: 1_000)
+        let partial = VoiceSpeechResult(segmentID: "live",text: "I like this",isFinal: false,audioStart: 2,audioEnd: 3)
+        _ = try await repository.speech(partial,session: id,attempt: attempt,now: now)
+        #expect(try await repository.packetFeedback(now: now.addingTimeInterval(119.999),idleInterval: 120).feedbackPackets == nil)
+        let before = try await repository.load().steering
+        _ = try await repository.speech(partial,session: id,attempt: attempt,now: now.addingTimeInterval(119))
+        _ = try await repository.captured(session: id,attempt: attempt,audioStart: 10,duration: 1,hostStart: 110)
+        #expect(try await repository.load().steering == before)
+        let packet = try #require(try await repository.packetFeedback(now: now.addingTimeInterval(120),idleInterval: 120).feedbackPackets?.first)
+        #expect(packet.notes.count == 1 && !packet.notes[0].isFinal && packet.needsAttention == 1)
+        #expect(try await repository.claim(now: now.addingTimeInterval(121),idleInterval: 120) == nil)
+        #expect(try await repository.load().sessions[0].state == .recording)
+        _ = try await repository.speech(.init(segmentID: "live",text: "I like this moment",isFinal: true,audioStart: 2,audioEnd: 3),session: id,attempt: attempt,now: now.addingTimeInterval(122))
+        #expect(try await repository.claim(now: now.addingTimeInterval(241.999),idleInterval: 120) == nil)
+        let claim = try #require(try await repository.claim(now: now.addingTimeInterval(242),idleInterval: 120))
+        let saved = try await repository.load()
+        #expect(saved.feedbackPackets?.count == 2 && saved.feedbackPackets?.first == packet)
+        #expect(claim.feedbackPacketID == saved.feedbackPackets?.last?.id && claim.noteRevisions[0].revision == 2)
+        #expect(saved.sessions[0].state == .recording)
+    }
+
+    @Test func packetTransactionsAreIdempotentAcrossRepositoriesAndPreserveEarlierProtection() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let second = try VoiceReviewRepository(project: project), (id,attempt) = try await seed(repository,target: target), now = Date(timeIntervalSince1970: 1_000)
+        _ = try await repository.speech(.init(segmentID: "keep",text: "Keep this",isFinal: true,audioStart: 2,audioEnd: 3),session: id,attempt: attempt,now: now)
+        async let a = repository.packetFeedback(now: now.addingTimeInterval(120),idleInterval: 120)
+        async let b = second.packetFeedback(now: now.addingTimeInterval(120),idleInterval: 120)
+        let (one,two) = try await (a,b)
+        #expect(one.feedbackPackets?.count == 1 && one.feedbackPackets == two.feedbackPackets)
+        let original = try #require(one.feedbackPackets?.first)
+        _ = try await second.speech(.init(segmentID: "change",text: "Remove this",isFinal: true,audioStart: 6,audioEnd: 7),session: id,attempt: attempt,now: now.addingTimeInterval(121))
+        let next = try await repository.packetFeedback(now: now.addingTimeInterval(241),idleInterval: 120)
+        #expect(next.feedbackPackets?.count == 2 && next.feedbackPackets?.first == original)
+        #expect(next.feedbackPackets?.last?.notes.map(\.intent) == [.protect,.change])
+        let claims = try await [repository.claim(now: now.addingTimeInterval(241),idleInterval: 120),second.claim(now: now.addingTimeInterval(241),idleInterval: 120)]
+        #expect(claims.compactMap { $0 }.count == 1)
+        let reopened = try await VoiceReviewRepository(project: project).load()
+        #expect(reopened.feedbackPackets == next.feedbackPackets)
+    }
+
+    @Test func idlePacketRetainsDraftsWithoutPromotingThemToInstructions() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let (id,attempt) = try await seed(repository,target: target)
+        let saved = try await final(repository,session: id,attempt: attempt), note = saved.notes[0]
+        let draft = VoiceTranscriptDraft(noteID: note.id,text: "Unfinished alternative",intent: .change,targetID: target.id,start: "unfinished",end: "",baseRevision: note.revision)
+        _ = try await repository.saveDraft(draft)
+        var typed = VoiceTypedDraft(versionID: target.versionID); typed.text = "Another unfinished idea"; typed.target = target
+        _ = try await repository.saveTypedDraft(typed,expected: nil)
+        let now = try #require(try await repository.load().steering?.lastActivity).addingTimeInterval(120)
+        let packet = try #require(try await repository.packetFeedback(now: now,idleInterval: 120).feedbackPackets?.first)
+        #expect(packet.drafts == [draft] && packet.typedDrafts == [typed] && packet.needsAttention == 2)
+        #expect(packet.notes[0].text == note.text && packet.notes[0].isFinal)
+        #expect(try await repository.claim(now: now,idleInterval: 120) == nil)
+        #expect(try await VoiceReviewRepository(project: project).load().candidates.isEmpty)
+        #expect(try await repository.load().notes[0].text == note.text)
+    }
+
+    @MainActor @Test func liveCaptureAutomaticallyPacketsAndPreparesWhileMicrophoneStaysOn() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0.08)
+        await controller.load(); let token = UUID(); controller.willAttach(token)
+        await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
+        controller.chooseDevice("mock-device"); controller.start(); try await waitFor { controller.mode == .recording }
+        controller.record(.init(host: 110,seconds: 10,rate: 0,available: true),token: token)
+        await provider.emit(.clock(audioStart: 0,duration: 10,hostStart: 100))
+        await provider.emit(.speech(.init(segmentID: "first",text: "Keep this moment",isFinal: true,audioStart: 2,audioEnd: 3)))
+        try await waitFor { controller.document.candidates.last?.state == .prepared }
+        #expect(controller.active && controller.document.feedbackPackets?.count == 1)
+        #expect(await provider.starts == 1); #expect(await provider.stops == 0)
+        await provider.emit(.speech(.init(segmentID: "second",text: "Keep this detail",isFinal: true,audioStart: 5,audioEnd: 6)))
+        try await waitFor { controller.document.feedbackPackets?.count == 2 && controller.document.candidates.last?.noteRevisions.count == 2 && controller.document.candidates.last?.state == .prepared }
+        #expect(controller.active); #expect(await provider.stops == 0)
+        let frameLease = UUID(); #expect(controller.beginFrameComment(frameLease)); controller.endFrameComment(frameLease) // A frame pause is a clock boundary.
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func steeringDuringBackgroundWorkSupersedesOldProposalAndKeepsCaptureLive() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), processor = PausedVoiceProcessor()
+        let controller = try VoiceReviewController(project: project,provider: provider,processor: processor,steeringIdleInterval: 0.06)
+        await controller.load(); let token = UUID(); controller.willAttach(token)
+        await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
+        controller.chooseDevice("mock-device"); controller.start(); try await waitFor { controller.mode == .recording }
+        controller.record(.init(host: 110,seconds: 10,rate: 0,available: true),token: token)
+        await provider.emit(.clock(audioStart: 0,duration: 10,hostStart: 100))
+        await provider.emit(.speech(.init(segmentID: "first",text: "Keep this",isFinal: true,audioStart: 2,audioEnd: 3)))
+        try await waitFor { await processor.calls == 1 }
+        await provider.emit(.speech(.init(segmentID: "second",text: "Keep this too",isFinal: true,audioStart: 5,audioEnd: 6)))
+        try await waitFor { controller.document.notes.count == 2 }
+        #expect(controller.active); #expect(await provider.stops == 0)
+        await processor.release()
+        try await waitFor { controller.document.candidates.count == 2 && controller.document.candidates.last?.state == .prepared }
+        #expect(controller.document.candidates[0].state == .superseded && controller.document.feedbackPackets?.count == 2)
+        #expect(controller.document.candidates.last?.noteRevisions.count == 2)
+        #expect(controller.active); #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func quitCancelsIdleTimerAndReopenReschedulesSavedDraftWithoutCapture() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider)
+        await controller.load(); controller.typedComposer(for: target.versionID).text = "Keep this raw unfinished thought"
+        #expect(await controller.flushForExit())
+        #expect(controller.nextPacketAt == nil && controller.document.feedbackPackets == nil)
+        let reopened = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0)
+        await reopened.load(); try await waitFor { reopened.document.feedbackPackets?.count == 1 }
+        #expect(reopened.document.feedbackPackets?.first?.typedDrafts.first?.text == "Keep this raw unfinished thought")
+        #expect(reopened.document.notes.isEmpty && reopened.document.candidates.isEmpty)
+        #expect(await provider.starts == 0)
+        #expect(try await repository.load().feedbackPackets?.count == 1)
+        #expect(await reopened.flushForExit())
+    }
+
+    @MainActor @Test func pendingTypingCannotBeBypassedByClockWritesOrAnOldIdleTimer() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0.04)
+        await controller.load(); let token = UUID(); controller.willAttach(token)
+        await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
+        controller.chooseDevice("mock-device"); controller.start(); try await waitFor { controller.mode == .recording }
+        controller.typedComposer(for: target.versionID).text = "Unfinished steering remains a draft"
+        controller.record(.init(host: 110,seconds: 10,rate: 0,available: true),token: token)
+        await provider.emit(.clock(audioStart: 0,duration: 10,hostStart: 100))
+        await provider.emit(.speech(.init(segmentID: "first",text: "Keep this",isFinal: true,audioStart: 2,audioEnd: 3)))
+        try await waitFor { controller.document.notes.count == 1 }
+        try await Task.sleep(for: .milliseconds(70))
+        #expect(controller.document.feedbackPackets == nil && controller.document.candidates.isEmpty)
+        try await waitFor { controller.document.feedbackPackets?.count == 1 }
+        #expect(controller.document.feedbackPackets?.first?.typedDrafts.first?.text == "Unfinished steering remains a draft")
+        #expect(controller.document.candidates.isEmpty && controller.active)
+        #expect(await controller.flushForExit())
+    }
+
+    @Test func packetBoundWorkCannotPublishAfterAnotherRepositoryAddsDraftOrUnfinishedSpeech() async throws {
+        for typed in [false,true] {
+            let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let other = try VoiceReviewRepository(project: project), (id,attempt) = try await seed(repository,target: target)
+            _ = try await final(repository,session: id,attempt: attempt)
+            let claim = try #require(try await repository.claim(idleInterval: 0)), input = try await repository.candidateInput(claim)
+            if typed {
+                var draft = VoiceTypedDraft(versionID: target.versionID); draft.text = "New unfinished direction"; draft.target = target
+                _ = try await other.saveTypedDraft(draft,expected: nil)
+            } else {
+                _ = try await other.speech(.init(segmentID: "new-partial",text: "Actually this next bit",isFinal: false,audioStart: 6,audioEnd: 7),session: id,attempt: attempt)
+            }
+            await #expect(throws: (any Error).self) { try await repository.candidateInput(claim) }
+            let completed = try await repository.complete(claim,directives: input)
+            #expect(completed.candidates[0].state == .superseded && completed.processingJobID == nil)
+            #expect(completed.candidates[0].instructionsRelativePath == nil)
+            #expect(!FileManager.default.fileExists(atPath: project.folder.appendingPathComponent("notes/voice-review/candidates/"+claim.id.uuidString+".json").path))
+            #expect(completed.notes[0].state == .ready && completed.hasUnpacketedFeedback)
+        }
+    }
+
+    @MainActor @Test func firstLocalDraftKeystrokeInvalidatesHeldPreparationBeforeAutosave() async throws {
+        for typed in [false,true] {
+            let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let (id,attempt) = try await seed(repository,target: target)
+            _ = try await final(repository,session: id,attempt: attempt)
+            let processor = PausedVoiceProcessor(), controller = try VoiceReviewController(project: project,provider: MockVoiceProvider(),processor: processor,steeringIdleInterval: 0)
+            await controller.load(); try await waitFor { await processor.calls == 1 }
+            if typed { controller.typedComposer(for: target.versionID).text = "New raw direction" }
+            else {
+                let note = controller.document.notes[0]
+                controller.retainDraft(.init(noteID: note.id,text: "New raw direction",intent: .change,targetID: target.id,start: "unfinished",end: "",baseRevision: note.revision))
+            }
+            await processor.release()
+            try await waitFor { controller.document.candidates.count == 1 && controller.document.processingJobID == nil }
+            let stale = try #require(controller.document.candidates.first)
+            #expect(stale.state != .prepared && stale.instructionsRelativePath == nil)
+            #expect(await controller.flushForExit())
+            let saved = try await repository.load()
+            #expect(saved.typedDrafts?.first?.text == "New raw direction" || saved.drafts?.first?.text == "New raw direction")
+        }
+    }
+
+    @MainActor @Test func busyExternalLeaseResumesWithoutNewFeedbackAndQuitCancelsTheWatcher() async throws {
+        for releaseLease in [true,false] {
+            let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let (id,attempt) = try await seed(repository,target: target)
+            _ = try await final(repository,session: id,attempt: attempt)
+            let claim = try #require(try await repository.claim()), input = try await repository.candidateInput(claim)
+            _ = try await final(repository,session: id,attempt: attempt,key: "next",start: 6,text: "Keep this detail too")
+            let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider(),steeringIdleInterval: 0)
+            await controller.load(); try await waitFor { controller.waitingForPreparation }
+            let activity = controller.document.steering
+            if releaseLease {
+                _ = try await repository.complete(claim,directives: input)
+                try await waitFor { controller.document.candidates.count == 2 && controller.document.candidates.last?.state == .prepared }
+                #expect(controller.document.steering == activity && controller.document.feedbackPackets?.count == 1)
+                #expect(!controller.waitingForPreparation && controller.document.candidates.last?.noteRevisions.count == 2)
+                #expect(await controller.flushForExit())
+            } else {
+                #expect(await controller.flushForExit())
+                #expect(!controller.waitingForPreparation && controller.nextPacketAt == nil)
+                #expect(try await repository.load().processingJobID == claim.id) // Never cancel another repository's job.
+                _ = try await repository.complete(claim,directives: input)
+            }
+        }
+    }
+
+    @MainActor @Test func cancelledApplicationQuitResumesPacketsWithoutRestartingMicrophone() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider,steeringIdleInterval: 0.08)
+        await controller.load()
+        let token = UUID(); controller.willAttach(token)
+        await controller.attach(target,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
+        #expect(await controller.addTyped(text: "Keep this exact range",action: .protect,start: 1,end: 2,expectedTarget: target))
+        #expect(await controller.flushForExit())
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(try await repository.load().feedbackPackets == nil)
+        controller.resumeAfterCancelledExit()
+        try await waitFor { controller.document.feedbackPackets?.count == 1 && controller.document.candidates.last?.state == .prepared }
+        #expect(await provider.starts == 0)
+        #expect(controller.mode == .idle && controller.document.notes.count == 1)
+        #expect(await controller.flushForExit())
+    }
+
+    @Test func discardedTypedDraftUsesCASAndCannotBeResurrectedByStaleSavesOrSubmissions() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        var draft = VoiceTypedDraft(versionID: target.versionID); draft.text = "Discard these unfinished words"; draft.start = "unfinished"; draft.target = target
+        _ = try await repository.saveTypedDraft(draft,expected: nil)
+        let other = try VoiceReviewRepository(project: project)
+        var newer = draft; newer.revision += 1; newer.submissionID = UUID(); newer.text = "Newer words from another window"
+        _ = try await other.saveTypedDraft(newer,expected: draft)
+        await #expect(throws: (any Error).self) { try await repository.discardTypedDraft(draft,expected: draft) }
+        #expect(try await repository.load().typedDrafts == [newer])
+        let discarded = try await repository.discardTypedDraft(newer,expected: newer)
+        let retry = try await other.discardTypedDraft(newer,expected: newer)
+        #expect(discarded.typedDiscards == retry.typedDiscards && retry.typedDiscards?.count == 1 && (retry.typedDrafts ?? []).isEmpty)
+        await #expect(throws: (any Error).self) { try await repository.saveTypedDraft(newer,expected: nil) }
+        var changed = newer; changed.revision += 1; changed.submissionID = UUID(); changed.start = "1"; changed.end = "2"
+        await #expect(throws: (any Error).self) { try await other.saveTypedDraft(changed,expected: nil) }
+        await #expect(throws: (any Error).self) { try await other.submitTypedDraft(changed,expected: nil) }
+        #expect(try await repository.load().notes.isEmpty)
+    }
+
+    @MainActor @Test func typedDiscardReservesSynchronouslyAndQuitJoinsItWithoutLosingOtherFeedback() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        _ = try await repository.addTyped(text: "Keep already saved feedback",action: .protect,anchor: .init(targetID: target.id,seconds: 1,endSeconds: 2))
+        let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider())
+        await controller.load(); let composer = controller.typedComposer(for: target.versionID)
+        composer.text = "Unfinished draft to discard"; composer.start = "-"
+        let oldID = composer.snapshot.id, task = try #require(controller.discardTypedComposer(target.versionID))
+        #expect(composer.saving && controller.hasPendingWork && controller.discardTypedComposer(target.versionID) == nil)
+        composer.text = "Must not replace the frozen discard"; #expect(composer.text == "Unfinished draft to discard")
+        #expect(await controller.flushForExit()); #expect(await task.value)
+        let saved = try await repository.load()
+        #expect(saved.notes.count == 1 && saved.notes[0].text == "Keep already saved feedback")
+        #expect(saved.typedDiscards?.first?.draftID == oldID && (saved.typedDrafts ?? []).isEmpty)
+        #expect(composer.text.isEmpty && composer.snapshot.id != oldID && !controller.hasPendingWork)
+    }
+
+    @MainActor @Test func clearingOrDiscardingTemporaryDraftUnblocksAnIdenticalFinalPacket() async throws {
+        for discard in [false,true] {
+            let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let (id,attempt) = try await seed(repository,target: target)
+            _ = try await final(repository,session: id,attempt: attempt)
+            let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider(),steeringIdleInterval: 0)
+            await controller.load(); try await waitFor { controller.document.candidates.last?.state == .prepared }
+            let original = try #require(controller.document.candidates.last), composer = controller.typedComposer(for: target.versionID)
+            composer.text = "A temporary unfinished direction"
+            try await waitFor { controller.document.typedDrafts?.first?.text == composer.text }
+            #expect(controller.document.candidates.first?.state == .superseded)
+            if discard { #expect(await controller.discardTypedComposer(target.versionID)?.value == true) }
+            else { composer.text = "" }
+            try await waitFor { controller.document.candidates.last?.id != original.id && controller.document.candidates.last?.state == .prepared }
+            let latest = try #require(controller.document.candidates.last)
+            #expect(latest.noteRevisions == original.noteRevisions && latest.feedbackPacketID != original.feedbackPacketID)
+            #expect(controller.document.feedbackPackets?.last?.needsAttention == 0)
+            #expect(latest.directives.map(\.text) == original.directives.map(\.text))
+            #expect(await controller.flushForExit())
+        }
+    }
+
+    @MainActor @Test func foreignLeaseWatcherReconnectsAfterTemporaryLedgerReadFailure() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let (id,attempt) = try await seed(repository,target: target)
+        _ = try await final(repository,session: id,attempt: attempt)
+        let claim = try #require(try await repository.claim()), input = try await repository.candidateInput(claim)
+        _ = try await final(repository,session: id,attempt: attempt,key: "more",start: 6,text: "Keep this too")
+        let controller = try VoiceReviewController(project: project,provider: MockVoiceProvider(),steeringIdleInterval: 0)
+        await controller.load(); try await waitFor { controller.waitingForPreparation }
+        let ledger = project.folder.appendingPathComponent("notes/voice-review/ledger.json"), original = try Data(contentsOf: ledger)
+        try Data("{}".utf8).write(to: ledger,options: .atomic)
+        try await waitFor { controller.error?.contains("Reconnecting") == true }
+        #expect(controller.waitingForPreparation)
+        try original.write(to: ledger,options: .atomic)
+        _ = try await repository.complete(claim,directives: input)
+        try await waitFor { controller.document.candidates.count == 2 && controller.document.candidates.last?.state == .prepared }
+        #expect(!controller.waitingForPreparation && controller.error == nil)
+        #expect(await controller.flushForExit())
     }
 
     @MainActor @Test func guidedVoiceSetupRequestsOncePreparesModelChoosesDefaultAndStartsVerifiedPlayer() async throws {
@@ -818,7 +1112,7 @@ struct VoiceReviewTests {
         #expect(await controller.flushForExit())
         let saved = try #require(try await repository.load().typedDrafts?.first)
         #expect(saved.text == composer.text && saved.start == "unfinished :" && saved.end == "-" && saved.action == .remove && saved.target == target)
-        let reopened = try VoiceReviewController(project: project,provider: provider); await reopened.load()
+        let reopened = try VoiceReviewController(project: project,provider: provider, steeringIdleInterval: 0); await reopened.load()
         let restored = reopened.typedComposer(for: target.versionID)
         #expect(restored.snapshot == saved && reopened.target == nil && !reopened.canStart)
         #expect(reopened.document.notes.isEmpty && reopened.document.sessions.isEmpty)
@@ -842,7 +1136,7 @@ struct VoiceReviewTests {
         #expect(saved.typedSubmissions?.count == 1 && (saved.typedDrafts ?? []).isEmpty)
         #expect(composer.text.isEmpty && !composer.saving && !controller.hasPendingWork)
         #expect(await provider.starts == 0)
-        let reopened = try VoiceReviewController(project: project,provider: provider); await reopened.load()
+        let reopened = try VoiceReviewController(project: project,provider: provider, steeringIdleInterval: 0); await reopened.load()
         #expect(reopened.typedComposer(for: target.versionID).text.isEmpty)
         #expect(await reopened.flushForExit())
     }
@@ -908,7 +1202,7 @@ struct VoiceReviewTests {
 
     @MainActor @Test func unboundTypedDraftPinsOnlyAfterExplicitSelectionAndRefusesAnotherVersion() async throws {
         let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider)
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider, steeringIdleInterval: 0)
         await controller.load()
         let composer = controller.typedComposer(for: target.versionID)
         composer.text = "Keep these unbound words"; composer.start = "unfinished"; composer.end = "3"
@@ -920,7 +1214,7 @@ struct VoiceReviewTests {
         #expect(controller.submitTypedComposer(target.versionID) == nil) // Range still unfinished; pin is nevertheless saved.
         #expect(await controller.flushForExit())
         #expect(try await repository.load().typedDrafts?.first?.target == target)
-        let restarted = try VoiceReviewController(project: project,provider: provider); await restarted.load()
+        let restarted = try VoiceReviewController(project: project,provider: provider, steeringIdleInterval: 0); await restarted.load()
         #expect(restarted.typedComposer(for: target.versionID).snapshot.target == target && restarted.target == nil)
         #expect(await restarted.flushForExit())
         composer.start = "1"
