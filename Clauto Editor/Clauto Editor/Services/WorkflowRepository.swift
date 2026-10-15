@@ -207,6 +207,7 @@ actor WorkflowRepository {
     }
 
     func prepare(project: Project, engine: URL, label: String, primaryID: UUID? = nil, narrationIDs: [UUID] = []) throws -> EditRun {
+        guard project.manifest.importedReviewOnly != true else { throw WorkflowFailure.invalid("This imported movie project supports feedback and separate review previews. Its original camera/graphics timeline remains reference evidence; a new production cut is not authorized here.") }
         try TranscriptProductionGate.requireLegacyPipelineAllowed(project: project)
         try project.manifest.durationBounds?.validate()
         let missing = project.manifest.files.filter { !fm.fileExists(atPath: project.folder.appendingPathComponent($0.relativePath).path) }
@@ -839,7 +840,8 @@ actor WorkflowRepository {
         let receipt = try decoder.decode([String: String].self, from: Data(contentsOf: safe(receiptPath, in: project.folder)))
         guard receipt["saved_sha256"] == sha else { throw WorkflowFailure.invalid("The saved timeline changed. Restore a verified version before attaching feedback.") }
         let xml = try XMLDocument(data: data, options: .nodeLoadExternalEntitiesNever)
-        guard let sequence = try xml.nodes(forXPath: "//sequence").first as? XMLElement,
+        let projectSequences = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence")
+        guard projectSequences.count == 1, let sequence = projectSequences.first as? XMLElement,
               let value = sequence.attribute(forName: "duration")?.stringValue, value.hasSuffix("s") else { throw ProjectFailure.invalidProject }
         let parts = value.dropLast().split(separator: "/")
         let duration: Double

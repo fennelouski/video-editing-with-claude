@@ -25,10 +25,15 @@ final class VoiceReviewController {
     private(set) var level: Float = 0
     private(set) var pendingWrites = 0
     private(set) var unsavedActions = 0
+    private(set) var renderingCandidateID: UUID?
+    private(set) var renderProgress = ""
+    private(set) var candidatePlaybackID: UUID?
     var error: String?
     var selectedDeviceUID: String
     var locale: String
     @ObservationIgnored let repository: VoiceReviewRepository
+    @ObservationIgnored private let previewService = VoiceCandidatePreviewService()
+    @ObservationIgnored private var renderTask: Task<Void, Never>?
     @ObservationIgnored private let worker: VoiceCandidateWorker
     @ObservationIgnored private let provider: any VoiceReviewDictating
     @ObservationIgnored private let defaults: UserDefaults
@@ -61,14 +66,27 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty }
-    var canStart: Bool { !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
+    var hasPendingWork: Bool { sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var canStart: Bool { candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
+
+    var canPresentCandidate: Bool { candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
+    func beginCandidatePlayback(_ token: UUID) -> Bool {
+        guard canPresentCandidate else { error = "Stop and finalize voice capture before playing a review candidate."; return false }
+        candidatePlaybackID = token; return true
+    }
+    func endCandidatePlayback(_ token: UUID) { if candidatePlaybackID == token { candidatePlaybackID = nil } }
 
     func isAttached(to token: UUID) -> Bool { viewToken == token }
 
     private func apply(_ value: VoiceReviewDocument) {
         guard value.projectID == project.id, value.sequence >= document.sequence else { return }; document = value
+        if let id = renderingCandidateID, let candidate = document.candidates.first(where: { $0.id == id }) {
+            let relevant = document.notes.filter { $0.state != .cancelled && ($0.effectiveAnchor?.targetID == candidate.parent.id || $0.effectiveAnchor == nil) }
+            if candidate.state != .prepared || relevant.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) != candidate.noteRevisions {
+                renderTask?.cancel(); Task { await previewService.cancel() }
+            }
+        }
     }
     func load() async {
         if let loadTask { await loadTask.value; return }
@@ -120,7 +138,7 @@ final class VoiceReviewController {
             catch {
                 self.error = error.localizedDescription
                 if retainFailure { failedWrites.append(operation); unsavedActions = failedWrites.count }
-                if active { Task { _ = await self.stop(cancel: true) } }
+                if retainFailure && active { Task { _ = await self.stop(cancel: true) } }
                 return false
             }
         }
@@ -249,16 +267,48 @@ final class VoiceReviewController {
         draftTasks[id]?.cancel(); draftTasks[id] = nil; drafts[id] = nil
         enqueue { try await $0.discardDraft(id) }
     }
-    func edit(_ note: VoiceReviewNote, text: String, intent: VoiceIntent, anchor: VoiceNoteAnchor?, expectedRevision: Int? = nil) async -> Bool {
+    func edit(_ note: VoiceReviewNote, text: String, intent: VoiceIntent, anchor: VoiceNoteAnchor?, expectedRevision: Int? = nil, action: VoiceRangeAction? = nil) async -> Bool {
         let submittedDraft = drafts[note.id]
         draftTasks[note.id]?.cancel(); draftTasks[note.id] = nil
-        let saved = await enqueue(retainFailure: false) { try await $0.edit(note: note.id, expectedRevision: expectedRevision ?? note.revision, text: text, intent: intent, anchor: anchor) }.value
+        let saved = await enqueue(retainFailure: false) { try await $0.edit(note: note.id, expectedRevision: expectedRevision ?? note.revision, text: text, intent: intent, anchor: anchor, action: action) }.value
         if saved { if drafts[note.id] == submittedDraft { drafts[note.id] = nil } }
         else if let draft = drafts[note.id] { retainDraft(draft) }
         return saved
     }
     func cancel(_ note: VoiceReviewNote) async { _ = await enqueue { try await $0.cancel(note: note.id) }.value }
     func retry(_ note: VoiceReviewNote) async { _ = await enqueue { try await $0.retry(note: note.id) }.value }
+    func addTyped(text: String, action: VoiceRangeAction, start: Double, end: Double) async {
+        guard let target else { error = "Select the watched player before adding feedback."; return }
+        _ = await enqueue(retainFailure: false) { try await $0.addTyped(text: text,action: action,anchor: .init(targetID: target.id,seconds: start,endSeconds: end)) }.value
+    }
+    func prepareEditPlan(_ candidate: VoiceRevisionCandidate) async { _ = await enqueue(retainFailure: false) { try await $0.prepareEditPlan(candidate.id) }.value }
+    func approveEditPlan(_ candidate: VoiceRevisionCandidate) async {
+        guard let sha = candidate.editPlanSHA256 else { return }
+        _ = await enqueue(retainFailure: false) { try await $0.approveEditPlan(candidate.id,expectedSHA: sha) }.value
+    }
+    func renderPreview(_ candidate: VoiceRevisionCandidate, engine: URL) {
+        guard renderTask == nil else { return }; renderingCandidateID = candidate.id; renderProgress = "Waiting for a render slot"
+        renderTask = Task {
+            do {
+                apply(try await previewService.render(repository: repository,candidateID: candidate.id,engine: engine,onLine: { [self] line in
+                    guard !line.isError, let bytes = line.text.data(using: .utf8), let event = try? JSONSerialization.jsonObject(with: bytes) as? [String:Any], let phase = event["phase"] as? String else { return }
+                    let label: String
+                    switch phase {
+                    case "waiting_for_render_slot": label = "Waiting for a render slot"
+                    case "source_snapshot_chunk", "source_snapshot_ready": label = "Verifying a private temporary copy of the watched movie"
+                    case "render_fragment": label = "Rendering approved movie ranges"
+                    case "candidate_verified": label = "Candidate frames and audio verified"
+                    default: return
+                    }
+                    await self.showRenderProgress(label,candidate: candidate.id)
+                }))
+            } catch { self.error = error.localizedDescription }
+            renderingCandidateID = nil; renderTask = nil
+        }
+    }
+    private func showRenderProgress(_ value: String, candidate: UUID) { if renderingCandidateID == candidate { renderProgress = value } }
+    func cancelRender() async { renderTask?.cancel(); await previewService.cancel(); await renderTask?.value }
+
     func retryStorage() async {
         guard !retryingStorage else { return }; retryingStorage = true
         defer { retryingStorage = false }
@@ -271,6 +321,7 @@ final class VoiceReviewController {
         kickPreparation()
     }
     func flushForExit() async -> Bool {
+        await cancelRender()
         _ = await stop()
         for task in Array(draftTasks.values) { await task.value }
         _ = await writes?.value

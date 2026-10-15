@@ -311,6 +311,33 @@ struct VoiceReviewTests {
         return controller
     }
 
+    @Test @MainActor func candidatePlaybackLeaseBlocksCaptureAndCannotBeginDuringStartRecordingOrStop() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try await controller(project: project,provider: provider,target: target)
+        let preview = UUID()
+        #expect(controller.beginCandidatePlayback(preview))
+        #expect(!controller.canStart && !controller.canPresentCandidate)
+        controller.start(); #expect(await provider.starts == 0)
+        controller.endCandidatePlayback(UUID()); #expect(!controller.canStart)
+        controller.endCandidatePlayback(preview); #expect(controller.canStart)
+        await provider.configure(holdStart: true)
+        controller.start()
+        #expect(!controller.beginCandidatePlayback(UUID()))
+        try await waitFor { await provider.starts == 1 }
+        #expect(!controller.beginCandidatePlayback(UUID()))
+        await provider.releaseStart()
+        try await waitFor { controller.mode == .recording }
+        #expect(!controller.beginCandidatePlayback(UUID()))
+        let stopping = Task { await controller.stop() }
+        await Task.yield()
+        if controller.active || controller.canStop { #expect(!controller.beginCandidatePlayback(UUID())) }
+        #expect(await stopping.value)
+        #expect(controller.beginCandidatePlayback(preview))
+        #expect(!controller.canStart)
+        controller.endCandidatePlayback(preview)
+        #expect(controller.canStart)
+    }
+
     @Test @MainActor func openingAndReloadingNeverRecordOrRequestPermissionAndDeviceIsExplicit() async throws {
         let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
         let provider = MockVoiceProvider(), controller = try await controller(project: project, provider: provider, target: target)

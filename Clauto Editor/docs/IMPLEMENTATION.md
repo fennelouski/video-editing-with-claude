@@ -383,3 +383,25 @@ microphone capture, permission prompts, model downloads, interactive VoiceOver,
 private footage processing and new cut generation were not performed. Independent
 review details and precise final evidence are in the task-local handoff rather than
 implied by earlier milestone acceptance counts above.
+
+## Explicit review-candidate integration (15 October)
+
+[VOICE_CANDIDATE_EDITS.md](VOICE_CANDIDATE_EDITS.md) records the next tested
+increment. Explicit Remove/Protect actions and reviewed frame ranges now compile
+into a separate approved plan. A bounded renderer uses exact unlinked read-only
+local APFS snapshots and persistent NAS output, checks decoded frames/audio,
+preserves watched-version pointers and parent XML, and exposes verified in-app
+candidate playback. A separate new review project imports the latest completed
+Pizza Yeast v7 with its exact original technical receipt and input bytes.
+
+| Requirement | Current result | Remaining boundary |
+|---|---|---|
+| Apply finalized feedback to actual edits | Implemented for explicit review-movie frame removals/protection | No semantic free-text edit guessing or camera-layer application |
+| Preserve parent/source mapping | Implemented and checked | Mapping is watched-master frames; original native XML is reference lineage |
+| Render and verify candidates | Implemented for supported SDR/grid/audio inputs | Not production or new editorial/fact approval |
+| Actual Videos NAS publication | Generated-media acceptance passed | Old source renderer SMB zero-link gate remains intact |
+| Latest Pizza test workflow | Verified v7 review import and canonical launcher | See actual app launch receipt; no v8 assumed |
+| Capture/accessibility acceptance | Mock and semantic coverage remains | Real microphone and interactive VoiceOver pending |
+
+Final exact test/build/review counts and source revision are in the local status
+receipt and handoff. This increment does not complete every documented app feature.

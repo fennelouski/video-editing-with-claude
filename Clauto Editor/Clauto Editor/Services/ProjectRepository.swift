@@ -22,7 +22,7 @@ actor ProjectRepository {
         }
     }
 
-    func create(name: String, root: URL, engine: URL, engineVersion: String = "development", resolution: ExportResolution = .fullHD) throws -> Project {
+    func create(name: String, root: URL, engine: URL, engineVersion: String = "development", resolution: ExportResolution = .fullHD, importedReviewOnly: Bool = false) throws -> Project {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 160, !name.contains("/"), !name.contains(":"),
               !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
@@ -36,7 +36,7 @@ actor ProjectRepository {
             for path in ["footage/a-cam", "footage/audio", "assets/music", "assets/graphics", "script", "notes", "cuts", "build", ".clauto"] {
                 try manager.createDirectory(at: folder.appendingPathComponent(path), withIntermediateDirectories: true)
             }
-            let project = Project(manifest: ProjectManifest(name: name, engineVersion: engineVersion, exportResolution: resolution), folder: folder, brief: Brief())
+            let project = Project(manifest: ProjectManifest(importedReviewOnly: importedReviewOnly ? true : nil, name: name, engineVersion: engineVersion, exportResolution: resolution), folder: folder, brief: Brief())
             let paths = ["footage": folder.appendingPathComponent("footage").path,
                          "assets": folder.appendingPathComponent("assets").path,
                          "build": folder.appendingPathComponent("build").path,

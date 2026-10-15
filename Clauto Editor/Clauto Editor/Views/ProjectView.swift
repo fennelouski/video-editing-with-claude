@@ -385,6 +385,9 @@ private struct CutView: View {
     private func versionResults(_ version: CutVersion, project: Project) -> some View {
         let folder = project.folder.appendingPathComponent("cuts/" + version.folderName)
         return VStack(alignment: .leading, spacing: 12) {
+            if project.manifest.importedReviewOnly == true {
+                Text("Imported verified movie · review candidates use the watched movie. Original camera and graphics timeline is retained separately; new production approval is required for a production cut.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            }
             if let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
                 VersionReview(store: store, project: project, version: version, url: folder.appendingPathComponent(preview)).id(version.id)
             }
@@ -397,7 +400,7 @@ private struct CutView: View {
             Button("Reveal Version") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
             Button("Export Script & Shot List PDF") {
                 Task { if let url = await store.exportHandoff(version) { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
-            }.disabled(store.exportingPDF)
+            }.disabled(store.exportingPDF || project.manifest.importedReviewOnly == true)
             ForEach([version.preferredArtifact(".heard.txt"), version.preferredArtifact(".edl.json")].compactMap { $0 }, id: \.self) { artifact in
                 ClautoDisclosure(artifact.hasSuffix(".heard.txt") ? "Rendered audio read-back" : "Cut points and reasons") {
                     Text((try? String(contentsOf: folder.appendingPathComponent(artifact), encoding: .utf8)) ?? "File unavailable").font(ClautoDesign.caption).textSelection(.enabled)
@@ -408,7 +411,7 @@ private struct CutView: View {
 }
 
 @MainActor
-private struct CutPreview: NSViewRepresentable {
+struct CutPreview: NSViewRepresentable {
     let url: URL
     @Binding var playhead: Double
     @Binding var playing: Bool
@@ -506,8 +509,8 @@ private struct CutPreview: NSViewRepresentable {
     }
 }
 
-private struct ReviewSeek { var id = UUID(); var seconds: Double }
-@MainActor private final class ReviewPlaybackControl { weak var player: AVPlayer? }
+struct ReviewSeek { var id = UUID(); var seconds: Double }
+@MainActor final class ReviewPlaybackControl { weak var player: AVPlayer? }
 
 struct VersionReview: View {
     @Bindable var store: EditorStore
@@ -569,7 +572,12 @@ struct VersionReview: View {
                 Text(String(format: "%02d:%02d / %02d:%02d", Int(playhead)/60, Int(playhead)%60, Int(duration)/60, Int(duration)%60))
                     .font(ClautoDesign.caption.monospacedDigit()).foregroundStyle(ClautoDesign.quiet)
             }
-            if let voice { VoiceReviewView(controller: voice, versionID: version.id, selected: voice.isAttached(to: voiceToken), select: selectForVoiceReview, seek: requestSeek) }
+            if let voice { VoiceReviewView(controller: voice, versionID: version.id, engine: store.engineRoot, selected: voice.isAttached(to: voiceToken), select: selectForVoiceReview, seek: requestSeek, prepareCandidatePlayback: { token in
+                guard voice.isAttached(to: voiceToken), voice.beginCandidatePlayback(token) else { return false }
+                control.player?.pause(); playing = false
+                voice.record(livePlayhead(),kind: .pause,token: voiceToken)
+                return true
+            }) }
             ClautoSection("Feedback for v\(version.number)") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -647,6 +655,9 @@ struct VersionReview: View {
                 voice?.record(livePlayhead(), token: voiceToken)
                 try? await Task.sleep(for: .milliseconds(100))
             }
+        }
+        .onChange(of: ready) {
+            if ready { Task { await store.recordReviewLaunch(version: version,project: project,playerSeconds: control.player?.currentTime().seconds ?? 0) } }
         }
         .onChange(of: playing) { voice?.record(livePlayhead(), kind: playing ? .play : .pause, token: voiceToken) }
         .onDisappear { voice?.detach(voiceToken) }

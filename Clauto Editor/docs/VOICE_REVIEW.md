@@ -52,15 +52,17 @@ Acceptance must cover late/duplicate/out-of-order ASR, delayed/dropped clock pac
 seeks and version changes during speech, pause, missing timing, stale provenance,
 manual edits during processing, cancel/retry, concurrent conflicting notes,
 debounce, disk failure/corruption and restart recovery. Tests use mocks and small
-synthetic media. Actual microphone recording and foreground tests are not
-authorized during this development request.
+synthetic media. Actual microphone recording requires current explicit permission. Authorized
+foreground acceptance now includes opening the separately imported latest movie;
+this does not authorize starting capture.
 
-The existing synthetic render transport is capability-blocked on Videos SMB
-because zero-link attestation is unsupported. This feature must not weaken that
-check or claim a new cut. Later playback still needs version/media revalidation;
+The existing synthetic source-span transport remains capability-blocked on Videos
+SMB because zero-link attestation is unsupported. The separate
+[review-movie candidate contract](VOICE_CANDIDATE_EDITS.md) uses a strict local
+unlinked snapshot and persistent NAS output. Later playback still needs version/media revalidation;
 voice provenance does not make AVPlayer or editable original references immutable.
 
-## Implemented milestone (15 October)
+## Instruction foundation (15 October; completed before candidate integration)
 
 The native version player now offers **Use this player for Voice Review**, explicit
 microphone selection and Start / Stop and Finalize / Cancel capture. Selecting a
@@ -114,3 +116,17 @@ UI/VoiceOver test, remote AI/provider, private media processing, Sheet edit, Fin
 control, new cut, current-pointer change, push or deployment occurred. Check-time
 fingerprints and duration checks do not make AVPlayer's file descriptor immutable.
 Production byte attestation remains a separate existing gate.
+
+## Reviewed candidate integration
+
+[VOICE_CANDIDATE_EDITS.md](VOICE_CANDIDATE_EDITS.md) supersedes the foundation's
+“intent only” rendering status for its explicit reduced scope. Typed or finalized
+voice notes with a resolved action and range now produce separately approved
+parent-frame edits, a verified movie, editable watched-master FCPXML and native
+candidate playback. Original camera/graphics XML remains reference-only. NAS
+publication passes with an unlinked read-only local APFS snapshot; the old source
+renderer gate is unchanged. The exact latest verified v7 is copied into a new
+review-only project; no new private edit or production approval is inferred.
+
+See task-local final status and independent review for current validation and
+remaining limitations; the foundation test counts above are historical.

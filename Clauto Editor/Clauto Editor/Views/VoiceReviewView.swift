@@ -1,12 +1,19 @@
 import SwiftUI
+import AVFoundation
 
 struct VoiceReviewView: View {
     @Bindable var controller: VoiceReviewController
     let versionID: UUID
+    let engine: URL
     let selected: Bool
     let select: () -> Void
     let seek: (Double) -> Void
+    let prepareCandidatePlayback: (UUID) -> Bool
     @State private var visibleNotes = 50
+    @State private var typedText = ""
+    @State private var typedStart = ""
+    @State private var typedEnd = ""
+    @State private var typedAction = VoiceRangeAction.protect
 
     var body: some View {
         ClautoSection("Voice review") {
@@ -76,6 +83,27 @@ struct VoiceReviewView: View {
                         Button("Retry Save") { Task { await controller.retryStorage() } }.accessibilityIdentifier("voiceReviewRetrySave")
                     }.font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
                 }
+                ClautoDisclosure("Add feedback without a microphone") {
+                    TextField("Feedback", text: $typedText).accessibilityIdentifier("voiceTypedFeedback")
+                    Picker("Explicit review action", selection: $typedAction) {
+                        Text("Protect this range").tag(VoiceRangeAction.protect)
+                        Text("Remove this range").tag(VoiceRangeAction.remove)
+                    }
+                    HStack {
+                        TextField("Start seconds", text: $typedStart).accessibilityLabel("Typed feedback start seconds")
+                        TextField("End seconds", text: $typedEnd).accessibilityLabel("Typed feedback end seconds")
+                        Button("Save typed review note") {
+                            guard let start = Double(typedStart), let end = Double(typedEnd) else { controller.error = "Enter explicit start and end times in seconds."; return }
+                            let submitted = typedText
+                            Task { await controller.addTyped(text: submitted,action: typedAction,start: start,end: end) }
+                        }.disabled(!selected || controller.target?.versionID != versionID || typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("voiceSaveTypedFeedback")
+                    }
+                }
+                if controller.renderingCandidateID != nil {
+                    ProgressView(controller.renderProgress)
+                    Button("Cancel candidate render") { Task { await controller.cancelRender() } }.accessibilityIdentifier("voiceCancelCandidateRender")
+                }
                 ForEach(Array(controller.document.notes.suffix(visibleNotes).reversed())) { note in
                     VoiceReviewNoteRow(controller: controller, note: note, versionID: versionID, seek: seek)
                 }
@@ -88,6 +116,7 @@ struct VoiceReviewView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("Candidate for v\(candidate.parent.versionNumber) · \(candidate.state.rawValue)").font(ClautoDesign.body)
                                 Text(candidate.detail).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                                VoiceCandidateActions(controller: controller,candidate: candidate,engine: engine,selected: selected,preparePlayback: prepareCandidatePlayback)
                                 ForEach(candidate.directives, id: \.noteID) { directive in
                                     Text(String(format: "%.3fs · %@ · %@", directive.anchor.seconds,
                                         directive.intent == .protect ? "Protect" : "Change requested", directive.text)).font(ClautoDesign.caption)
@@ -108,6 +137,7 @@ private struct VoiceReviewNoteRow: View {
     let seek: (Double) -> Void
     // Deliberate editing draft: later ASR never replaces text while the user types.
     @State private var text: String
+    @State private var action: VoiceRangeAction?
     @State private var intent: VoiceIntent
     @State private var targetID: UUID?
     @State private var start: String
@@ -119,6 +149,7 @@ private struct VoiceReviewNoteRow: View {
         self.controller = controller; self.note = note; self.versionID = versionID; self.seek = seek
         let draft = controller.drafts[note.id]
         _text = State(initialValue: draft?.text ?? note.text); _intent = State(initialValue: draft?.intent ?? note.intent)
+        _action = State(initialValue: draft?.action ?? note.action)
         _targetID = State(initialValue: draft?.targetID ?? note.effectiveAnchor?.targetID)
         _start = State(initialValue: draft?.start ?? note.effectiveAnchor.map { String(format: "%.6f", $0.seconds) } ?? "")
         _end = State(initialValue: draft?.end ?? note.effectiveAnchor?.endSeconds.map { String(format: "%.6f", $0) } ?? "")
@@ -146,6 +177,11 @@ private struct VoiceReviewNoteRow: View {
                 Text("Change / dislike").tag(VoiceIntent.change)
                 Text("Needs clarification").tag(VoiceIntent.unclear)
             }.accessibilityIdentifier("voiceReviewIntent-" + note.id.uuidString)
+            Picker("Explicit candidate action", selection: Binding(get: { action },set: { action = $0; changed() })) {
+                Text("Unresolved — choose an action").tag(Optional<VoiceRangeAction>.none)
+                Text("Protect range").tag(Optional(VoiceRangeAction.protect))
+                Text("Remove range").tag(Optional(VoiceRangeAction.remove))
+            }.accessibilityIdentifier("voiceReviewAction-"+note.id.uuidString)
             ForEach(note.issues, id: \.self) { Text($0).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
             if dirty && baseRevision != note.revision {
                 Text("This note changed while you edited. Your draft is retained; reload the latest note before saving.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
@@ -180,23 +216,111 @@ private struct VoiceReviewNoteRow: View {
     }
     private func changed() {
         dirty = true
-        controller.retainDraft(.init(noteID: note.id, text: text, intent: intent, targetID: targetID, start: start, end: end, baseRevision: baseRevision))
+        controller.retainDraft(.init(noteID: note.id, text: text, intent: intent, targetID: targetID, start: start, end: end, baseRevision: baseRevision, action: action))
     }
     private func reload(_ saved: VoiceReviewNote? = nil) {
         let note = saved ?? controller.document.notes.first(where: { $0.id == self.note.id }) ?? self.note
-        text = note.text; intent = note.intent; targetID = note.effectiveAnchor?.targetID
+        text = note.text; intent = note.intent; action = note.action; targetID = note.effectiveAnchor?.targetID
         start = note.effectiveAnchor.map { String(format: "%.6f", $0.seconds) } ?? ""
         end = note.effectiveAnchor?.endSeconds.map { String(format: "%.6f", $0) } ?? ""
         baseRevision = note.revision; dirty = false
     }
     private func save(anchor: VoiceNoteAnchor?) {
-        let draft = text, meaning = intent, revision = baseRevision, draftStart = start, draftEnd = end, draftTarget = targetID
+        let draft = text, meaning = intent, revision = baseRevision, draftStart = start, draftEnd = end, draftTarget = targetID, submittedAction = action
         Task {
-            if await controller.edit(note, text: draft, intent: meaning, anchor: anchor, expectedRevision: revision) {
+            if await controller.edit(note, text: draft, intent: meaning, anchor: anchor, expectedRevision: revision, action: submittedAction) {
                 // Keep a newer draft if typing continued while this write awaited disk.
-                if text == draft && intent == meaning && start == draftStart && end == draftEnd && targetID == draftTarget { reload() }
+                if text == draft && intent == meaning && start == draftStart && end == draftEnd && targetID == draftTarget && action == submittedAction { reload() }
                 else if let saved = controller.document.notes.first(where: { $0.id == note.id }) { baseRevision = saved.revision; changed() }
             }
         }
+    }
+}
+
+private struct VoiceCandidateActions: View {
+    @Bindable var controller: VoiceReviewController
+    let candidate: VoiceRevisionCandidate
+    let engine: URL
+    let selected: Bool
+    let preparePlayback: (UUID) -> Bool
+    @State private var playbackToken = UUID()
+    @State private var previewURL: URL?
+    @State private var showingPreview = false
+    var body: some View {
+        VStack(alignment: .leading,spacing: 8) {
+            if candidate.state == .prepared {
+                if let plan = candidate.editPlan {
+                    Text("Review candidate from the watched movie. Original camera/graphics timeline is retained separately as reference.")
+                        .font(ClautoDesign.caption)
+                    ForEach(Array(plan.operations.enumerated()),id: \.offset) { _, operation in
+                        Text("\(operation.action == .protect ? "Protect" : "Remove") watched frames \(operation.startFrame)..<\(operation.endFrame) · note \(operation.noteID.uuidString.prefix(8))")
+                            .font(ClautoDesign.caption).textSelection(.enabled)
+                    }
+                    Text("Removals round inward and protections outward to complete 24000/1001 video frames. All ranges refer to the watched version before any cuts.").font(ClautoDesign.caption)
+                    ForEach(plan.issues,id: \.self) { Text($0).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
+                    if plan.issues.isEmpty, let sha = candidate.editPlanSHA256 {
+                        Text("Plan "+sha.prefix(12)).font(ClautoDesign.caption)
+                        if candidate.editApproval == nil {
+                            Button("Approve these review-movie cuts") { Task { await controller.approveEditPlan(candidate) } }
+                                .accessibilityIdentifier("voiceApproveCandidatePlan")
+                        } else {
+                            Text("Rendering uses one private temporary local copy, up to 1 GiB; the completed candidate stays in this project on your drive.").font(ClautoDesign.caption)
+                            Button(candidate.renderedPreview == nil ? "Render separate review candidate" : "Render another verified candidate") { controller.renderPreview(candidate,engine: engine) }
+                                .disabled(controller.renderingCandidateID != nil).accessibilityIdentifier("voiceRenderCandidate")
+                        }
+                    }
+                } else {
+                    Button("Review exact candidate cuts") { Task { await controller.prepareEditPlan(candidate) } }
+                        .accessibilityIdentifier("voicePrepareCandidatePlan")
+                }
+            }
+            if let rendered = candidate.renderedPreview {
+                Text("Verified candidate · \(rendered.frames) frames · watched version unchanged").font(ClautoDesign.caption)
+                Button("Play verified review candidate") {
+                    Task {
+                        do {
+                            let verified = try await controller.repository.verifiedPreview(candidate.id)
+                            guard preparePlayback(playbackToken) else { return }
+                            previewURL = verified; showingPreview = true
+                        }
+                        catch { controller.error = error.localizedDescription }
+                    }
+                }.disabled(!selected || !controller.canPresentCandidate).accessibilityIdentifier("voicePlayCandidate")
+                Button("Reveal rendered review candidate") {
+                    Task {
+                        do { let url = try await controller.repository.verifiedPreview(candidate.id); NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                        catch { controller.error = error.localizedDescription }
+                    }
+                }.accessibilityIdentifier("voiceRevealCandidate")
+            }
+        }.sheet(isPresented: $showingPreview,onDismiss: { controller.endCandidatePlayback(playbackToken) }) {
+            if let previewURL { VoiceCandidatePlayback(url: previewURL) }
+        }.onDisappear { controller.endCandidatePlayback(playbackToken) }
+    }
+}
+
+private struct VoiceCandidatePlayback: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var seconds = 0.0
+    @State private var playing = false
+    @State private var ready = false
+    @State private var failure: String?
+    @State private var control = ReviewPlaybackControl()
+    var body: some View {
+        VStack(alignment: .leading,spacing: 14) {
+            Text("Separate review candidate").font(.headline)
+            Text("Review playback only; voice feedback is disabled here. The watched version is paused and unchanged. Original camera and graphics layers remain in the preserved parent timeline.").font(.caption)
+            CutPreview(url: url,playhead: $seconds,playing: $playing,ready: $ready,failure: $failure,seek: nil,control: control,onSeekCompleted: { _ in },onTimeJump: {})
+                .frame(minWidth: 800,minHeight: 450)
+            if let failure { Text(failure).foregroundStyle(.red) }
+            HStack {
+                Button(playing ? "Pause candidate" : "Play candidate") { if playing { control.player?.pause() } else { control.player?.play() } }.disabled(!ready || failure != nil)
+                Text(String(format: "%.2f s",seconds)).monospacedDigit()
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+        }.padding(24).frame(minWidth: 860,minHeight: 580)
+        .onDisappear { control.player?.pause() }
     }
 }

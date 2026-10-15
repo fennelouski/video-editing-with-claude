@@ -149,6 +149,7 @@ struct VoiceReviewNote: Codable, Identifiable, Sendable {
     var text: String
     var isFinal: Bool
     var revision = 1
+    var action: VoiceRangeAction?
     var manuallyEdited = false
     var intent: VoiceIntent
     /// Set once from captured onset; a user resolution is kept separately.
@@ -169,6 +170,7 @@ struct VoiceTranscriptDraft: Codable, Equatable, Sendable {
     var start: String
     var end: String
     var baseRevision: Int
+    var action: VoiceRangeAction? = nil
 }
 
 struct VoiceNoteRevision: Codable, Equatable, Sendable { let id: UUID; let revision: Int }
@@ -178,6 +180,7 @@ struct VoiceCandidateDirective: Codable, Equatable, Sendable {
     let intent: VoiceIntent
     let anchor: VoiceNoteAnchor
     let text: String
+    var action: VoiceRangeAction? = nil
 }
 struct VoiceRevisionCandidate: Codable, Identifiable, Sendable {
     enum State: String, Codable, Sendable { case processing, prepared, needsResolution, cancelled, failed, superseded }
@@ -193,6 +196,13 @@ struct VoiceRevisionCandidate: Codable, Identifiable, Sendable {
     var renderRequested = false
     var instructionsRelativePath: String?
     var instructionsSHA256: String?
+    var editPlan: VoiceCandidateEditPlan?
+    var editPlanRelativePath: String?
+    var editPlanSHA256: String?
+    var editApproval: VoiceCandidateEditApproval?
+    var editApprovalRelativePath: String?
+    var editApprovalSHA256: String?
+    var renderedPreview: VoiceCandidatePreview?
     var appliedToCut = false
     var productionAuthorized = false
 }
@@ -290,7 +300,7 @@ struct VoiceReviewDocument: Codable, Sendable {
             for j in notes.indices where j > i && notes[j].isFinal && notes[j].state != .cancelled {
                 guard let b = notes[j].effectiveAnchor, a.targetID == b.targetID,
                     notes[i].intent != .unclear, notes[j].intent != .unclear, notes[i].intent != notes[j].intent,
-                    max(a.seconds,b.seconds) <= min(a.endSeconds ?? a.seconds+0.25,b.endSeconds ?? b.seconds+0.25) else { continue }
+                    max(a.seconds,b.seconds) < min(a.endSeconds ?? a.seconds+0.25,b.endSeconds ?? b.seconds+0.25) else { continue }
                 let message = "Conflicting protect/change feedback overlaps. Edit its range, intent or cancel one note."
                 notes[i].issues.append(message); notes[j].issues.append(message)
                 notes[i].state = .needsResolution; notes[j].state = .needsResolution

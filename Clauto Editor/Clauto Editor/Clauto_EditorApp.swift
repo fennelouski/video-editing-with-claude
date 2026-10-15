@@ -17,7 +17,7 @@ struct Clauto_EditorApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(store: store)
+            ContentView(store: store, initialProjectTab: ProcessInfo.processInfo.environment["CLAUTO_PROJECT_TAB"] ?? "Brief")
                 .frame(minWidth: 900, minHeight: 640)
                 .task {
                     delegate.store = store

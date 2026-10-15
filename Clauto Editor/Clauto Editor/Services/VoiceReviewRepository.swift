@@ -162,7 +162,7 @@ actor VoiceReviewRepository {
         }
     }
 
-    func edit(note id: UUID, expectedRevision: Int, text: String, intent: VoiceIntent, anchor: VoiceNoteAnchor?) throws -> VoiceReviewDocument {
+    func edit(note id: UUID, expectedRevision: Int, text: String, intent: VoiceIntent, anchor: VoiceNoteAnchor?, action: VoiceRangeAction? = nil) throws -> VoiceReviewDocument {
         try locked { document in
             guard let i = document.notes.firstIndex(where: { $0.id == id && $0.revision == expectedRevision }), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 20_000 else { throw WorkflowFailure.invalid("This note changed. Reload its latest transcript before saving your edit.") }
             if let anchor {
@@ -171,6 +171,7 @@ actor VoiceReviewRepository {
             }
             document.drafts?.removeAll { $0.noteID == id }
             document.notes[i].revision += 1; document.notes[i].text = text; document.notes[i].intent = intent
+            document.notes[i].action = action
             document.notes[i].manuallyEdited = true; document.notes[i].isFinal = true; document.notes[i].state = .ready
             if let anchor { document.notes[i].resolvedAnchor = anchor }
             document.notes[i].history.append(.init(date: Date(), source: anchor == nil ? "User transcript edit" : "User anchor resolution", text: text, revision: document.notes[i].revision))
@@ -220,7 +221,7 @@ actor VoiceReviewRepository {
             try claim.noteRevisions.map { ref in
                 guard let note = document.notes.first(where: { $0.id == ref.id && $0.revision == ref.revision && $0.issues.isEmpty && $0.state == .processing }),
                       let anchor = note.effectiveAnchor, anchor.targetID == claim.parent.id else { throw CancellationError() }
-                return .init(noteID: note.id, revision: note.revision, intent: note.intent, anchor: anchor, text: note.text)
+                return .init(noteID: note.id, revision: note.revision, intent: note.intent, anchor: anchor, text: note.text, action: note.action)
             }
         }, save: false)
     }
@@ -241,7 +242,7 @@ actor VoiceReviewRepository {
                 try VoiceReviewProvenance.check(claim.parent, project: project)
                 let expected = try claim.noteRevisions.map { ref -> VoiceCandidateDirective in
                     guard let note = document.notes.first(where: { $0.id == ref.id && $0.revision == ref.revision }), let anchor = note.effectiveAnchor else { throw ProjectFailure.invalidProject }
-                    return .init(noteID: note.id, revision: note.revision, intent: note.intent, anchor: anchor, text: note.text)
+                    return .init(noteID: note.id, revision: note.revision, intent: note.intent, anchor: anchor, text: note.text, action: note.action)
                 }
                 guard directives == expected else { throw WorkflowFailure.invalid("The candidate processor changed a finalized feedback instruction.") }
                 let payload = VoiceCandidateInstructions(id: claim.id, parent: claim.parent, noteRevisions: claim.noteRevisions,
@@ -279,6 +280,136 @@ actor VoiceReviewRepository {
             return document
         }
     }
+}
+
+extension VoiceReviewRepository {
+    private func checkedCandidate(_ id: UUID, document: VoiceReviewDocument) throws -> Int {
+        guard let i = document.candidates.firstIndex(where: { $0.id == id && $0.state == .prepared }) else { throw WorkflowFailure.invalid("Prepare the latest finalized feedback before reviewing a candidate.") }
+        let candidate = document.candidates[i]
+        let notes = document.notes.filter { $0.state != .cancelled && ($0.effectiveAnchor?.targetID == candidate.parent.id || $0.effectiveAnchor == nil) }
+        guard notes.allSatisfy({ $0.isFinal && $0.issues.isEmpty }),
+              notes.map({ VoiceNoteRevision(id: $0.id,revision: $0.revision) }) == candidate.noteRevisions,
+              let path = candidate.instructionsRelativePath, let sha = candidate.instructionsSHA256,
+              try VoiceReviewProvenance.inspect(path,project: project).sha256 == sha else { throw WorkflowFailure.invalid("Feedback changed or remains unresolved. Prepare and approve the latest candidate.") }
+        try VoiceReviewProvenance.check(candidate.parent,project: project)
+        return i
+    }
+    func addTyped(text: String, action: VoiceRangeAction, anchor: VoiceNoteAnchor) throws -> VoiceReviewDocument {
+        try locked { document in
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 20_000,
+                  let target = document.targets.first(where: { $0.id == anchor.targetID }),
+                  anchor.seconds.isFinite, let end = anchor.endSeconds, end.isFinite,
+                  anchor.seconds >= 0, end > anchor.seconds, end <= target.duration else { throw WorkflowFailure.invalid("Enter feedback and an explicit start/end inside the selected movie.") }
+            try VoiceReviewProvenance.check(target,project: project)
+            let id = UUID(), attempt = UUID()
+            var session = VoiceReviewSession(id: id,attemptID: attempt,deviceUID: "typed-no-microphone",locale: "",ownerProcessID: getpid(),created: Date()); session.state = .stopped
+            document.sessions.append(session)
+            var note = VoiceReviewNote(id: UUID(),sessionID: id,segmentID: "typed-"+UUID().uuidString,audioStart: nil,audioEnd: nil,created: Date(),transcript: "",text: text,isFinal: true,intent: action == .protect ? .protect : .change)
+            note.action = action; note.manuallyEdited = true; note.resolvedAnchor = anchor
+            note.history.append(.init(date: Date(),source: "User typed feedback; no microphone",text: text,revision: note.revision))
+            document.notes.append(note); document.refresh(); return document
+        }
+    }
+    func prepareEditPlan(_ id: UUID) throws -> VoiceReviewDocument {
+        try locked { document in
+            document.refresh(); let i = try checkedCandidate(id,document: document)
+            if document.candidates[i].editPlan != nil { return document }
+            let plan = try VoiceCandidateEditPlan.compile(document.candidates[i]), bytes = try encoder.encode(plan)
+            let folder = try directory.child("edit-plans",create: true), name = plan.id.uuidString+".json"
+            try folder.writeNew(bytes,name: name)
+            document.candidates[i].editPlan = plan
+            document.candidates[i].editPlanRelativePath = "notes/voice-review/edit-plans/"+name
+            document.candidates[i].editPlanSHA256 = TranscriptSourceMap.sha(bytes)
+            document.candidates[i].detail = plan.issues.isEmpty ? "Review exact frame ranges, then explicitly approve this watched-movie candidate. No movie has rendered." : plan.issues.joined(separator: "\n")
+            return document
+        }
+    }
+    func approveEditPlan(_ id: UUID, expectedSHA: String) throws -> VoiceReviewDocument {
+        try locked { document in
+            document.refresh(); let i = try checkedCandidate(id,document: document)
+            guard let plan = document.candidates[i].editPlan, let path = document.candidates[i].editPlanRelativePath,
+                  let sha = document.candidates[i].editPlanSHA256, sha == expectedSHA, plan.issues.isEmpty,
+                  try VoiceReviewProvenance.inspect(path,project: project).sha256 == sha,
+                  TranscriptSourceMap.sha(try encoder.encode(plan)) == sha else { throw WorkflowFailure.invalid("Resolve and review the exact candidate plan before approval.") }
+            let approval = VoiceCandidateEditApproval(id: UUID(),planID: plan.id,planSHA256: sha,created: Date(),scope: VoiceCandidateEditPlan.mode,productionAuthorized: false)
+            let bytes = try encoder.encode(approval), name = approval.id.uuidString+".json"
+            try directory.child("edit-approvals",create: true).writeNew(bytes,name: name)
+            document.candidates[i].editApproval = approval
+            document.candidates[i].editApprovalRelativePath = "notes/voice-review/edit-approvals/"+name
+            document.candidates[i].editApprovalSHA256 = TranscriptSourceMap.sha(bytes)
+            document.candidates[i].detail = "Exact review-movie cuts approved. Original editable camera/graphics timeline remains separate; production approval is unchanged."
+            return document
+        }
+    }
+    func approvedEditSnapshot(_ id: UUID) throws -> VoiceApprovedEditSnapshot {
+        try locked({ document in
+            document.refresh(); let i = try checkedCandidate(id,document: document), candidate = document.candidates[i]
+            guard let plan = candidate.editPlan, let planSHA = candidate.editPlanSHA256,
+                  let path = candidate.editPlanRelativePath, let approval = candidate.editApproval,
+                  let approvalSHA = candidate.editApprovalSHA256, let approvalPath = candidate.editApprovalRelativePath,
+                  plan.issues.isEmpty, approval.planID == plan.id, approval.planSHA256 == planSHA,
+                  approval.scope == VoiceCandidateEditPlan.mode, !approval.productionAuthorized,
+                  try VoiceReviewProvenance.inspect(path,project: project).sha256 == planSHA,
+                  try VoiceReviewProvenance.inspect(approvalPath,project: project).sha256 == approvalSHA,
+                  TranscriptSourceMap.sha(try encoder.encode(plan)) == planSHA,
+                  TranscriptSourceMap.sha(try encoder.encode(approval)) == approvalSHA else { throw WorkflowFailure.invalid("This candidate needs a current explicit frame-plan approval before rendering.") }
+            return .init(candidate: candidate,plan: plan,planSHA256: planSHA,approval: approval,approvalSHA256: approvalSHA)
+        },save: false)
+    }
+    func verifiedPreview(_ id: UUID) async throws -> URL {
+        let pair: (VoiceReviewTarget, VoiceCandidatePreview) = try locked({ document in
+            guard let candidate = document.candidates.first(where: { $0.id == id }), let record = candidate.renderedPreview,
+                  !record.productionAuthorized, !record.appliedToWatchedVersion,
+                  record.planSHA256 == candidate.editPlanSHA256 else { throw WorkflowFailure.invalid("This candidate has no verified rendered preview.") }
+            return (candidate.parent,record)
+        },save: false)
+        let project = self.project
+        let check = Task.detached { () throws -> URL in
+            let (parent,record) = pair
+            try VoiceReviewProvenance.check(parent,project: project)
+            let folder = try SourceRenderDirectory.open(project.folder).child("build").child("voice-candidates").child(record.id.uuidString)
+            guard folder.identity == record.folderIdentity, let completion = record.completionSHA256, TranscriptSourceMap.sha(try folder.read("completion.json")) == completion else { throw ProjectFailure.invalidProject }
+            for (name,sha) in record.artifactsSHA256 { guard try folder.voiceHash(name) == sha else { throw WorkflowFailure.invalid("A rendered candidate changed. Render a fresh candidate before playback.") } }
+            let bytes = try folder.read("render-proof.json")
+            guard TranscriptSourceMap.sha(bytes) == record.proofSHA256 else { throw ProjectFailure.invalidProject }
+            let proof = try JSONDecoder().decode(VoiceMasterProof.self,from: bytes)
+            guard try folder.voiceHash("input.json") == proof.inputSHA256 else { throw ProjectFailure.invalidProject }
+            return folder.url.appendingPathComponent("review.mov")
+        }
+        return try await withTaskCancellationHandler { try await check.value } onCancel: { check.cancel() }
+    }
+    func commitPreview(_ snapshot: VoiceApprovedEditSnapshot, final: SourceRenderDirectory, output: SourceRenderDirectory,
+                       id: UUID, proof: VoiceMasterProof, proofSHA: String, receipts: [VoiceArtifact]) throws -> VoiceReviewDocument {
+        try locked { document in
+            document.refresh(); let i = try checkedCandidate(snapshot.candidate.id,document: document)
+            guard document.candidates[i].editPlanSHA256 == snapshot.planSHA256,
+                  document.candidates[i].editApproval?.id == snapshot.approval.id,
+                  document.candidates[i].editApprovalSHA256 == snapshot.approvalSHA256,
+                  proof.planSHA256 == snapshot.planSHA256, proof.approvalSHA256 == snapshot.approvalSHA256,
+                  !proof.productionAuthorized, !proof.appliedToWatchedVersion,
+                  final.url == output.url.appendingPathComponent(id.uuidString), Set(receipts.map(\.relativePath)) == Set(VoiceMasterByteContract.files),
+                  receipts.first(where: { $0.relativePath == "candidate-plan.json" })?.sha256 == snapshot.planSHA256,
+                  receipts.first(where: { $0.relativePath == "candidate-approval.json" })?.sha256 == snapshot.approvalSHA256,
+                  receipts.first(where: { $0.relativePath == "parent.fcpxml" })?.sha256 == snapshot.plan.parent.timeline.sha256,
+                  receipts.first(where: { $0.relativePath == "input.json" })?.sha256 == proof.inputSHA256,
+                  receipts.first(where: { $0.relativePath == "render-proof.json" })?.sha256 == proofSHA,
+                  let planPath = document.candidates[i].editPlanRelativePath, let approvalPath = document.candidates[i].editApprovalRelativePath,
+                  try VoiceReviewProvenance.inspect(planPath,project: project).sha256 == snapshot.planSHA256,
+                  try VoiceReviewProvenance.inspect(approvalPath,project: project).sha256 == snapshot.approvalSHA256 else { throw WorkflowFailure.invalid("The candidate feedback, frame plan or approval changed during rendering. Output remains separate evidence.") }
+            try root.checkPath(); try output.checkPath(); try final.checkPath(); try Task.checkCancellation()
+            for receipt in receipts { try final.voiceCheck(receipt) }
+            var record = VoiceCandidatePreview(id: id,relativeFolder: "build/voice-candidates/"+id.uuidString,planSHA256: snapshot.planSHA256,approvalID: snapshot.approval.id,proofSHA256: proofSHA,folderIdentity: final.identity,artifactsSHA256: proof.artifactsSHA256,frames: proof.frames,audioSamplesPerChannel: proof.audioSamplesPerChannel,productionAuthorized: false,appliedToWatchedVersion: false)
+            let completion = try encoder.encode(record)
+            try final.writeNew(completion,name: "completion.json"); record.completionSHA256 = TranscriptSourceMap.sha(completion)
+            try root.checkPath(); try output.checkPath(); try final.checkPath(); try Task.checkCancellation()
+            for receipt in receipts { try final.voiceCheck(receipt) }
+            try VoiceReviewProvenance.check(snapshot.plan.parent,project: project)
+            document.candidates[i].renderedPreview = record
+            document.candidates[i].detail = "Rendered review candidate verified against exact watched-master frame ranges and decoded pixels/PCM. The watched version and original native timeline are unchanged."
+            return document
+        }
+    }
+
 }
 
 protocol VoiceCandidateProcessing: Sendable {

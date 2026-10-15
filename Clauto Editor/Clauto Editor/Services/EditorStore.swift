@@ -76,6 +76,20 @@ final class EditorStore {
         catch { controller.error = error.localizedDescription }
     }
 
+    func recordReviewLaunch(version: CutVersion, project: Project, playerSeconds: Double) async {
+        guard ProcessInfo.processInfo.environment["CLAUTO_VERIFY_REVIEW_LAUNCH"] == "1" else { return }
+        do {
+            let target = try await workflow.voiceReviewTarget(version,project: project)
+            let root = try SourceRenderDirectory.open(project.folder)
+            let evidence: [String:Any] = ["kind":"native_review_launch","processID":ProcessInfo.processInfo.processIdentifier,
+                "bundlePath":Bundle.main.bundleURL.path,"engineRoot":engineRoot.path,"projectPath":project.folder.path,
+                "versionID":version.id.uuidString,"versionNumber":version.number,"previewSHA256":target.preview.sha256,
+                "previewPath":try VoiceReviewProvenance.url(target.preview.relativePath,project: project).path,
+                "duration":target.duration,"playerReady":true,"playerSeconds":playerSeconds,"microphoneStarted":false]
+            try root.child(".clauto").writeNew(JSONSerialization.data(withJSONObject: evidence,options: [.sortedKeys]),name: "review-launch-"+UUID().uuidString+".json")
+        } catch { notice = error.localizedDescription }
+    }
+
     var hasPendingReviewWork: Bool { hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {

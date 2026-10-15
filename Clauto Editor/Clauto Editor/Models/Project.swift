@@ -40,6 +40,7 @@ struct ProjectFile: Codable, Identifiable, Hashable, Sendable {
 
 struct ProjectManifest: Codable, Identifiable, Sendable {
     var schemaVersion = 1
+    var importedReviewOnly: Bool?
     var id = UUID()
     var name: String
     var aspect = "16:9"
