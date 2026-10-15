@@ -422,3 +422,8 @@ regression starts both first writes on eight fresh projects and verifies the
 latest Brief, exact selected script and manifest revision. The independent people
 prototype is excluded from this correction. Native first-use interaction remains
 unobserved during the foreground hold.
+
+
+## Background frame-grid validation
+
+The common frame verifier moves synchronous sample scanning off Swift's shared cooperative workers onto a bounded owned serial queue. Cancellation promptly releases the awaiting task, refuses late publication and retains physical capacity until the underlying operation ends. All existing timestamp/decoder/provenance checks remain. A synchronous OS/NAS read is not forcibly interruptible; there is no hard I/O deadline. See [FRAME_CAPTURE_BACKGROUND_IO.md](FRAME_CAPTURE_BACKGROUND_IO.md). People/Vision implementation is excluded from this correction, and native/NAS/full-product acceptance remains held.

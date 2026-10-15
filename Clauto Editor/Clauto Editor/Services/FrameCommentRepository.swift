@@ -4,6 +4,80 @@ import AVFoundation
 import ImageIO
 import UniformTypeIdentifiers
 
+/// A cancelled waiter may return before a synchronous OS read does. The queue
+/// retains that job's capacity until its actual work ends; replacement requests
+/// cannot create unbounded blocked workers.
+final class FrameBlockingJob<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var claimed = false
+    private var bound = false
+    private var result: Result<Value,any Error>?
+    private var continuation: CheckedContinuation<Value,any Error>?
+    func claim() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !claimed else { return false }; claimed = true; return true
+    }
+    func bind(_ continuation: CheckedContinuation<Value,any Error>) -> Bool {
+        lock.lock()
+        guard !bound else { lock.unlock(); continuation.resume(throwing: ProjectFailure.invalidProject); return false }
+        bound = true
+        if let result { lock.unlock(); continuation.resume(with: result); return false }
+        self.continuation = continuation; lock.unlock(); return true
+    }
+    func checkCancellation() throws {
+        lock.lock(); let value = cancelled; lock.unlock()
+        if value { throw CancellationError() }
+    }
+    func finish(_ result: Result<Value,any Error>) {
+        lock.lock()
+        guard self.result == nil else { lock.unlock(); return }
+        self.result = result; let waiting = continuation; continuation = nil; lock.unlock()
+        waiting?.resume(with: result)
+    }
+    func cancel() {
+        lock.lock(); cancelled = true; lock.unlock()
+        finish(.failure(CancellationError()))
+    }
+}
+final class FrameBlockingExecutor: @unchecked Sendable {
+    static let frameChecks = FrameBlockingExecutor(label: "com.clauto.frame-grid",capacity: 64)
+    private let queue: DispatchQueue
+    private let lock = NSLock()
+    private let capacity: Int
+    private var occupied = 0
+    init(label: String,capacity: Int) {
+        precondition((1...64).contains(capacity)); self.capacity = capacity
+        queue = DispatchQueue(label: label,qos: .userInitiated)
+    }
+    var inFlight: Int { lock.lock(); defer { lock.unlock() }; return occupied }
+    private func reserve() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard occupied < capacity else { return false }; occupied += 1; return true
+    }
+    private func release() { lock.lock(); occupied -= 1; lock.unlock() }
+    func perform<Value: Sendable>(job: FrameBlockingJob<Value>,_ work: @escaping @Sendable (FrameBlockingJob<Value>) throws -> Value) async throws -> Value {
+        try Task.checkCancellation()
+        // Only the one claimed caller may install a handler that cancels this
+        // job. A rejected duplicate must never acquire cancellation ownership.
+        guard job.claim() else { throw ProjectFailure.invalidProject }
+        let value = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard job.bind(continuation) else { return }
+                guard reserve() else { job.finish(.failure(WorkflowFailure.invalid("Frame checks are busy. Retry after an earlier capture finishes."))); return }
+                queue.async {
+                    defer { self.release() }
+                    do {
+                        try job.checkCancellation(); let value = try work(job); try job.checkCancellation()
+                        job.finish(.success(value))
+                    } catch { job.finish(.failure(error)) }
+                }
+            }
+        } onCancel: { job.cancel() }
+        try Task.checkCancellation(); return value
+    }
+}
+
 protocol ReviewFrameCapturing: Sendable {
     func capture(_ request: FrameCommentRequest, project: Project) async throws -> FrozenReviewFrame
     func cancel(_ id: UUID) async
@@ -12,11 +86,12 @@ actor ReviewFrameCaptureService: ReviewFrameCapturing {
     private var active: (UUID,AVAssetImageGenerator)?
     private var busyID: UUID?
     private var cancelled = false
-    func cancel(_ id: UUID) { if busyID == id { cancelled = true; active?.1.cancelAllCGImageGeneration() } }
+    private var gridJob: FrameBlockingJob<Void>?
+    func cancel(_ id: UUID) { if busyID == id { cancelled = true; gridJob?.cancel(); active?.1.cancelAllCGImageGeneration() } }
     func capture(_ request: FrameCommentRequest, project: Project) async throws -> FrozenReviewFrame {
         guard busyID == nil, request.target.projectID == project.id else { throw ProjectFailure.invalidProject }
         busyID = request.id; cancelled = false
-        defer { busyID = nil; active = nil; cancelled = false }
+        defer { gridJob?.cancel(); gridJob = nil; busyID = nil; active = nil; cancelled = false }
         try request.frame.validate(duration: request.target.duration)
         try VoiceReviewProvenance.check(request.target,project: project)
         let movie = try VoiceReviewProvenance.url(request.target.preview.relativePath,project: project)
@@ -57,14 +132,28 @@ actor ReviewFrameCaptureService: ReviewFrameCapturing {
         guard CMTimeCompare(mapping.target.start,.zero) == 0,
               CMTimeCompare(mapping.source.duration,mapping.target.duration) == 0,
               mapping.target.duration.isNumeric, abs(mapping.target.duration.seconds-Double(frames)*1001/24000) <= 0.001 else { throw WorkflowFailure.invalid("The saved movie's presentation clock is unsupported for frame comments.") }
+        try Task.checkCancellation(); guard !cancelled else { throw CancellationError() }
+        let job = FrameBlockingJob<Void>(); gridJob = job
+        try await FrameBlockingExecutor.frameChecks.perform(job: job) { job in
+            try Self.checkGrid(asset: asset,track: track,mapping: mapping,frames: frames,job: job)
+        }
+        try Task.checkCancellation(); guard !cancelled else { throw CancellationError() }
+    }
+    private nonisolated static func checkGrid(asset: AVAsset,track: AVAssetTrack,mapping: CMTimeMapping,frames: Int,job: FrameBlockingJob<Void>) throws {
+        try job.checkCancellation()
         let reader = try AVAssetReader(asset: asset), output = AVAssetReaderTrackOutput(track: track,outputSettings: nil)
+        // Reader creation, reads and cancellation stay on one owned queue.
+        // AVAssetReader forbids cancelReading racing copyNextSampleBuffer.
+        defer { reader.cancelReading() }
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { throw ProjectFailure.invalidProject }; reader.add(output)
+        try job.checkCancellation()
         guard reader.startReading() else { throw WorkflowFailure.invalid("The saved frame grid could not be read.") }
-        defer { reader.cancelReading() }
         var seen = Set<Int>()
-        while let sample = output.copyNextSampleBuffer() {
-            try Task.checkCancellation()
+        while true {
+            try job.checkCancellation()
+            guard let sample = output.copyNextSampleBuffer() else { break }
+            try job.checkCancellation()
             // AVFoundation may emit zero-sample decoder boundary markers.
             // They are not frames; completeness still requires every real PTS.
             if CMSampleBufferGetNumSamples(sample) == 0 { continue }
@@ -79,6 +168,7 @@ actor ReviewFrameCaptureService: ReviewFrameCapturing {
             guard index >= 0, index < frames, seen.insert(index).inserted,
                   CMTimeCompare(pts,CMTime(value: Int64(index)*1001,timescale: 24000)) == 0 else { throw ProjectFailure.invalidProject }
         }
+        try job.checkCancellation()
         guard reader.status == .completed, seen.count == frames else { throw WorkflowFailure.invalid("The saved movie has an incomplete or unsupported frame grid.") }
     }
 }
