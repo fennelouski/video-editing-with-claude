@@ -26,45 +26,28 @@ struct VoiceReviewView: View {
                 }
                 VStack(alignment: .leading,spacing: 8) {
                     Picker("Microphone", selection: Binding(get: { controller.selectedDeviceUID }, set: controller.chooseDevice)) {
-                        Text("Choose a microphone").tag("")
+                        Text("Automatic").tag("")
                         if !controller.selectedDeviceUID.isEmpty && !controller.devices.contains(where: { $0.id == controller.selectedDeviceUID }) {
                             Text("Selected microphone unavailable").tag(controller.selectedDeviceUID)
                         }
                         ForEach(controller.devices) { Text($0.name).tag($0.id) }
-                    }.disabled(controller.active).accessibilityIdentifier("voiceReviewMicrophone")
+                    }.disabled(controller.active || controller.voiceSetupPhase.working).accessibilityIdentifier("voiceReviewMicrophone")
                     Button("Refresh") { Task { await controller.refreshAccess() } }
-                        .disabled(controller.active).accessibilityIdentifier("voiceReviewRefreshInputs")
+                        .disabled(controller.active || controller.voiceSetupPhase.working).accessibilityIdentifier("voiceReviewRefreshInputs")
                 }
-                if let access = controller.access {
-                    if access.microphone != .authorized {
-                        Text(access.microphone == .denied ? "Microphone access is off. Enable Clauto in System Settings before recording." : "Microphone access has not been requested.")
-                            .font(ClautoDesign.caption)
-                        if access.microphone == .notDetermined {
-                            Button("Allow Microphone Access…") { Task { await controller.requestMicrophonePermission() } }
-                                .accessibilityIdentifier("voiceReviewGrantMicrophone")
-                        }
-                    }
-                    if access.speech != .authorized {
-                        Text(access.speech == .denied ? "Speech Recognition access is off. Enable Clauto in System Settings." : "Speech Recognition access has not been requested.")
-                            .font(ClautoDesign.caption)
-                        if access.speech == .notDetermined {
-                            Button("Allow Speech Recognition…") { Task { await controller.requestSpeechPermission() } }
-                                .accessibilityIdentifier("voiceReviewGrantSpeech")
-                        }
-                    }
-                    if !access.installedModel {
-                        Text("The local speech model for \(access.locale) is unavailable. Install it through Dictate, then refresh. Clauto will not start a download.")
-                            .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
-                    }
+                if needsSetup {
+                    voiceSetupControls
                 }
                 VStack(alignment: .leading,spacing: 8) {
                     HStack {
-                    Button("Mic On") { controller.start() }
-                        .disabled(!selected || !controller.canStart || controller.target?.versionID != versionID).accessibilityIdentifier("voiceReviewStart")
+                    if !needsSetup && !controller.active {
+                        Button("Start listening") { if !selected { select() }; controller.setUpVoiceReview(for: versionID) }
+                            .accessibilityIdentifier("voiceReviewStart")
+                    }
+                    if controller.canStop {
                     Button("Mic Off") { Task { _ = await controller.stop() } }
-                        .disabled(!controller.canStop || controller.mode == .finishing).accessibilityIdentifier("voiceReviewStop")
-                    Button("Cancel") { Task { _ = await controller.stop(cancel: true) } }
-                        .disabled(!controller.canStop || controller.mode == .finishing).accessibilityIdentifier("voiceReviewCancelCapture")
+                        .disabled(controller.mode == .finishing).accessibilityIdentifier("voiceReviewStop")
+                    }
                     }.buttonStyle(.bordered).controlSize(.small)
                     Text(controller.mode.rawValue.capitalized).font(ClautoDesign.caption)
                         .accessibilityLabel("Voice review status").accessibilityValue(controller.mode.rawValue)
@@ -73,7 +56,7 @@ struct VoiceReviewView: View {
                     ProgressView("Microphone level", value: Double(controller.level), total: 1)
                         .accessibilityIdentifier("voiceReviewMicrophoneLevel")
                 }
-                Text("On-device speech · transcripts and review history retained. Use headphones.")
+                Text("Feedback saves as you speak.")
                     .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 if let error = controller.error {
                     Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
@@ -135,6 +118,33 @@ struct VoiceReviewView: View {
                     }
                 }
             }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    private var needsSetup: Bool {
+        controller.voiceSetupPhase.working || controller.voiceSetupPhase == .failed ||
+        (!controller.active && (controller.access?.canStart != true || !controller.devices.contains { $0.id == controller.selectedDeviceUID }))
+    }
+    private var voiceSetupControls: some View {
+        VStack(alignment: .leading,spacing: 8) {
+            if controller.voiceSetupPhase.working {
+                Text(controller.voiceSetupPhase.label).font(ClautoDesign.caption).textSelection(.enabled)
+                if controller.voiceSetupPhase == .model {
+                    ProgressView(value: controller.voiceSetupProgress ?? 0,total: 1).accessibilityLabel("Preparing on-device speech")
+                    Text(controller.voiceSetupProgress.map { "\(Int($0*100))%" } ?? "Preparing…").font(ClautoDesign.caption).monospacedDigit()
+                } else { ProgressView().controlSize(.small) }
+                Button("Cancel setup") { controller.cancelVoiceSetup() }
+            } else {
+                Text(controller.voiceSetupIssue ?? "Allow access once. Clauto prepares voice recognition on this Mac.").font(ClautoDesign.caption).textSelection(.enabled)
+                if let permission = controller.voiceSetupPermission {
+                    Button("Allow "+(permission == "Microphone" ? "Microphone":"Speech Recognition")) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_"+permission) { NSWorkspace.shared.open(url) }
+                    }
+                }
+                Button(controller.voiceSetupPhase == .failed ? "Try again":"Get started") {
+                    if !selected { select() }
+                    controller.setUpVoiceReview(for: versionID)
+                }.accessibilityIdentifier("voiceReviewGetStarted")
+            }
         }
     }
 }

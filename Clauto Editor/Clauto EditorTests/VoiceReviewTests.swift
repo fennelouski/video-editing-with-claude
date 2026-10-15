@@ -37,13 +37,46 @@ private actor MockVoiceProvider: VoiceReviewDictating {
     var stopWaiter: CheckedContinuation<Void, Never>?
     var output: AsyncStream<VoiceDictationEvent>.Continuation?
     var finalEvents: [VoiceDictationEvent] = []
-    func access(locale: String) async -> VoiceReviewAccess { .init(microphone: .authorized, speech: .authorized, installedModel: true, locale: locale) }
-    func devices() async -> [VoiceInputDevice] { [.init(id: "mock-device", name: "Mock microphone")] }
-    func requestMicrophonePermission() async -> Bool { microphoneRequests += 1; return true }
-    func requestSpeechPermission() async -> Bool { speechRequests += 1; return true }
+    var microphone = VoicePermission.authorized, speech = VoicePermission.authorized
+    var installedModel = true, grantMicrophone = true, grantSpeech = true, holdModel = false, failModelOnce = false
+    var cancellationAsNSError = false
+    var modelPreparations = 0
+    var lastDeviceUID: String?
+    var inputDevices = [VoiceInputDevice(id: "mock-device",name: "Mock microphone",isDefault: true)]
+    var modelProgress: (@Sendable (Double) -> Void)?
+    var accessCalls = 0, heldAccessCall: Int?
+    var accessWaiter: CheckedContinuation<Void,Never>?
+    func access(locale: String) async -> VoiceReviewAccess {
+        accessCalls += 1
+        if accessCalls == heldAccessCall { await withCheckedContinuation { accessWaiter = $0 } }
+        return .init(microphone: microphone,speech: speech,installedModel: installedModel,locale: locale)
+    }
+    func holdSpeechAccess() { heldAccessCall = accessCalls+2 }
+    func releaseAccess() { accessWaiter?.resume(); accessWaiter = nil; heldAccessCall = nil }
+    var accessIsHeld: Bool { accessWaiter != nil }
+    func devices() async -> [VoiceInputDevice] { inputDevices }
+    func requestMicrophonePermission() async -> Bool { microphoneRequests += 1; microphone = grantMicrophone ? .authorized:.denied; return grantMicrophone }
+    func requestSpeechPermission() async -> Bool { speechRequests += 1; speech = grantSpeech ? .authorized:.denied; return grantSpeech }
+    func configureSetup(microphone: VoicePermission = .notDetermined,speech: VoicePermission = .notDetermined,installed: Bool = false,grantMicrophone: Bool = true,grantSpeech: Bool = true,holdModel: Bool = false,failModelOnce: Bool = false,devices: [VoiceInputDevice]? = nil) {
+        self.microphone = microphone; self.speech = speech; installedModel = installed
+        self.grantMicrophone = grantMicrophone; self.grantSpeech = grantSpeech; self.holdModel = holdModel; self.failModelOnce = failModelOnce
+        if let devices { inputDevices = devices }
+    }
+    func useFrameworkCancellationError() { cancellationAsNSError = true }
+    func releaseModel() { holdModel = false }
+    func emitModelProgress(_ value: Double) { modelProgress?(value) }
+    func prepareSpeech(locale: String,progress: @escaping @Sendable (Double) -> Void) async throws {
+        modelPreparations += 1; modelProgress = progress; progress(0.25)
+        do { while holdModel { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(5)) } }
+        catch { if cancellationAsNSError { throw NSError(domain: NSURLErrorDomain,code: NSURLErrorCancelled) }; throw error }
+        try Task.checkCancellation()
+        if failModelOnce { failModelOnce = false; throw WorkflowFailure.invalid("Synthetic offline model failure; try again.") }
+        installedModel = true; progress(1)
+    }
     func configure(holdStart: Bool = false, holdStop: Bool = false, finals: [VoiceDictationEvent] = []) { self.holdStart = holdStart; self.holdStop = holdStop; finalEvents = finals }
     func start(session: UUID, deviceUID: String, locale: String) async throws -> AsyncStream<VoiceDictationEvent> {
         starts += 1
+        lastDeviceUID = deviceUID
         if holdStart { await withCheckedContinuation { startWaiter = $0 } }
         let (stream, continuation) = AsyncStream<VoiceDictationEvent>.makeStream(); output = continuation
         return stream
@@ -667,6 +700,113 @@ struct VoiceReviewTests {
         let reopened = try ReviewMovieOpeningIdentity.capture(url: url,project: project)
         try reopened.check(fresh,project: project)
         #expect(throws: (any Error).self) { try ReviewMovieOpeningIdentity.capture(url: project.folder.deletingLastPathComponent().appendingPathComponent("outside.mp4"),project: project) }
+    }
+
+    @MainActor @Test func guidedVoiceSetupRequestsOncePreparesModelChoosesDefaultAndStartsVerifiedPlayer() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider()
+        await provider.configureSetup(devices: [.init(id: "other",name: "Other"),.init(id: "system-default",name: "System default",isDefault: true)])
+        let controller = try await controller(project: project,provider: provider,target: target)
+        #expect(await provider.starts == 0); #expect(await provider.modelPreparations == 0)
+        controller.setUpVoiceReview(for: target.versionID); controller.setUpVoiceReview(for: target.versionID)
+        try await waitFor { controller.mode == .recording }
+        #expect(controller.voiceSetupPhase == .ready && controller.selectedDeviceUID == "system-default")
+        #expect(await provider.microphoneRequests == 1); #expect(await provider.speechRequests == 1)
+        #expect(await provider.modelPreparations == 1); #expect(await provider.starts == 1)
+        #expect(await provider.lastDeviceUID == "system-default")
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func deniedSetupPermissionNeverPreparesAssetsOrStartsMicrophone() async throws {
+        for denyMicrophone in [true,false] {
+            let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+            let provider = MockVoiceProvider(); await provider.configureSetup(grantMicrophone: !denyMicrophone,grantSpeech: false)
+            let controller = try await controller(project: project,provider: provider,target: target)
+            controller.setUpVoiceReview(for: target.versionID); try await waitFor { controller.voiceSetupPhase == .failed }
+            #expect(controller.voiceSetupPermission == (denyMicrophone ? "Microphone":"SpeechRecognition"))
+            #expect(await provider.modelPreparations == 0); #expect(await provider.starts == 0)
+            #expect(controller.document.sessions.isEmpty)
+            #expect(await controller.flushForExit())
+        }
+    }
+
+    @MainActor @Test func guidedSetupRetriesFailedModelWithoutRepeatingGrantedConsent() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup(failModelOnce: true)
+        let controller = try await controller(project: project,provider: provider,target: target)
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { controller.voiceSetupPhase == .failed }
+        #expect(await provider.starts == 0)
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { controller.mode == .recording }
+        #expect(await provider.microphoneRequests == 1); #expect(await provider.speechRequests == 1)
+        #expect(await provider.modelPreparations == 2); #expect(await provider.starts == 1)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func cancelSetupAndQuitLeaveNoSessionAndIgnoreLateProgress() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup(holdModel: true)
+        let controller = try await controller(project: project,provider: provider,target: target)
+        await provider.useFrameworkCancellationError()
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { await provider.modelPreparations == 1 }
+        #expect(await controller.flushForExit())
+        await provider.emitModelProgress(0.9); await Task.yield()
+        #expect(controller.voiceSetupPhase == .idle && controller.voiceSetupProgress == nil)
+        #expect(await provider.starts == 0); #expect(controller.document.sessions.isEmpty)
+    }
+
+    @MainActor @Test func setupCompletionCannotStartAnotherPlayerAfterNavigation() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup(holdModel: true)
+        let controller = try await controller(project: project,provider: provider,target: target)
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { await provider.modelPreparations == 1 }
+        let other = try self.target(project: project,number: 2), token = UUID(); controller.willAttach(token)
+        await controller.attach(other,token: token,sampler: { .init(host: 101,seconds: 1,rate: 0,available: true) })
+        await provider.releaseModel(); try await waitFor { controller.voiceSetupPhase == .failed }
+        #expect(await provider.starts == 0); #expect(controller.document.sessions.isEmpty)
+        #expect(controller.target?.id == other.id)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func guidedSetupWithoutMicrophoneNeverPreparesAssetsAndCanRecover() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup(devices: [])
+        let controller = try await controller(project: project,provider: provider,target: target)
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { controller.voiceSetupPhase == .failed }
+        #expect(await provider.modelPreparations == 0); #expect(await provider.starts == 0)
+        #expect(controller.voiceSetupIssue?.contains("microphone") == true)
+        await provider.configureSetup(microphone: .authorized,speech: .authorized,devices: [.init(id: "connected",name: "Connected",isDefault: true)])
+        controller.setUpVoiceReview(for: target.versionID); try await waitFor { controller.mode == .recording }
+        #expect(await provider.microphoneRequests == 1); #expect(await provider.speechRequests == 1)
+        #expect(await provider.lastDeviceUID == "connected")
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func guidedSetupKeepsExplicitInputAndIgnoresInvalidAndLateProgress() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup(holdModel: true,devices: [.init(id: "chosen",name: "Chosen"),.init(id: "default",name: "Default",isDefault: true)])
+        let controller = try await controller(project: project,provider: provider,target: target)
+        controller.chooseDevice("chosen"); controller.setUpVoiceReview(for: target.versionID)
+        try await waitFor { await provider.modelPreparations == 1 }
+        await provider.emitModelProgress(.nan); await provider.emitModelProgress(5)
+        try await waitFor { controller.voiceSetupProgress == 1 }
+        controller.cancelVoiceSetup(); try await waitFor { controller.voiceSetupPhase == .idle }
+        await provider.emitModelProgress(0.3); await Task.yield()
+        #expect(controller.voiceSetupProgress == nil && controller.selectedDeviceUID == "chosen")
+        #expect(await provider.starts == 0)
+        #expect(await controller.flushForExit())
+    }
+
+    @MainActor @Test func cancellationDuringStatusReadCannotOpenTheNextPermissionPrompt() async throws {
+        let (root,project,_,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(); await provider.configureSetup()
+        let controller = try await controller(project: project,provider: provider,target: target)
+        await provider.holdSpeechAccess(); controller.setUpVoiceReview(for: target.versionID)
+        try await waitFor { await provider.accessIsHeld }
+        controller.cancelVoiceSetup(); await provider.releaseAccess()
+        try await waitFor { controller.voiceSetupPhase == .idle }
+        #expect(await provider.microphoneRequests == 1); #expect(await provider.speechRequests == 0)
+        #expect(await provider.modelPreparations == 0); #expect(await provider.starts == 0)
+        #expect(await controller.flushForExit())
     }
 
     @MainActor @Test func newTypedDraftRestoresInvalidRangesUnicodeActionAndFrozenTargetAfterRestart() async throws {

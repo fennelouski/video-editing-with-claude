@@ -421,3 +421,20 @@ This is another bounded, tested increment. It does not claim all product documen
 are implemented, production camera-layer editing is available, or real microphone
 and interactive VoiceOver acceptance has completed. Final source/test/build and
 independent-review receipts are task-local, alongside earlier milestone evidence.
+
+## Guided voice setup and app-first priority (15 October)
+
+Nathan requested completing Clauto's app workflows before further Pizza editing.
+The voice setup increment includes the recognition engine and an explicit guided
+Get started flow inside Clauto: native consent, input discovery, on-device asset
+preparation, progress, cancellation and retry. It replaces the external Dictate
+installation instruction. This changes the product's former no-install policy:
+an explicit setup action may prepare Apple's local assets; opening a project or
+ordinary capture cannot. Development has used synthetic providers without actual
+permission requests, model downloads or app launch.
+
+Continuous steering with approximately 120 seconds of feedback inactivity before
+packet preparation is the next requirement. Microphone off remains a privacy
+control; it must not be required to begin processing feedback. Broader original
+product requirements above and native accessibility acceptance remain tracked,
+and no publication or live external conversation service is implied.

@@ -147,3 +147,24 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
   interactive acceptance remain deferred while Nathan uses the foreground for
   taxes. The prior M5 synthetic component renders are retained only for that pin;
   they do not establish runtime acceptance of these new typed controls.
+
+## Milestone 7 — guided voice setup
+
+- The in-app Get started action requests native consent, finds an available input,
+  prepares Apple's on-device speech assets with progress and cancellation, then
+  starts review for the originally selected verified movie. The VoiceKit engine
+  is already included in Clauto. Another dictation app is no longer a prerequisite.
+- Retry preserves granted consent and a valid explicit input; otherwise setup
+  chooses the system default input. An unavailable input is explained in place.
+  Native macOS privacy denial exposes the relevant system privacy control, since
+  applications cannot grant themselves access after a user denies consent.
+- Opening a project never starts setup. Ordinary capture cannot request access,
+  install assets or silently fall back to a different microphone. Setup completion
+  after navigation cannot start the replacement player's microphone. Quit joins
+  cancellation and late progress cannot revive a cancelled setup.
+- Source and synthetic-provider tests run in the background. No model installation,
+  native consent request, live capture, app launch or foreground interaction was
+  performed during development. Those runtime checks remain pending.
+- Nathan's continuous steering requirement supersedes the earlier stop/finalize
+  workflow: live feedback should continue while roughly two minutes of inactivity
+  forms a packet for longer work. That next increment remains pending here.

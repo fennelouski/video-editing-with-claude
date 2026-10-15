@@ -2,8 +2,25 @@ import Foundation
 import AVFoundation
 import Speech
 import VoiceKit
+import CoreAudio
 
-struct VoiceInputDevice: Identifiable, Equatable, Sendable { let id: String; let name: String }
+struct VoiceInputDevice: Identifiable, Equatable, Sendable {
+    let id: String; let name: String; var isDefault = false
+}
+enum VoiceSetupPhase: String, Sendable {
+    case idle, microphone, speech, model, ready, failed
+    var working: Bool { [.microphone,.speech,.model].contains(self) }
+    var label: String {
+        switch self {
+        case .idle: "Set up voice review"
+        case .microphone: "Allow microphone access"
+        case .speech: "Allow speech recognition"
+        case .model: "Preparing on-device speech…"
+        case .ready: "Voice is ready"
+        case .failed: "Voice setup paused"
+        }
+    }
+}
 enum VoicePermission: String, Sendable { case authorized, notDetermined, denied }
 struct VoiceReviewAccess: Sendable {
     let microphone: VoicePermission
@@ -24,18 +41,29 @@ protocol VoiceReviewDictating: Sendable {
     func devices() async -> [VoiceInputDevice]
     func requestMicrophonePermission() async -> Bool
     func requestSpeechPermission() async -> Bool
+    func prepareSpeech(locale: String, progress: @escaping @Sendable (Double) -> Void) async throws
     func start(session: UUID, deviceUID: String, locale: String) async throws -> AsyncStream<VoiceDictationEvent>
     func stop(session: UUID, cancel: Bool) async
 }
+extension VoiceReviewDictating {
+    func prepareSpeech(locale: String, progress: @escaping @Sendable (Double) -> Void) async throws {
+        try Task.checkCancellation()
+        let installed = await access(locale: locale).installedModel; try Task.checkCancellation()
+        guard installed else { throw WorkflowFailure.invalid("On-device speech could not be prepared. Try again.") }
+        progress(1)
+    }
+}
 
 /// Reuses Dictate's local engine without global hotkeys, insertion, preferences,
-/// cleanup/providers, model installation, device fallback or implicit prompts.
+/// cleanup/providers or capture-time fallback/prompts. Guided setup explicitly
+/// prepares Apple's on-device assets inside this app before capture begins.
 actor DictateReviewAdapter: VoiceReviewDictating {
     private var owner: UUID?
     private var service: SpeechRecognitionService?
     private var tasks: [Task<Void, Never>] = []
     private var continuation: AsyncStream<VoiceDictationEvent>.Continuation?
     private var stopping: Task<Void, Never>?
+    private var preparingSpeech = false
 
     func access(locale: String) async -> VoiceReviewAccess {
         let microphone: VoicePermission
@@ -60,18 +88,55 @@ actor DictateReviewAdapter: VoiceReviewDictating {
     }
 
     func devices() async -> [VoiceInputDevice] {
-        await AudioInputSelection.availableDevices().compactMap { device in
+        var defaultDevice = AudioDeviceID(0), size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,mScope: kAudioObjectPropertyScopeGlobal,mElement: kAudioObjectPropertyElementMain)
+        _ = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),&address,0,nil,&size,&defaultDevice)
+        return await AudioInputSelection.availableDevices().compactMap { device in
             guard let number = UInt32(device.id), let uid = AudioInputSelection.deviceUID(for: number) else { return nil }
-            return VoiceInputDevice(id: uid, name: device.name)
+            return VoiceInputDevice(id: uid,name: device.name,isDefault: number == defaultDevice)
         }
     }
 
-    // These entry points are called only by separate, explicitly labeled buttons.
+    // The app's explicit Get started flow owns these native consent requests.
     func requestMicrophonePermission() async -> Bool { await AVCaptureDevice.requestAccess(for: .audio) }
     func requestSpeechPermission() async -> Bool { await SpeechRecognitionService.requestAuthorization() == .authorized }
 
+    func prepareSpeech(locale: String, progress: @escaping @Sendable (Double) -> Void) async throws {
+        try Task.checkCancellation()
+        guard owner == nil, !preparingSpeech else { throw WorkflowFailure.invalid("Voice setup is already running. Keep this window open.") }
+        preparingSpeech = true; defer { preparingSpeech = false }
+        let supportedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: locale))
+        try Task.checkCancellation()
+        guard let supported = supportedLocale else {
+            throw WorkflowFailure.invalid("On-device speech is unavailable for this language on this Mac.")
+        }
+        let transcriber = SpeechTranscriber(locale: supported,preset: .timeIndexedProgressiveTranscription)
+        let status = await AssetInventory.status(forModules: [transcriber]); try Task.checkCancellation()
+        if status == .installed { progress(1); return }
+        let installation = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]); try Task.checkCancellation()
+        guard let request = installation else {
+            let installed = await AssetInventory.status(forModules: [transcriber]); try Task.checkCancellation()
+            guard installed == .installed else { throw WorkflowFailure.invalid("Speech setup could not finish. Check your connection and try again.") }
+            progress(1); return
+        }
+        let updates = Task {
+            while !Task.isCancelled {
+                progress(max(0,min(1,request.progress.fractionCompleted)))
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { break }
+            }
+        }
+        defer { updates.cancel() }
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await request.downloadAndInstall(); try Task.checkCancellation()
+        } onCancel: { request.progress.cancel() }
+        let installed = await AssetInventory.status(forModules: [transcriber]); try Task.checkCancellation()
+        guard installed == .installed else { throw WorkflowFailure.invalid("Speech setup could not finish. Try again.") }
+        progress(1)
+    }
+
     func start(session id: UUID, deviceUID: String, locale: String) async throws -> AsyncStream<VoiceDictationEvent> {
-        guard owner == nil else { throw WorkflowFailure.invalid("Another voice review owns the microphone. Stop it before starting a new session.") }
+        guard owner == nil, !preparingSpeech else { throw WorkflowFailure.invalid("Voice is still being prepared. Try again when setup finishes.") }
         owner = id
         let local = SpeechRecognitionService(allowAuthorizationRequest: false, allowModelInstallation: false, allowDeviceFallback: false)
         service = local

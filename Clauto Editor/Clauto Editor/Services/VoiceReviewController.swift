@@ -67,6 +67,10 @@ final class VoiceReviewController {
     private(set) var candidatePlaybackID: UUID?
     private(set) var frameCommentLease: UUID?
     private(set) var playbackAvailable = false
+    private(set) var voiceSetupPhase: VoiceSetupPhase = .idle
+    private(set) var voiceSetupProgress: Double?
+    private(set) var voiceSetupIssue: String?
+    private(set) var voiceSetupPermission: String?
     var restructuringCards: Set<UUID> = []
     var cardInputs: [UUID:VoiceCardInput] = [:]
     func cardInput(for note: UUID) -> VoiceCardInput {
@@ -119,6 +123,8 @@ final class VoiceReviewController {
     @ObservationIgnored private var cardTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var typedDraftTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var typedSaveTasks: [UUID: Task<Bool, Never>] = [:]
+    @ObservationIgnored private var voiceSetupTask: Task<Void, Never>?
+    @ObservationIgnored private var voiceSetupGeneration: UUID?
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingStopCancelled = false
     @ObservationIgnored private var sessionID: UUID?
@@ -139,8 +145,8 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
-    var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
+    var hasPendingWork: Bool { voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
     var canPresentCandidate: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
@@ -187,6 +193,71 @@ final class VoiceReviewController {
     }
     func requestMicrophonePermission() async { _ = await provider.requestMicrophonePermission(); await refreshAccess() }
     func requestSpeechPermission() async { _ = await provider.requestSpeechPermission(); await refreshAccess() }
+
+    /// Called only by the explicit in-app Get started / Try again control.
+    /// Reading a project or starting ordinary capture never installs assets.
+    func setUpVoiceReview(for version: UUID) {
+        guard voiceSetupTask == nil, !active, frameCommentLease == nil, candidatePlaybackID == nil else { return }
+        let generation = UUID(), binding = viewToken
+        voiceSetupGeneration = generation; voiceSetupPhase = .microphone
+        voiceSetupProgress = nil; voiceSetupIssue = nil; voiceSetupPermission = nil
+        voiceSetupTask = Task { @MainActor in
+            defer { if voiceSetupGeneration == generation { voiceSetupTask = nil; voiceSetupGeneration = nil } }
+            do {
+                var state = await provider.access(locale: locale); try Task.checkCancellation()
+                if state.microphone != .authorized {
+                    let granted = await provider.requestMicrophonePermission(); try Task.checkCancellation()
+                    guard granted else {
+                        voiceSetupPermission = "Microphone"; throw WorkflowFailure.invalid("Allow Microphone access for Clauto, then continue here.")
+                    }
+                }
+                try Task.checkCancellation(); voiceSetupPhase = .speech
+                state = await provider.access(locale: locale); try Task.checkCancellation()
+                if state.speech != .authorized {
+                    let granted = await provider.requestSpeechPermission(); try Task.checkCancellation()
+                    guard granted else {
+                        voiceSetupPermission = "SpeechRecognition"; throw WorkflowFailure.invalid("Allow Speech Recognition for Clauto, then continue here.")
+                    }
+                }
+                try Task.checkCancellation(); devices = await provider.devices(); try Task.checkCancellation()
+                guard !devices.isEmpty else { throw WorkflowFailure.invalid("Connect a microphone, then try again. Clauto will find it for you.") }
+                try Task.checkCancellation(); voiceSetupPhase = .model; voiceSetupProgress = 0
+                try await provider.prepareSpeech(locale: locale) { [weak self] value in
+                    guard value.isFinite else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.voiceSetupGeneration == generation, self.voiceSetupPhase == .model else { return }
+                        self.voiceSetupProgress = max(0,min(1,value))
+                    }
+                }
+                try Task.checkCancellation(); await refreshAccess(); try Task.checkCancellation()
+                guard access?.canStart == true else { throw WorkflowFailure.invalid("Speech setup could not finish. Try again.") }
+                if !devices.contains(where: { $0.id == selectedDeviceUID }) {
+                    guard let device = devices.first(where: \.isDefault) ?? devices.first else { throw WorkflowFailure.invalid("Connect a microphone, then try again. Clauto will find it for you.") }
+                    chooseDevice(device.id)
+                }
+                // The user may navigate during native consent or installation.
+                // Never start a replacement player's microphone by completion time.
+                let deadline = ContinuousClock.now + .seconds(5)
+                while viewToken == binding, target?.versionID != version || !playbackAvailable {
+                    try Task.checkCancellation()
+                    guard ContinuousClock.now < deadline else { throw WorkflowFailure.invalid("Wait for this video to finish loading, then try again.") }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                guard binding != nil, viewToken == binding, target?.versionID == version else { throw WorkflowFailure.invalid("The selected video changed. Choose the video you want to review, then continue.") }
+                try Task.checkCancellation(); voiceSetupProgress = 1; voiceSetupPhase = .ready
+                start()
+            } catch is CancellationError {
+                voiceSetupPhase = .idle; voiceSetupProgress = nil
+            } catch {
+                if Task.isCancelled { voiceSetupPhase = .idle; voiceSetupProgress = nil }
+                else {
+                    voiceSetupPhase = .failed
+                    voiceSetupIssue = (error as? WorkflowFailure)?.localizedDescription ?? "Voice setup could not finish. Check your connection and try again."
+                }
+            }
+        }
+    }
+    func cancelVoiceSetup() { voiceSetupTask?.cancel() }
 
     func willAttach(_ token: UUID) {
         if let old = clockSampler?() { record(old, token: viewToken) }
@@ -492,6 +563,7 @@ final class VoiceReviewController {
         kickPreparation()
     }
     func flushForExit() async -> Bool {
+        voiceSetupTask?.cancel(); await voiceSetupTask?.value
         await cancelRender()
         _ = await stop()
         for task in Array(cardTasks.values) { await task.value }
