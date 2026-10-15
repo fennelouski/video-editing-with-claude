@@ -158,6 +158,10 @@ struct VoiceReviewNote: Codable, Identifiable, Sendable {
     var state: VoiceNoteState = .provisional
     var issues: [String] = []
     var history: [VoiceNoteHistory] = []
+    var lineage: VoiceCardLineage?
+    var supersededBy: [UUID]?
+    var captureOrdinal: Int64?
+    var capturePath: [Int]?
     var effectiveAnchor: VoiceNoteAnchor? { resolvedAnchor ?? onset }
 }
 
@@ -235,6 +239,7 @@ struct VoiceReviewDocument: Codable, Sendable {
     var notes: [VoiceReviewNote] = []
     var candidates: [VoiceRevisionCandidate] = []
     var processingJobID: UUID?
+    var cardOperations: [VoiceCardRequest]?
     var drafts: [VoiceTranscriptDraft]? // Optional for ledgers created before draft retention.
 
     mutating func speech(_ result: VoiceSpeechResult, sessionID: UUID, attemptID: UUID, now: Date) throws {
@@ -242,7 +247,12 @@ struct VoiceReviewDocument: Codable, Sendable {
               [.recording,.finishing,.retrying].contains(session.state) else { return }
         guard !result.segmentID.isEmpty, result.segmentID.count < 256, result.text.count <= 20_000 else { throw ProjectFailure.invalidProject }
         if let i = notes.firstIndex(where: { $0.sessionID == sessionID && $0.segmentID == result.segmentID }) {
-            guard notes[i].state != .cancelled else { return }
+            if notes[i].state == .cancelled {
+                if !(notes[i].supersededBy ?? []).isEmpty, notes[i].history.last?.text != result.text {
+                    notes[i].history.append(.init(date: now,source: "Late ASR retained after card restructuring",text: result.text,revision: notes[i].revision))
+                }
+                return
+            }
             if notes[i].isFinal || notes[i].manuallyEdited {
                 if result.text != notes[i].transcript { notes[i].history.append(.init(date: now, source: "Late ASR ignored", text: result.text, revision: notes[i].revision)) }
                 return
@@ -256,6 +266,7 @@ struct VoiceReviewDocument: Codable, Sendable {
             guard notes.count < 10_000 else { throw WorkflowFailure.invalid("This voice review has reached its note limit. Start a new review project before recording more.") }
             var note = VoiceReviewNote(id: UUID(), sessionID: sessionID, segmentID: result.segmentID, audioStart: result.audioStart,
                 audioEnd: result.audioEnd, created: now, transcript: result.text, text: result.text, isFinal: result.isFinal, intent: .infer(result.text))
+            note.captureOrdinal = captureOrder(note,fallback: notes.count)
             note.history.append(.init(date: now, source: result.isFinal ? "Final ASR" : "Partial ASR", text: result.text, revision: 1)); notes.append(note)
         }
         refresh()
@@ -264,6 +275,13 @@ struct VoiceReviewDocument: Codable, Sendable {
     mutating func refresh() {
         for i in notes.indices where notes[i].state != .cancelled {
             var issues: [String] = []
+            if notes[i].lineage != nil {
+                if notes[i].resolvedAnchor == nil { issues.append("Confirm the new card's exact saved version and range; original anchors are retained in history.") }
+                if notes[i].action == nil { issues.append("Choose Protect or Remove for this new card. Parent actions were not expanded.") }
+            }
+            if notes[i].resolvedAnchor == nil, notes[i].text.range(of: #"\b(earlier|back there|before that|previous (shot|part|bit)|that previous)\b"#,options: [.regularExpression,.caseInsensitive]) != nil {
+                issues.append("This refers to another moment. Choose its exact saved version and time.")
+            }
             if notes[i].resolvedAnchor == nil {
                 if let session = sessions.first(where: { $0.id == notes[i].sessionID }),
                    let start = notes[i].audioStart, let end = notes[i].audioEnd,

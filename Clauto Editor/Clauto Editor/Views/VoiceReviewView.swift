@@ -111,10 +111,10 @@ struct VoiceReviewView: View {
                     ProgressView(controller.renderProgress)
                     Button("Cancel candidate render") { Task { await controller.cancelRender() } }.accessibilityIdentifier("voiceCancelCandidateRender")
                 }
-                ForEach(Array(controller.document.notes.suffix(visibleNotes).reversed())) { note in
+                ForEach(Array(controller.visibleCards.suffix(visibleNotes).reversed())) { note in
                     VoiceReviewNoteRow(controller: controller, note: note, versionID: versionID, seek: seek)
                 }
-                if controller.document.notes.count > visibleNotes {
+                if controller.visibleCards.count > visibleNotes {
                     Button("Show earlier feedback") { visibleNotes += 50 }.accessibilityIdentifier("voiceReviewEarlierFeedback")
                 }
                 if !controller.document.candidates.isEmpty {
@@ -151,21 +151,34 @@ private struct VoiceReviewNoteRow: View {
     @State private var end: String
     @State private var baseRevision: Int
     @State private var dirty = false
+    @Bindable private var cardInput: VoiceCardInput
 
     init(controller: VoiceReviewController, note: VoiceReviewNote, versionID: UUID, seek: @escaping (Double) -> Void) {
         self.controller = controller; self.note = note; self.versionID = versionID; self.seek = seek
+        self.cardInput = controller.cardInput(for: note.id)
         let draft = controller.drafts[note.id]
         _text = State(initialValue: draft?.text ?? note.text); _intent = State(initialValue: draft?.intent ?? note.intent)
         _action = State(initialValue: draft?.action ?? note.action)
-        _targetID = State(initialValue: draft?.targetID ?? note.effectiveAnchor?.targetID)
+        _targetID = State(initialValue: draft?.targetID ?? note.effectiveAnchor?.targetID ?? note.lineage?.parentAnchors.first?.targetID)
         _start = State(initialValue: draft?.start ?? note.effectiveAnchor.map { String(format: "%.6f", $0.seconds) } ?? "")
         _end = State(initialValue: draft?.end ?? note.effectiveAnchor?.endSeconds.map { String(format: "%.6f", $0) } ?? "")
         _baseRevision = State(initialValue: draft?.baseRevision ?? note.revision)
         _dirty = State(initialValue: draft != nil)
     }
+    private var retired: Bool { !(note.supersededBy ?? []).isEmpty }
+    private var nextCard: VoiceReviewNote? {
+        let cards = controller.document.orderedVisibleNotes.filter { $0.state != .cancelled }
+        guard let index = cards.firstIndex(where: { $0.id == note.id }), index+1 < cards.count else { return nil }
+        let next = cards[index+1]
+        return next.isFinal && next.effectiveAnchor?.targetID == note.effectiveAnchor?.targetID ? next : nil
+    }
     private var boundTarget: VoiceReviewTarget? { controller.document.targets.first { $0.id == note.effectiveAnchor?.targetID } }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if retired {
+                Text("This card was merged or split. Your unsaved draft is retained here for copying.").font(.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled)
+                Button("Discard retained draft") { controller.discardDraft(note.id) }
+            }
             HStack {
                 Text(boundTarget.map { "v\($0.versionNumber)" } ?? "Timing needs resolution").font(ClautoDesign.body)
                 if let anchor = note.effectiveAnchor {
@@ -176,48 +189,76 @@ private struct VoiceReviewNoteRow: View {
                 Spacer()
                 Text(note.state.rawValue).font(ClautoDesign.caption).foregroundStyle(note.issues.isEmpty ? ClautoDesign.quiet : ClautoDesign.ember)
             }
-            TextEditor(text: Binding(get: { text }, set: { text = $0; changed() }))
-                .frame(minHeight: 58, maxHeight: 110).font(ClautoDesign.body)
-                .accessibilityLabel("Voice feedback transcript").accessibilityIdentifier("voiceReviewTranscript-" + note.id.uuidString)
+            if retired {
+                Text(text).font(ClautoDesign.body).textSelection(.enabled)
+                    .accessibilityLabel("Retained voice feedback draft")
+            } else {
+                TextEditor(text: Binding(get: { text }, set: { text = $0; changed() }))
+                    .frame(minHeight: 58, maxHeight: 110).font(ClautoDesign.body)
+                    .accessibilityLabel("Voice feedback transcript").accessibilityIdentifier("voiceReviewTranscript-" + note.id.uuidString)
+            }
             Picker("Meaning", selection: Binding(get: { intent }, set: { intent = $0; changed() })) {
                 Text("Protect / like").tag(VoiceIntent.protect)
                 Text("Change / dislike").tag(VoiceIntent.change)
                 Text("Clarify").tag(VoiceIntent.unclear)
-            }.accessibilityIdentifier("voiceReviewIntent-" + note.id.uuidString)
+            }.disabled(retired).accessibilityIdentifier("voiceReviewIntent-" + note.id.uuidString)
             Picker("Action", selection: Binding(get: { action },set: { action = $0; changed() })) {
                 Text("Choose action").tag(Optional<VoiceRangeAction>.none)
                 Text("Protect range").tag(Optional(VoiceRangeAction.protect))
                 Text("Remove range").tag(Optional(VoiceRangeAction.remove))
-            }.accessibilityIdentifier("voiceReviewAction-"+note.id.uuidString)
+            }.disabled(retired).accessibilityIdentifier("voiceReviewAction-"+note.id.uuidString)
             ForEach(note.issues, id: \.self) { Text($0).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
-            if dirty && baseRevision != note.revision {
+            if !retired && dirty && baseRevision != note.revision {
                 Text("This note changed while you edited. Your draft is retained; reload the latest note before saving.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
                 Button("Reload latest note") { controller.discardDraft(note.id); reload() }
             }
             HStack {
-                Button("Save") { save(anchor: nil) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseRevision != note.revision)
-                Button("Cancel") { Task { await controller.cancel(note) } }.disabled(note.state == .cancelled)
-                Button("Retry") { Task { await controller.retry(note) } }.disabled(!note.isFinal || ![.failed,.cancelled].contains(note.state))
+                Button("Save") { save(anchor: nil) }.disabled(retired || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || baseRevision != note.revision)
+                Button("Cancel") { Task { await controller.cancel(note) } }.disabled(retired || note.state == .cancelled)
+                Button("Retry") { Task { await controller.retry(note) } }.disabled(retired || !note.isFinal || ![.failed,.cancelled].contains(note.state))
             }.buttonStyle(.bordered).controlSize(.small)
+            if !retired {
+                ClautoDisclosure("Merge / split") {
+                    if let next = nextCard {
+                        Button("Merge with next card") {
+                            controller.restructureCards(.init(id: UUID(),kind: .merge,parents: [.init(id: note.id,revision: note.revision),.init(id: next.id,revision: next.revision)]))
+                        }.disabled(dirty || !note.isFinal)
+                    }
+                    TextField("Split after this opening phrase",text: $cardInput.splitAfter)
+                        .accessibilityLabel("Split card after opening phrase")
+                    Button("Split card") {
+                        let prefix = cardInput.splitAfter
+                        guard !prefix.isEmpty, text.hasPrefix(prefix) else { controller.error = "Enter the opening phrase exactly; both new cards need text."; return }
+                        controller.restructureCards(.init(id: UUID(),kind: .split,parents: [.init(id: note.id,revision: note.revision)],splitUTF16: prefix.utf16.count))
+                    }.disabled(dirty || !note.isFinal || cardInput.splitAfter.isEmpty)
+                    Text("Original words and anchors stay in history. Confirm each new card's range and action.").font(.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
+                }
+            }
             ClautoDisclosure("Timing and transcript history") {
                 Picker("Saved version for this feedback", selection: Binding(get: { targetID }, set: { targetID = $0; changed() })) {
                     Text("Choose a saved version").tag(Optional<UUID>.none)
                     ForEach(controller.document.targets) { Text("v\($0.versionNumber)").tag(Optional($0.id)) }
-                }
+                }.disabled(retired)
                 VStack(alignment: .leading,spacing: 8) {
                     TextField("Start seconds", text: Binding(get: { start }, set: { start = $0; changed() })).accessibilityLabel("Feedback start seconds")
                     TextField("End seconds (optional)", text: Binding(get: { end }, set: { end = $0; changed() })).accessibilityLabel("Feedback end seconds, optional")
                     Button("Resolve timing and save") {
                         guard let targetID, let seconds = Double(start), end.isEmpty || Double(end) != nil else { controller.error = "Choose the exact saved version and valid seconds."; return }
                         save(anchor: .init(targetID: targetID, seconds: seconds, endSeconds: end.isEmpty ? nil : Double(end)))
-                    }.disabled(baseRevision != note.revision)
+                    }.disabled(retired || baseRevision != note.revision)
+                }.disabled(retired)
+                if let lineage = note.lineage {
+                    Text("\(lineage.operation.kind.rawValue.capitalized) · \(lineage.operation.parents.count) original cards").font(.caption)
+                    ForEach(Array(lineage.parentAnchors.enumerated()),id: \.offset) { _,anchor in
+                        Text(String(format: "Original anchor %.6f%@",anchor.seconds,anchor.endSeconds.map { String(format: "–%.6f",$0) } ?? "")).font(.caption.monospacedDigit()).textSelection(.enabled)
+                    }
                 }
                 Text("Original ASR: " + note.transcript).font(ClautoDesign.caption).textSelection(.enabled)
                 ForEach(note.history) { entry in
                     Text("\(entry.source) · r\(entry.revision): \(entry.text)").font(ClautoDesign.caption).textSelection(.enabled)
                 }
             }
-        }.padding(10).background(ClautoDesign.paper).accessibilityElement(children: .contain)
+        }.disabled(controller.restructuringCards.contains(note.id)).padding(10).background(ClautoDesign.paper).accessibilityElement(children: .contain)
             .accessibilityLabel("Voice feedback, " + (boundTarget.map { "version \($0.versionNumber)" } ?? "unresolved version"))
             .onChange(of: note.revision) { if !dirty { reload() } }
     }

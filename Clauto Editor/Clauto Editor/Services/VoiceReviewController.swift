@@ -21,6 +21,8 @@ struct VoiceLivePlayhead: Sendable {
     var saving = false
 }
 
+@MainActor @Observable final class VoiceCardInput { var splitAfter = "" }
+
 @MainActor @Observable
 final class VoiceReviewController {
     enum Mode: String { case idle, starting, recording, finishing, failed }
@@ -38,6 +40,28 @@ final class VoiceReviewController {
     private(set) var renderProgress = ""
     private(set) var candidatePlaybackID: UUID?
     private(set) var frameCommentLease: UUID?
+    var restructuringCards: Set<UUID> = []
+    var cardInputs: [UUID:VoiceCardInput] = [:]
+    func cardInput(for note: UUID) -> VoiceCardInput {
+        if let value = cardInputs[note] { return value }
+        let value = VoiceCardInput(); cardInputs[note] = value; return value
+    }
+    var visibleCards: [VoiceReviewNote] {
+        let visible = document.orderedVisibleNotes
+        let retained = document.notes.filter { note in !(note.supersededBy ?? []).isEmpty && drafts[note.id] != nil }
+        // In-memory drafts take precedence over delayed disk acknowledgements.
+        return visible + retained
+    }
+    func restructureCards(_ request: VoiceCardRequest) {
+        let ids = Set(request.parents.map(\.id))
+        guard restructuringCards.isDisjoint(with: ids), ids.allSatisfy({ drafts[$0] == nil }) else { error = "Finish or discard these card drafts before changing their structure."; return }
+        restructuringCards.formUnion(ids)
+        let write = enqueue(retainFailure: false) { try await $0.restructureCards(request) }
+        cardTasks[request.id] = Task { @MainActor in
+            defer { restructuringCards.subtract(ids); cardTasks[request.id] = nil }
+            _ = await write.value
+        }
+    }
     var typedComposers: [UUID:VoiceTypedComposer] = [:]
     func typedComposer(for version: UUID) -> VoiceTypedComposer {
         if let value = typedComposers[version] { return value }
@@ -62,6 +86,7 @@ final class VoiceReviewController {
     @ObservationIgnored private var stopTask: Task<Bool, Never>?
     @ObservationIgnored private var prepareTask: Task<Void, Never>?
     @ObservationIgnored private var draftTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var cardTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var pendingStopCancelled = false
     @ObservationIgnored private var sessionID: UUID?
@@ -81,7 +106,7 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
-    var hasPendingWork: Bool { sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
+    var hasPendingWork: Bool { !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
     var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
@@ -345,10 +370,11 @@ final class VoiceReviewController {
     func flushForExit() async -> Bool {
         await cancelRender()
         _ = await stop()
+        for task in Array(cardTasks.values) { await task.value }
         for task in Array(draftTasks.values) { await task.value }
         _ = await writes?.value
         await retryStorage()
         prepareTask?.cancel(); await prepareTask?.value; debounceTask?.cancel()
-        return sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty
+        return sessionID == nil && !active && pendingWrites == 0 && unsavedActions == 0 && draftTasks.isEmpty && restructuringCards.isEmpty && cardTasks.isEmpty
     }
 }

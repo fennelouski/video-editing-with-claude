@@ -56,7 +56,10 @@ actor VoiceReviewRepository {
     }
 
     private func validate(_ document: VoiceReviewDocument) throws {
+        try document.validateCardLineage()
         guard document.schemaVersion == 1, document.projectID == project.id, document.sequence >= 0,
+              (document.cardOperations ?? []).count <= 10_000,
+              Set((document.cardOperations ?? []).map(\.id)).count == (document.cardOperations ?? []).count,
               document.sessions.count <= 1_000, document.targets.count <= 1_000, document.notes.count <= 10_000,
               document.candidates.count <= 10_000,
               (document.drafts ?? []).count <= 10_000,
@@ -164,7 +167,7 @@ actor VoiceReviewRepository {
 
     func edit(note id: UUID, expectedRevision: Int, text: String, intent: VoiceIntent, anchor: VoiceNoteAnchor?, action: VoiceRangeAction? = nil) throws -> VoiceReviewDocument {
         try locked { document in
-            guard let i = document.notes.firstIndex(where: { $0.id == id && $0.revision == expectedRevision }), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 20_000 else { throw WorkflowFailure.invalid("This note changed. Reload its latest transcript before saving your edit.") }
+            guard let i = document.notes.firstIndex(where: { $0.id == id && $0.revision == expectedRevision }), (document.notes[i].supersededBy ?? []).isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 20_000 else { throw WorkflowFailure.invalid("This note changed. Reload its latest transcript before saving your edit.") }
             if let anchor {
                 guard let target = document.targets.first(where: { $0.id == anchor.targetID }), anchor.seconds.isFinite, anchor.seconds >= 0, anchor.seconds <= target.duration,
                       anchor.endSeconds == nil || (anchor.endSeconds!.isFinite && anchor.endSeconds! >= anchor.seconds && anchor.endSeconds! <= target.duration) else { throw WorkflowFailure.invalid("Choose a valid saved version and time range for this note.") }
@@ -190,9 +193,13 @@ actor VoiceReviewRepository {
 
     func retry(note id: UUID) throws -> VoiceReviewDocument {
         try locked { document in
-            guard let i = document.notes.firstIndex(where: { $0.id == id }), document.notes[i].isFinal else { throw WorkflowFailure.invalid("Finalize or edit the saved transcript before retrying preparation. Starting a microphone requires a separate Start action.") }
+            guard let i = document.notes.firstIndex(where: { $0.id == id }), document.notes[i].isFinal, (document.notes[i].supersededBy ?? []).isEmpty else { throw WorkflowFailure.invalid("Finalize or edit the saved transcript before retrying preparation. Starting a microphone requires a separate Start action.") }
             document.notes[i].revision += 1; document.notes[i].state = .ready; document.refresh(); return document
         }
+    }
+
+    func restructureCards(_ request: VoiceCardRequest) throws -> VoiceReviewDocument {
+        try locked { document in try document.restructureCards(request); return document }
     }
 
     func claim(now: Date = Date()) throws -> VoiceRevisionCandidate? {
