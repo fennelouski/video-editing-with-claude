@@ -74,3 +74,16 @@ import checkout, native-tools WIP, NAS project media, and prior audit receipts.
   replaced by late automatic groups. Original candidate and watched-version
   isolation continue to apply. No microphone, permission request, model download,
   external speech service or private footage is used by these synthetic checks.
+
+## Player identity and rate guard correction
+
+- Player creation pins the movie's path and fast file signature before creating
+  its decoder. The asynchronously prepared full target must match that opening
+  snapshot and a fresh signature check before an endpoint can publish.
+- Explicit voice selection uses the immutable target held by the watched player;
+  it does not recompute a new disk identity for an already-open decoder. Changed
+  saved media refuses binding and leaves the microphone off.
+- Rates outside the supported signed −4…4 ledger range, including nonfinite
+  values, record an unavailable interval with no target. Original feedback stays
+  durable and unresolved, and returning to a supported clock creates a boundary.
+  Such a rate cannot poison the durable save queue or supply a guessed anchor.

@@ -14,6 +14,14 @@ enum VoiceReviewProvenance {
             modifiedSeconds: Int64(info.st_mtimespec.tv_sec), modifiedNanoseconds: Int64(info.st_mtimespec.tv_nsec),
             changedSeconds: Int64(info.st_ctimespec.tv_sec), changedNanoseconds: Int64(info.st_ctimespec.tv_nsec))
     }
+    static func fileSignature(_ relative: String,project: Project) throws -> SourceFileSignature {
+        let file = try url(relative,project: project)
+        var info = stat()
+        guard lstat(file.path,&info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+            throw WorkflowFailure.invalid("The watched movie is missing or disconnected.")
+        }
+        return signature(info)
+    }
     static func inspect(_ relative: String, project: Project) throws -> VoiceArtifact {
         let file = try url(relative, project: project), fd = Darwin.open(file.path, O_RDONLY | O_NOFOLLOW)
         guard fd >= 0 else { throw WorkflowFailure.invalid("The selected edit is missing or disconnected.") }
@@ -46,5 +54,25 @@ enum VoiceReviewProvenance {
               try inspect(target.approvedScriptPath, project: project).sha256 == target.approvedScriptSHA256,
               try inspect(target.approvedPlanPath, project: project).sha256 == target.approvedPlanSHA256,
               try inspect(folder + "inputs/brief.md", project: project).sha256 == target.approvedBriefSHA256 else { throw WorkflowFailure.invalid("The saved version's approved inputs changed. Resolve its provenance before preparing another candidate.") }
+    }
+}
+
+/// Fast opening identity, captured before the decoder is created. Full hashing
+/// stays in the asynchronous target preparation; both snapshots must agree.
+struct ReviewMovieOpeningIdentity: Sendable {
+    let relativePath: String
+    let signature: SourceFileSignature
+    static func capture(url: URL,project: Project) throws -> Self {
+        let root = project.folder.standardizedFileURL.path+"/", path = url.standardizedFileURL.path
+        guard path.hasPrefix(root) else { throw ProjectFailure.invalidProject }
+        let relative = String(path.dropFirst(root.count))
+        return .init(relativePath: relative,signature: try VoiceReviewProvenance.fileSignature(relative,project: project))
+    }
+    func check(_ target: VoiceReviewTarget,project: Project) throws {
+        guard target.projectID == project.id, target.preview.relativePath == relativePath,
+              target.preview.signature == signature,
+              try VoiceReviewProvenance.fileSignature(relativePath,project: project) == signature else {
+            throw WorkflowFailure.invalid("The movie changed while its player opened. Reopen the saved version before attaching feedback.")
+        }
     }
 }

@@ -614,4 +614,58 @@ struct VoiceReviewTests {
         #expect(await controller.flushForExit())
     }
 
+    @MainActor @Test func unsupportedPlaybackRatesRetainTranscriptsWithoutPoisoningStorage() async throws {
+        let (root,project,repository,target) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), token = UUID()
+        let controller = try await controller(project: project,provider: provider,target: target,token: token)
+        controller.start(); try await waitFor { controller.mode == .recording }
+        controller.record(.init(host: 100.1,seconds: 10,rate: 16,available: true),token: token)
+        controller.record(.init(host: 100.4,seconds: 10,rate: .nan,available: true),token: token)
+        await provider.emit(.clock(audioStart: 0,duration: 1,hostStart: 100.1))
+        await provider.emit(.speech(.init(segmentID: "unsupported-rate",text: "Keep the original feedback",isFinal: true,audioStart: 0.1,audioEnd: 0.2)))
+        try await waitFor { controller.document.notes.count == 1 }
+        #expect(controller.document.notes[0].state == .needsResolution && controller.unsavedActions == 0)
+        controller.record(.init(host: 101.2,seconds: 10,rate: 0,available: true),token: token)
+        #expect(await controller.stop())
+        #expect(await controller.flushForExit())
+        let reopened = try await repository.load()
+        #expect(reopened.notes[0].text == "Keep the original feedback" && reopened.notes[0].state == .needsResolution)
+        #expect(reopened.sessions[0].playhead.allSatisfy { $0.rate.isFinite && (-4...4).contains($0.rate) })
+        #expect(reopened.sessions[0].playhead.contains { $0.targetID == nil })
+    }
+    @MainActor @Test func attachingFrozenPlayerIdentityAfterFileChangeRefusesFreshRebinding() async throws {
+        let (root,project,_,original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(), controller = try VoiceReviewController(project: project,provider: provider)
+        await controller.load()
+        let movie = project.folder.appendingPathComponent(original.preview.relativePath)
+        try Data("Synthetic changed movie after decoder opened".utf8).write(to: movie)
+        let token = UUID(); controller.willAttach(token)
+        await controller.attach(original,token: token,sampler: { .init(host: 100,seconds: 10,rate: 0,available: true) })
+        #expect(controller.target == nil && controller.error != nil && !controller.canStart)
+        #expect(controller.document.notes.isEmpty && controller.document.sessions.isEmpty)
+        #expect(await provider.starts == 0)
+        #expect(await provider.microphoneRequests == 0)
+        #expect(await controller.flushForExit())
+    }
+
+    @Test func decoderOpeningIdentityRejectsReplacementBeforeAsyncTargetPreparation() async throws {
+        let (root,project,_,original) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = project.folder.appendingPathComponent(original.preview.relativePath)
+        let opening = try ReviewMovieOpeningIdentity.capture(url: url,project: project)
+        try opening.check(original,project: project)
+        // Same bytes/hash, different file identity between decoder opening and
+        // the asynchronous full target lookup: neither voice nor frame endpoint
+        // may publish this new target for the old decoder.
+        let bytes = try Data(contentsOf: url); try bytes.write(to: url,options: .atomic)
+        let freshPreview = try VoiceReviewProvenance.inspect(original.preview.relativePath,project: project)
+        #expect(freshPreview.sha256 == original.preview.sha256 && freshPreview.signature != original.preview.signature)
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String:Any])
+        object["preview"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(freshPreview))
+        let fresh = try JSONDecoder().decode(VoiceReviewTarget.self,from: JSONSerialization.data(withJSONObject: object))
+        #expect(throws: (any Error).self) { try opening.check(fresh,project: project) }
+        let reopened = try ReviewMovieOpeningIdentity.capture(url: url,project: project)
+        try reopened.check(fresh,project: project)
+        #expect(throws: (any Error).self) { try ReviewMovieOpeningIdentity.capture(url: project.folder.deletingLastPathComponent().appendingPathComponent("outside.mp4"),project: project) }
+    }
+
 }

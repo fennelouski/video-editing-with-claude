@@ -11,6 +11,7 @@ import Observation
     let version: CutVersion
     let url: URL
     let player: AVPlayer
+    private let openingMovie: ReviewMovieOpeningIdentity?
     let control = ReviewPlaybackControl()
     private(set) var endpoint: ReviewPlaybackEndpoint?
     private(set) var playhead = 0.0
@@ -34,10 +35,14 @@ import Observation
     init(project: Project,version: CutVersion,url: URL,store: EditorStore,ownerID: UUID) {
         self.ownerID = ownerID
         self.project = project; self.version = version; self.url = url; self.store = store
-        player = AVPlayer(url: url); control.player = player
+        openingMovie = try? ReviewMovieOpeningIdentity.capture(url: url,project: project)
+        player = openingMovie == nil ? AVPlayer():AVPlayer(url: url); control.player = player
+        if openingMovie == nil { issue = "Preview unavailable. Reconnect its drive, then reopen this version." }
         control.onSeekRequested = { [weak self] in self?.record(.seekRequested) }
         control.onSeekCompleted = { [weak self] completed in self?.record(completed ? .seekCompleted : .unavailable) }
-        observations.append(player.currentItem!.observe(\.status,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
+        if let item = player.currentItem {
+            observations.append(item.observe(\.status,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
+        }
         observations.append(player.observe(\.rate,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
         observations.append(player.observe(\.timeControlStatus,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
         clockObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1,preferredTimescale: 600),queue: .main) { [weak self] _ in let session = self; Task { @MainActor in session?.refresh() } }
@@ -54,8 +59,10 @@ import Observation
             guard let self else { return }
             defer { self.preparing = nil }
             do {
+                guard let openingMovie = self.openingMovie else { throw WorkflowFailure.invalid("The watched movie could not be pinned when this player opened.") }
                 let target = try await store.playbackTarget(version: self.version,project: self.project)
                 guard !self.disposed else { return }
+                try openingMovie.check(target,project: self.project)
                 self.endpoint = .init(id: self.id,project: self.project,target: target,driver: self.control)
                 if let endpoint = self.endpoint, self.workspaceVisible || self.presentation.detached { self.router?.register(endpoint); if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
                 await store.frameComment(for: self.project).load()
@@ -66,11 +73,16 @@ import Observation
     }
     func selectForVoice() {
         guard binding == nil, let store, let voice = store.voiceReview(for: project) else { return }
+        guard let endpoint else { presentationNotice = "Wait for this saved video's identity to finish loading."; return }
+        presentationNotice = nil
+        let watchedTarget = endpoint.target
         voice.willAttach(id)
         binding = Task { [weak self] in
             guard let self else { return }; defer { self.binding = nil }
             guard !self.disposed, self.workspaceVisible || self.presentation.ownsExternalSurface else { return }
-            await store.bindVoiceReview(version: self.version,project: self.project,token: self.id,sampler: { [weak self] in self?.sample() ?? .init(host: VoiceLivePlayhead.now,seconds: 0,rate: 0,available: false) })
+            // Bind the immutable snapshot already held by this decoder. A fresh
+            // disk lookup could otherwise attach new provenance to an old item.
+            await voice.attach(watchedTarget,token: self.id,sampler: { [weak self] in self?.sample() ?? .init(host: VoiceLivePlayhead.now,seconds: 0,rate: 0,available: false) })
         }
     }
     func sample() -> VoiceLivePlayhead {

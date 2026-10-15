@@ -192,15 +192,21 @@ final class VoiceReviewController {
 
     func record(_ sample: VoiceLivePlayhead, kind: VoiceTransportKind = .sample, token: UUID?) {
         guard token == viewToken, sample.host.isFinite, sample.seconds.isFinite else { return }
-        let event = kind == .sample && latest?.rate != nil && latest?.rate != sample.rate ? VoiceTransportKind.rateChanged : kind
-        latest = sample
+        let supportedRate = sample.rate.isFinite && (-4...4).contains(sample.rate)
+        let observed = VoiceLivePlayhead(host: sample.host,seconds: sample.seconds,
+            rate: supportedRate ? sample.rate:0,available: sample.available && supportedRate)
+        let event: VoiceTransportKind
+        if kind == .sample, let latest, latest.available != observed.available { event = .unavailable }
+        else if kind == .sample, let latest, latest.rate != observed.rate { event = .rateChanged }
+        else { event = kind }
+        latest = observed
         guard let id = sessionID else { return }
         if pendingWrites > 32 && event == .sample { return }
         if pendingWrites > 256 { error = "Voice review storage cannot keep up. Capture stopped; resolve incomplete feedback."; Task { _ = await stop(cancel: true) }; return }
         if event != .sample { epoch = UUID() }
-        let boundTarget = sample.available && kind != .seekRequested && kind != .unavailable ? target?.id : nil
+        let boundTarget = observed.available && kind != .seekRequested && kind != .unavailable ? target?.id : nil
         let generation = epoch
-        enqueue { repo in try await repo.observe(session: id, host: sample.host, seconds: max(0,sample.seconds), rate: sample.rate,
+        enqueue { repo in try await repo.observe(session: id, host: observed.host, seconds: max(0,observed.seconds), rate: observed.rate,
             target: boundTarget, epoch: generation, kind: event) }
     }
 
