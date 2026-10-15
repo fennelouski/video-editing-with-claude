@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import CryptoKit
 
 struct ReviewClockTime: Codable, Equatable, Sendable {
     let value: Int64
@@ -79,6 +80,7 @@ struct FrameEllipse: Codable, Equatable, Identifiable, Sendable {
     var tag: String? = nil
     var note: String? = nil
     var person: ProjectPersonReference? = nil
+    var mentions: [FramePersonMention]? = nil
     func validate(width: Int, height: Int) throws {
         try bounds.validate()
         guard width > 0, height > 0, bounds.width*Double(width) >= 1, bounds.height*Double(height) >= 1,
@@ -94,6 +96,15 @@ struct FrameEllipse: Codable, Equatable, Identifiable, Sendable {
         if let tag { guard !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, tag.utf8.count <= 160,
             !tag.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { throw WorkflowFailure.invalid("Use a short label for this region.") } }
         if let note { guard !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, note.utf8.count <= 4096 else { throw WorkflowFailure.invalid("A region note must contain up to 4096 UTF-8 bytes.") } }
+        if let mentions {
+            guard !mentions.isEmpty, mentions.count <= 32, Set(mentions.map(\.id)).count == mentions.count, let note else { throw ProjectFailure.invalidProject }
+            var end = 0
+            for mention in mentions {
+                try mention.validate(note: note)
+                guard mention.utf16Start >= end else { throw ProjectFailure.invalidProject }
+                end = mention.utf16Start + mention.utf16Length
+            }
+        }
     }
 }
 enum VideoAnnotationGeometry {
@@ -188,6 +199,7 @@ struct SavedFrameComment: Codable, Equatable, Identifiable, Sendable {
         for shape in annotations {
             try shape.validate(width: width,height: height)
             try shape.person?.validate(project: request.target.projectID)
+            for mention in shape.mentions ?? [] { try mention.person.validate(project: request.target.projectID) }
         }
     }
 }
@@ -322,6 +334,78 @@ struct ProjectPersonReference: Codable, Equatable, Sendable {
     let confirmedByUser: Bool
     func validate(project: UUID) throws {
         guard projectID == project, confirmedByUser, ProjectPersonNames.valid(nameSnapshot) else { throw ProjectFailure.invalidProject }
+    }
+}
+
+/// A typed mention is an explicit person choice, bound to exact note words.
+/// Plain @text never becomes an identity reference without that choice.
+struct FramePersonMention: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    let person: ProjectPersonReference
+    var utf16Start: Int
+    let utf16Length: Int
+    var noteSHA256: String
+    static func hash(_ note: String) -> String { SHA256.hash(data: Data(note.utf8)).map { String(format: "%02x",$0) }.joined() }
+    func validate(note: String) throws {
+        guard note.utf8.count <= 4096 else { throw ProjectFailure.invalidProject }
+        let length = note.utf16.count
+        guard ProjectPersonNames.valid(person.nameSnapshot), person.confirmedByUser,
+              utf16Start >= 0, utf16Start <= length, utf16Length > 0, utf16Length <= length-utf16Start,
+              noteSHA256 == Self.hash(note) else { throw ProjectFailure.invalidProject }
+        // NSRange conversion can admit a UTF16 offset inside a surrogate pair
+        // or grapheme. Only indexes obtained by walking Characters may reach
+        // Character subscripting/index(before:), including malformed files.
+        var boundaries: [Int:String.Index] = [:], offset = 0
+        for index in note.indices {
+            boundaries[offset] = index; offset += String(note[index]).utf16.count
+        }
+        boundaries[offset] = note.endIndex
+        guard offset == length, let start = boundaries[utf16Start], let end = boundaries[utf16Start+utf16Length],
+              start == note.startIndex || note[note.index(before: start)].isWhitespace,
+              end == note.endIndex || note[end].isWhitespace,
+              String(note[start..<end]).utf8.elementsEqual(("@"+person.nameSnapshot).utf8) else { throw ProjectFailure.invalidProject }
+    }
+    /// Preserve only untouched prefix/suffix tokens. An intersecting edit or an
+    /// ambiguous repeated-text alignment drops the link, retaining every word.
+    static func rebased(_ mentions: [Self]?,from old: String,to new: String) -> [Self]? {
+        guard !old.utf8.elementsEqual(new.utf8) else { return mentions }
+        guard let mentions else { return nil }
+        guard old.utf8.count <= 4096, new.utf8.count <= 4096 else { return nil }
+        let before = Array(old), after = Array(new)
+        var prefix = 0, suffix = 0
+        while prefix < min(before.count,after.count), String(before[prefix]).utf8.elementsEqual(String(after[prefix]).utf8) { prefix += 1 }
+        while suffix < min(before.count,after.count), String(before[before.count-1-suffix]).utf8.elementsEqual(String(after[after.count-1-suffix]).utf8) { suffix += 1 }
+        // Repeated words can admit several equally short edits. Keep only
+        // tokens outside the union of every possible changed range.
+        let ambiguous = prefix+suffix > min(before.count,after.count)
+        let startCount = ambiguous ? min(before.count,after.count)-suffix:prefix
+        let endCount = ambiguous ? prefix+max(0,before.count-after.count):before.count-suffix
+        let start = String(before.prefix(startCount)).utf16.count
+        let end = String(before.prefix(endCount)).utf16.count
+        let delta = new.utf16.count-old.utf16.count, hash = Self.hash(new)
+        let kept = mentions.compactMap { mention -> Self? in
+            guard (try? mention.validate(note: old)) != nil else { return nil }
+            var next = mention
+            if mention.utf16Start+mention.utf16Length <= start {} // Edit after token.
+            else if mention.utf16Start >= end { next.utf16Start += delta }
+            else { return nil }
+            next.noteSHA256 = hash
+            return (try? next.validate(note: new)) != nil ? next:nil
+        }
+        return kept.isEmpty ? nil:kept
+    }
+}
+
+struct FramePersonMentionQuery: Equatable, Sendable {
+    let note: String
+    let query: String
+    let utf16Start: Int
+    static func trailing(in note: String) -> Self? {
+        guard note.utf8.count <= 4096, let at = note.lastIndex(of: "@"),
+              at == note.startIndex || note[note.index(before: at)].isWhitespace else { return nil }
+        let query = String(note[note.index(after: at)...])
+        guard query.utf8.count <= 160, !query.contains("@"), !query.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        return .init(note: note,query: query,utf16Start: note[..<at].utf16.count)
     }
 }
 

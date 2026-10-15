@@ -233,7 +233,7 @@ actor FrameCommentRepository {
         guard frame.request.target.projectID == project.id else { throw ProjectFailure.invalidProject }
         var record = SavedFrameComment(schemaVersion: 1,id: id,supersedesID: supersedes,request: frame.request,text: text.trimmingCharacters(in: .whitespacesAndNewlines),annotations: annotations,framePNG_SHA256: frame.pngSHA256,width: frame.width,height: frame.height,actualFrameTime: frame.actualTime,created: Date(),reviewOnly: true,productionAuthorized: false,appliedToVideo: false)
         try record.validate(); try validatePNG(frame.png,sha: frame.pngSHA256,width: frame.width,height: frame.height)
-        let references = annotations.compactMap(\.person)
+        let references = annotations.compactMap(\.person)+annotations.flatMap { ($0.mentions ?? []).map(\.person) }
         let parent = try root(create: true)
         let lock = openat(parent.descriptor,"save.lock",O_CREAT | O_RDWR | O_NOFOLLOW,S_IRUSR | S_IWUSR)
         guard lock >= 0 else { throw ProjectFailure.invalidProject }; defer { Darwin.close(lock) }

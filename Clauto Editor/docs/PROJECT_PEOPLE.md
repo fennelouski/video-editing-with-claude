@@ -24,9 +24,15 @@ The detector uses `VNDetectHumanRectanglesRequest` revision 2 with full-body rec
 
 Synthetic tests cover duplicate choices, history replay and valid-hash tampering, rename/merge/archive history, shared-lock concurrent writes, stale roots, symlinks, explicit region association, undo/resize, saved revisions, forged references, unavailable-roster historical recovery, geometry and late-result cancellation. Live Vision accuracy, gesture/layout/VoiceOver behavior and the exact app runtime have not been observed under the foreground hold.
 
-Typed @mention editing, spoken-name disambiguation UI, direct region dictation/raw-ASR evidence, cross-frame tracking, original-camera time mapping, full split/unmerge and explicit people export remain unfinished. No tracking or real-world identity is inferred from the current boxes.
+Typed region-note @mentions are implemented in a separate source increment; see [TYPED_PERSON_MENTIONS.md](TYPED_PERSON_MENTIONS.md). General composer mentions, spoken-name disambiguation UI, direct region dictation/raw-ASR evidence, cross-frame tracking, original-camera time mapping, full split/unmerge and explicit people export remain unfinished. No tracking or real-world identity is inferred from the current boxes.
 
 
 The corrected rename editor retains draft wording by project/person ID, gives each native field a pinned identity and acknowledges only the submitted text. Select-mode click routing selects or clears an existing mark; suggested-person acceptance and new pins require a drawing-mode click or explicit Mark Person button.
 
 Vision request construction, synchronous perform and deferred request cancellation now stay on an owned serial blocking queue with four admitted active/queued jobs. Cancellation releases the Swift waiter and rejects late results while retaining physical capacity until the request returns. An individual synchronous Vision operation is not forcibly interrupted. Live Vision execution and accuracy remain unobserved; core tests still use injected synthetic detectors.
+
+
+Typed-mention boundary correction: a confirmed token requires whitespace or a string edge on both sides. Adjacent name growth, attached prefixes/punctuation and combining-mark extensions drop the previous identity link; a rehashed partial-name substring cannot be saved. Plain wording remains, and another explicit choice can link a corrected name.
+
+
+Unicode range validation: saved UTF-16 positions must map to complete Character boundaries before any Character indexing. Positions inside emoji, combining sequences or joined characters refuse with an ordinary validation error. The note remains bounded to 4096 UTF-8 bytes; oversized draft edits keep their wording and clear person links.

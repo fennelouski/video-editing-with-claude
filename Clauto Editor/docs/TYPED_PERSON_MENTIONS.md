@@ -1,0 +1,16 @@
+# Typed person mentions in captured region notes
+
+Type @ and a name at the end of a selected region note, then choose a project person from the menu. Duplicate names remain separate choices with stable roster numbers. Current labels, former labels and explicitly merged aliases can suggest active destination profiles. A suggestion alone never links a name. Unchosen @text can be saved as ordinary wording. This increment applies to region notes; the general conversation composer and spoken-name disambiguation remain unfinished.
+
+The choice retains project/person IDs, the exact chosen label, explicit confirmation, a stable mention UUID, a UTF-16 token range and the SHA-256 of the whole note. It does not assign an identity to the region's pixels; the separate Assign a Person control owns that decision. A mention must be separated on both sides by whitespace or a string boundary; the chooser adds a trailing space. Extending @Alex into @Alexandra, attaching a prefix or punctuation, or editing through the name removes the earlier link while preserving the words. A note may contain at most 32 non-overlapping mentions. Old annotation encodings omit the optional field and remain byte-identical.
+
+An async choice reloads the project roster and pins the original draft, region and exact note words before admission. Editing those words or deleting the region while the roster loads refuses the old choice without replacing newer text. Changing the selected region alone does not redirect the earlier choice. The selected ID must still be active and match the submitted query. Renaming/archive/merge after admission preserves the earlier ID and label in saved history; it does not rewrite previous notes.
+
+Text edits compare whole grapheme prefixes and suffixes. Tokens entirely outside an unambiguous edit retain their UUID/person and shift their UTF-16 positions where needed; their note hashes update. An edit through a token removes its identity link while preserving every word. Repeated-text alignments with overlapping prefix/suffix evidence conservatively remove links. Removing a link explicitly also preserves the note words. No freshly typed matching word is automatically assigned an ID. Undo and redo include wording and mention metadata together; resize preserves links.
+
+Save validates exact token text, bounds, ordering/non-overlap, note hash, project scope and confirmed labels. New or partial saves validate every reference against the current replay-validated roster under its descriptor-bound shared mutation lease. Exact completed-save recovery and historical reads remain independent of a currently available roster. All comments stay review-only, without production authorization or applied-video state.
+
+Verification uses synthetic fixtures only. Native menu/text/undo/VoiceOver interaction and the exact app runtime remain unobserved under the foreground hold. Direct region dictation and raw-ASR evidence, tracking, original-camera time and full split/unmerge are separate unfinished work.
+
+
+Unicode range validation: saved UTF-16 positions must map to complete Character boundaries before any Character indexing. Positions inside emoji, combining sequences or joined characters refuse with an ordinary validation error. The note remains bounded to 4096 UTF-8 bytes; oversized draft edits keep their wording and clear person links.

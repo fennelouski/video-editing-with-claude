@@ -135,6 +135,7 @@ struct FrameCommentEditor: View {
                 guard !controller.saving else { return }
                 do { try draft.updateRegion(selected.id,tag: draft.history.shapes.first(where: { $0.id == selected.id })?.tag ?? "",note: value) } catch { controller.error = error.localizedDescription }
             }),axis: .vertical).lineLimit(2...3).textFieldStyle(.roundedBorder).accessibilityLabel("Written note for selected region").id("region-note-"+selected.id.uuidString)
+            mentionControls(selected,draft: draft).disabled(controller.saving || controller.peopleBusy)
             HStack {
                 if let reference = selected.person { Text("Person: \(reference.nameSnapshot)").font(ClautoDesign.caption) }
                 Menu(selected.person == nil ? "Assign a Person…" : "Change Person…") {
@@ -154,6 +155,38 @@ struct FrameCommentEditor: View {
     private func personLabel(_ person: ProjectPerson,in people: ProjectPeopleDocument) -> String {
         let number = (people.people.firstIndex(where: { $0.id == person.id }) ?? 0)+1
         return "\(person.name) · Person \(number)"
+    }
+    @ViewBuilder private func mentionControls(_ region: FrameEllipse,draft: FrameCommentDraft) -> some View {
+        if let mentions = region.mentions {
+            Text("Links follow whole names separated by spaces. Editing a name or its boundary keeps the words and removes the link.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            ForEach(mentions) { mention in
+                HStack {
+                    let number = controller.people?.people.firstIndex(where: { $0.id == mention.person.personID }).map { $0+1 }
+                    Text("Linked @"+mention.person.nameSnapshot+(number.map { " · Person \($0)" } ?? "" )).font(ClautoDesign.caption)
+                    Button("Remove Mention Link") {
+                        do { try draft.removeMention(mention.id,region: region.id) } catch { controller.error = error.localizedDescription }
+                    }.accessibilityLabel("Remove person link for @"+mention.person.nameSnapshot+"; keep its words")
+                }
+            }
+        }
+        if let query = FramePersonMentionQuery.trailing(in: region.note ?? ""),
+           !(region.mentions ?? []).contains(where: { $0.utf16Start == query.utf16Start }) {
+            let choices = controller.people?.mentionMatches(query.query) ?? []
+            if !choices.isEmpty, let people = controller.people {
+                Menu("Choose a person for @"+query.query+"…") {
+                    ForEach(choices) { person in
+                        Button(personLabel(person,in: people)) {
+                            Task { await controller.mentionPerson(person.id,query: query,region: region.id,draftID: draft.id) }
+                        }
+                    }
+                }.accessibilityLabel("Choose an explicit project person for this typed mention")
+                Text("Choose the matching person. Duplicate names are separate choices.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            } else {
+                Text("No matching project person yet. Add a name below, or keep @text as ordinary words.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            }
+        } else if region.mentions == nil {
+            Text("Type @ and a name at the end of this note to link a project person.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+        }
     }
     @ViewBuilder private var projectPeopleControls: some View {
         DisclosureGroup("People in this Project") {

@@ -434,3 +434,14 @@ The common frame verifier moves synchronous sample scanning off Swift's shared c
 The isolated people milestone adds automatic local anonymous person-box analysis after a verified frame capture, explicit named region associations, a project roster with stable IDs and rename/archive/restore/merge history, and undoable link changes. Duplicate names stay separate choices. Catalog history must replay its saved roster exactly, and optional person references preserve earlier note labels through profile corrections. All storage remains on the project drive. See [PROJECT_PEOPLE.md](PROJECT_PEOPLE.md) for limits and remaining work.
 
 Synthetic detector tests avoid live Vision/model execution. Native UI, real detection accuracy, VoiceOver and the full product remain unaccepted under the foreground hold. Typed/spoken mentions, direct region dictation, tracking, original-camera time mapping and full split/unmerge remain unfinished. This section describes source implementation; the immutable source/build receipts determine acceptance of a particular milestone.
+
+
+## Typed person mentions in region notes
+
+Typing @ followed by a name at the end of a region note offers explicit project-person choices, including separate duplicate names. The selected person ID and original label bind to a UTF-16 token range and the exact note hash. Unrelated edits preserve/shift untouched tokens; intersecting or ambiguous repeated-text edits remove links while keeping the words. Region selection changes cannot retarget an earlier choice, and annotation undo/redo includes mention links. Names do not identify pixels or authorize video edits. General composer/spoken mentions, direct region dictation and native interaction acceptance remain unfinished. See [TYPED_PERSON_MENTIONS.md](TYPED_PERSON_MENTIONS.md).
+
+
+Typed-mention boundary correction: a confirmed token requires whitespace or a string edge on both sides. Adjacent name growth, attached prefixes/punctuation and combining-mark extensions drop the previous identity link; a rehashed partial-name substring cannot be saved. Plain wording remains, and another explicit choice can link a corrected name.
+
+
+Unicode range validation: saved UTF-16 positions must map to complete Character boundaries before any Character indexing. Positions inside emoji, combining sequences or joined characters refuse with an ordinary validation error. The note remains bounded to 4096 UTF-8 bytes; oversized draft edits keep their wording and clear person links.

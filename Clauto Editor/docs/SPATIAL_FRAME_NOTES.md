@@ -52,3 +52,14 @@ without windows, microphone or private media.
 
 
 Local anonymous person-box suggestions and explicit project-person links are specified in [PROJECT_PEOPLE.md](PROJECT_PEOPLE.md). They retain the same frame-bound review-only contract. Tracking, direct region dictation and original-camera time mapping remain unfinished.
+
+
+## Typed person mentions in region notes
+
+Typing @ followed by a name at the end of a region note offers explicit project-person choices, including separate duplicate names. The selected person ID and original label bind to a UTF-16 token range and the exact note hash. Unrelated edits preserve/shift untouched tokens; intersecting or ambiguous repeated-text edits remove links while keeping the words. Region selection changes cannot retarget an earlier choice, and annotation undo/redo includes mention links. Names do not identify pixels or authorize video edits. General composer/spoken mentions, direct region dictation and native interaction acceptance remain unfinished. See [TYPED_PERSON_MENTIONS.md](TYPED_PERSON_MENTIONS.md).
+
+
+Typed-mention boundary correction: a confirmed token requires whitespace or a string edge on both sides. Adjacent name growth, attached prefixes/punctuation and combining-mark extensions drop the previous identity link; a rehashed partial-name substring cannot be saved. Plain wording remains, and another explicit choice can link a corrected name.
+
+
+Unicode range validation: saved UTF-16 positions must map to complete Character boundaries before any Character indexing. Positions inside emoji, combining sequences or joined characters refuse with an ordinary validation error. The note remains bounded to 4096 UTF-8 bytes; oversized draft edits keep their wording and clear person links.

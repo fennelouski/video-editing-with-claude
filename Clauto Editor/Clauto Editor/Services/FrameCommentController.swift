@@ -43,6 +43,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     func updateRegion(_ id: UUID,tag: String,note: String) throws {
         guard frame != nil, let index = history.shapes.firstIndex(where: { $0.id == id }) else { return }
         var shapes = history.shapes
+        shapes[index].mentions = FramePersonMention.rebased(shapes[index].mentions,from: shapes[index].note ?? "",to: note)
         shapes[index].tag = tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil:tag
         shapes[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil:note
         // Retain all draft wording, including over-limit input. Save validates;
@@ -52,7 +53,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     func resizeSelected(_ bounds: NormalizedVideoRect) throws {
         guard let frame, let selectedShapeID, let old = history.shapes.first(where: { $0.id == selectedShapeID }) else { return }
         let points = old.points?.map { NormalizedVideoPoint(x: bounds.x+($0.x-old.bounds.x)/old.bounds.width*bounds.width,y: bounds.y+($0.y-old.bounds.y)/old.bounds.height*bounds.height) }
-        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note,person: old.person)
+        let next = FrameEllipse(id: old.id,kind: old.kind,bounds: bounds,points: points,tag: old.tag,note: old.note,person: old.person,mentions: old.mentions)
         try next.validate(width: frame.width,height: frame.height)
         try history.replace(history.shapes.map { $0.id == old.id ? next:$0 })
     }
@@ -62,6 +63,28 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
         guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
         if let reference { try people.validateReference(reference) }
         var next = history.shapes; next[index].person = reference; try history.replace(next)
+    }
+    func insertMention(_ reference: ProjectPersonReference,query: FramePersonMentionQuery,region: UUID,in people: ProjectPeopleDocument) throws {
+        guard let frame, people.projectID == request.target.projectID else { throw ProjectFailure.invalidProject }
+        try people.validateReference(reference)
+        guard people.mentionMatches(query.query).contains(where: { $0.id == reference.personID }) else { throw ProjectFailure.invalidProject }
+        guard let index = history.shapes.firstIndex(where: { $0.id == region }),
+              history.shapes[index].note?.utf8.elementsEqual(query.note.utf8) == true, FramePersonMentionQuery.trailing(in: query.note) == query,
+              let start = Range(NSRange(location: query.utf16Start,length: query.note.utf16.count-query.utf16Start),in: query.note) else {
+            throw WorkflowFailure.invalid("This note changed. Choose the person again for its current words.")
+        }
+        var next = history.shapes
+        let text = String(query.note[..<start.lowerBound])+"@"+reference.nameSnapshot+" "
+        var mentions = FramePersonMention.rebased(next[index].mentions,from: query.note,to: text) ?? []
+        mentions.removeAll { $0.utf16Start == query.utf16Start }
+        mentions.append(.init(id: UUID(),person: reference,utf16Start: query.utf16Start,utf16Length: ("@"+reference.nameSnapshot).utf16.count,noteSHA256: FramePersonMention.hash(text)))
+        next[index].note = text; next[index].mentions = mentions.sorted { $0.utf16Start < $1.utf16Start }
+        try next[index].validate(width: frame.width,height: frame.height); try history.replace(next)
+    }
+    func removeMention(_ id: UUID,region: UUID) throws {
+        guard let index = history.shapes.firstIndex(where: { $0.id == region }) else { return }
+        var next = history.shapes; let kept = next[index].mentions?.filter { $0.id != id } ?? []
+        next[index].mentions = kept.isEmpty ? nil:kept; try history.replace(next)
     }
     func undo() { history.undo(); selectedShapeID = nil }
     func redo() { history.redo(); selectedShapeID = nil }
@@ -139,6 +162,20 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
             } else { reference = nil }
             try draft.associate(reference,with: region,in: current); peopleError = nil
         } catch { peopleError = error.localizedDescription }
+    }
+    func mentionPerson(_ id: UUID,query: FramePersonMentionQuery,region: UUID,draftID: UUID) async {
+        guard !peopleBusy, !saving, draft?.id == draftID else { return }
+        peopleBusy = true; defer { peopleBusy = false }
+        do {
+            let current = try await ProjectPeopleRepository(project: project).load(); people = current
+            guard !saving, let draft, draft.id == draftID else { return }
+            guard current.mentionMatches(query.query).contains(where: { $0.id == id }),
+                  let person = current.people.first(where: { $0.id == id && $0.active }) else {
+                throw WorkflowFailure.invalid("This person's name changed. Choose a current person again.")
+            }
+            let reference = ProjectPersonReference(projectID: project.id,personID: id,nameSnapshot: person.name,confirmedByUser: true)
+            try draft.insertMention(reference,query: query,region: region,in: current); peopleError = nil; error = nil
+        } catch { self.error = error.localizedDescription }
     }
     func createPerson(name: String) async -> Bool {
         await changePeople { repo in _ = try await repo.create(name: name) }
