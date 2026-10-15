@@ -4,6 +4,7 @@ struct ContentView: View {
     @Bindable var store: EditorStore
     var initialTranscriptReviewGates = false
     var initialProjectTab = "Brief"
+    @State private var playbackRouter = ReviewWindowRouter()
     @State private var showNewProject = false
     @State private var showSetup = false
     @State private var projectName = ""
@@ -32,7 +33,7 @@ struct ContentView: View {
                     }.padding(16).background(ClautoDesign.soft).accessibilityElement(children: .contain)
                 }
                 if let project = store.selected {
-                    ProjectView(store: store, project: project, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id)
+                    ProjectView(store: store, project: project, playbackRouter: playbackRouter, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id)
                 } else {
                     VStack(alignment: .leading, spacing: 28) {
                         ClautoEmpty(title: "Your next cut starts here.", detail: "Describe the video. Bring your footage. Keep every version while you work toward the right cut.")
@@ -45,6 +46,12 @@ struct ContentView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(ClautoDesign.paper)
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).tint(ClautoDesign.rail)
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).preferredColorScheme(.light)
+            .background(PlaybackWindowRegistration(router: playbackRouter).frame(width: 0,height: 0))
+            .onAppear { playbackRouter.store = store }
+            .sheet(item: $playbackRouter.editor) { controller in
+                FrameCommentEditor(controller: controller, close: { playbackRouter.dismissEditor() })
+                    .interactiveDismissDisabled()
+            }
             .navigationTitle(store.selected?.manifest.name ?? "Clauto")
             .sheet(isPresented: $showSetup) {
                 VStack(spacing: 0) {

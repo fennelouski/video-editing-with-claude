@@ -28,6 +28,7 @@ final class VoiceReviewController {
     private(set) var renderingCandidateID: UUID?
     private(set) var renderProgress = ""
     private(set) var candidatePlaybackID: UUID?
+    private(set) var frameCommentLease: UUID?
     var error: String?
     var selectedDeviceUID: String
     var locale: String
@@ -67,14 +68,19 @@ final class VoiceReviewController {
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
     var hasPendingWork: Bool { sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
-    var canStart: Bool { candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
+    var canStart: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && latest?.available == true && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
     var canStop: Bool { sessionID != nil }
 
-    var canPresentCandidate: Bool { candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
+    var canPresentCandidate: Bool { frameCommentLease == nil && candidatePlaybackID == nil && !active && sessionID == nil && startTask == nil && stopTask == nil }
     func beginCandidatePlayback(_ token: UUID) -> Bool {
         guard canPresentCandidate else { error = "Stop and finalize voice capture before playing a review candidate."; return false }
         candidatePlaybackID = token; return true
     }
+    func beginFrameComment(_ token: UUID) -> Bool {
+        guard canPresentCandidate else { error = "Stop and finalize voice capture and close the candidate player before adding a frame comment."; return false }
+        frameCommentLease = token; return true
+    }
+    func endFrameComment(_ token: UUID) { if frameCommentLease == token { frameCommentLease = nil } }
     func endCandidatePlayback(_ token: UUID) { if candidatePlaybackID == token { candidatePlaybackID = nil } }
 
     func isAttached(to token: UUID) -> Bool { viewToken == token }

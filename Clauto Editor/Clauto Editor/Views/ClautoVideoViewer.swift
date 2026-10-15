@@ -132,6 +132,15 @@ struct ClautoVideoViewer: View {
 /// Player and observer ownership remains in the representable coordinator.
 final class ClautoVideoCanvas: NSView {
     private let videoLayer = AVPlayerLayer()
+    var onSelect: (() -> Void)?
+    var onSpace: (() -> Void)?
+    override var acceptsFirstResponder: Bool { onSpace != nil }
+    override func mouseDown(with event: NSEvent) { if onSpace != nil { onSelect?(); window?.makeFirstResponder(self) }; super.mouseDown(with: event) }
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49, event.modifierFlags.intersection([.command,.option,.control,.shift]).isEmpty,
+           window?.firstResponder === self, window?.attachedSheet == nil, let onSpace { onSpace(); return }
+        super.keyDown(with: event)
+    }
     var player: AVPlayer? { get { videoLayer.player } set { videoLayer.player = newValue } }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

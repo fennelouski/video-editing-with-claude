@@ -405,3 +405,19 @@ Pizza Yeast v7 with its exact original technical receipt and input bytes.
 
 Final exact test/build/review counts and source revision are in the local status
 receipt and handoff. This increment does not complete every documented app feature.
+
+## Playback commands and paused-frame comments (15 October)
+
+[PLAYBACK_AND_FRAME_COMMENTS.md](PLAYBACK_AND_FRAME_COMMENTS.md) is the user guide
+and supported-input contract. Native Playback menu commands route to a selected
+saved-version player in the key window, with a configurable skip interval and
+text/modal/seek guards. A paused-frame comment freezes the rational clock and full
+saved-version identity before asynchronous extraction. Raw PNG evidence and
+normalized circle/ellipse vectors persist separately, with explicit Save/Cancel,
+mark undo/removal, original-frame revision history, source checks and idempotent
+save recovery. The existing Remove/Protect candidate workflow remains separate.
+
+This is another bounded, tested increment. It does not claim all product documents
+are implemented, production camera-layer editing is available, or real microphone
+and interactive VoiceOver acceptance has completed. Final source/test/build and
+independent-review receipts are task-local, alongside earlier milestone evidence.

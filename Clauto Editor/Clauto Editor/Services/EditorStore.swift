@@ -31,6 +31,8 @@ final class EditorStore {
     var exportingPDF = false
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     var voiceReviews: [UUID: VoiceReviewController] = [:]
+    var frameComments: [UUID: FrameCommentController] = [:]
+    let playbackPreferences: ReviewPlaybackPreferences
     @ObservationIgnored private let voiceProvider = DictateReviewAdapter()
     @ObservationIgnored private let repository = ProjectRepository()
     @ObservationIgnored private let runner = ProcessRunner()
@@ -45,6 +47,7 @@ final class EditorStore {
         let env = ProcessInfo.processInfo.environment
         let preferences = env["CLAUTO_DEFAULTS_SUITE"].flatMap { UserDefaults(suiteName: $0) } ?? defaults
         self.defaults = preferences
+        playbackPreferences = ReviewPlaybackPreferences(defaults: preferences)
         defaultExportResolution = preferences.string(forKey: "ClautoDefaultExportResolution").flatMap(ExportResolution.init(rawValue:)) ?? .fullHD
         projectRoot = URL(fileURLWithPath: env["CLAUTO_PROJECTS_ROOT"] ?? preferences.string(forKey: "ClautoProjectsRoot") ?? Self.nasRoot.path, isDirectory: true)
         engineRoot = URL(fileURLWithPath: env["CLAUTO_ENGINE_ROOT"] ?? preferences.string(forKey: "ClautoEngineRoot") ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Clauto Editor/engine").path, isDirectory: true)
@@ -69,6 +72,16 @@ final class EditorStore {
         } catch { notice = error.localizedDescription; return nil }
     }
 
+    func frameComment(for project: Project) -> FrameCommentController {
+        if let controller = frameComments[project.id] { return controller }
+        let controller = FrameCommentController(project: project)
+        frameComments[project.id] = controller; return controller
+    }
+
+    func playbackTarget(version: CutVersion, project: Project) async throws -> VoiceReviewTarget {
+        try await workflow.voiceReviewTarget(version,project: project)
+    }
+
     func bindVoiceReview(version: CutVersion, project: Project, token: UUID, sampler: @escaping @MainActor () -> VoiceLivePlayhead) async {
         guard let controller = voiceReview(for: project) else { return }
         await controller.load()
@@ -90,10 +103,11 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         var voicesSaved = true
+        for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         return await flushTranscriptReviewsForExit() && voicesSaved
     }

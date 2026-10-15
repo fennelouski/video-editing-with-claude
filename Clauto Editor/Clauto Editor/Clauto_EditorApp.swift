@@ -21,6 +21,11 @@ struct Clauto_EditorApp: App {
                 .frame(minWidth: 900, minHeight: 640)
                 .task {
                     delegate.store = store
+                    #if DEBUG
+                    // App-host unit tests use synthetic windows and media. Do
+                    // not restore a user's recent projects into that test host.
+                    if NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+                    #endif
                     if let path = ProcessInfo.processInfo.environment["CLAUTO_OPEN_PROJECT"] {
                         await store.open(URL(fileURLWithPath: path, isDirectory: true))
                     } else {

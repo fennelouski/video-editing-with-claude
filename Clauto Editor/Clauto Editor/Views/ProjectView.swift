@@ -4,6 +4,7 @@ import AVKit
 struct ProjectView: View {
     @Bindable var store: EditorStore
     var project: Project
+    let playbackRouter: ReviewWindowRouter
     @State private var tab = "Brief"
     // Intentional one-time seed; parent keys this view by project ID when switching projects.
     @State private var draft: Brief
@@ -11,9 +12,9 @@ struct ProjectView: View {
     @State private var compactHistoryExpanded = false
 
     let initialTranscriptReviewGates: Bool
-    init(store: EditorStore, project: Project, initialTab: String = "Brief", initialTranscriptReviewGates: Bool = false) {
+    init(store: EditorStore, project: Project, playbackRouter: ReviewWindowRouter, initialTab: String = "Brief", initialTranscriptReviewGates: Bool = false) {
         self.initialTranscriptReviewGates = initialTranscriptReviewGates
-        self.store = store; self.project = project
+        self.store = store; self.project = project; self.playbackRouter = playbackRouter
         _draft = State(initialValue: project.brief)
         _tab = State(initialValue: initialTab)
     }
@@ -46,7 +47,7 @@ struct ProjectView: View {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
-                        else { CutView(store: store) }
+                        else { CutView(store: store, playbackRouter: playbackRouter) }
                     }.frame(maxHeight: .infinity)
                     if tab != "Transcript" {
                         ClautoRule()
@@ -275,6 +276,7 @@ private struct FilesView: View {
 
 private struct CutView: View {
     @Bindable var store: EditorStore
+    let playbackRouter: ReviewWindowRouter
     @State private var versionLabel = "First cut"
     @State private var comparison: UUID?
     @State private var primaryID: UUID?
@@ -287,7 +289,7 @@ private struct CutView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if let current = store.currentCuts[project.id] {
                         ClautoRule(); Text("Current cut: v\(current.number) · \(current.label)").font(ClautoDesign.type(18, weight: .semibold))
-                        if current.briefChanged(project) {
+                        if current.briefChanged(project) && project.manifest.importedReviewOnly != true {
                             Text("The brief changed since this cut. Run the updated inputs to make a new version.").foregroundStyle(ClautoDesign.ember)
                         }
                         if current.durationBounds != project.manifest.durationBounds {
@@ -389,7 +391,7 @@ private struct CutView: View {
                 Text("Imported verified movie · review candidates use the watched movie. Original camera and graphics timeline is retained separately; new production approval is required for a production cut.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             }
             if let preview = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
-                VersionReview(store: store, project: project, version: version, url: folder.appendingPathComponent(preview)).id(version.id)
+                VersionReview(store: store, project: project, playbackRouter: playbackRouter, version: version, url: folder.appendingPathComponent(preview)).id(version.id)
             }
             DerivativeView(store: store, project: project, version: version).id(version.id)
             Text(version.savedSchemaChecked == true ? "The saved timeline passed Final Cut's schema check. Review the import before editing." : "Final Cut's schema check is unverified for this saved cut. Review the timeline import before editing.")
@@ -417,15 +419,15 @@ struct CutPreview: NSViewRepresentable {
     @Binding var playing: Bool
     @Binding var ready: Bool
     @Binding var failure: String?
-    var seek: ReviewSeek?
     var control: ReviewPlaybackControl
+    var onSeekRequested: () -> Void = {}
     var onSeekCompleted: (Bool) -> Void
     var onTimeJump: () -> Void
+    var onSelect: (() -> Void)? = nil
     @MainActor final class Coordinator {
         var owner: CutPreview
         var player: AVPlayer?
         var observer: Any?
-        var lastSeek: UUID?
         var playbackObserver: NSKeyValueObservation?
         var itemObserver: NSKeyValueObservation?
         var generation = UUID()
@@ -434,7 +436,6 @@ struct CutPreview: NSViewRepresentable {
         func install(_ player: AVPlayer) {
             teardown(); self.player = player
             owner.control.player = player
-            lastSeek = nil
             let token = generation
             jumpObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemTimeJumped, object: player.currentItem, queue: .main) { [weak self] _ in
                 let coordinator = self
@@ -474,9 +475,9 @@ struct CutPreview: NSViewRepresentable {
         }
         func teardown() {
             if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) }; jumpObserver = nil
-            if owner.control.player === player { owner.control.player = nil }
+            owner.control.detach(player)
             if let observer { player?.removeTimeObserver(observer) }
-            generation = UUID(); observer = nil; playbackObserver = nil; itemObserver = nil; lastSeek = nil; player?.pause(); player = nil
+            generation = UUID(); observer = nil; playbackObserver = nil; itemObserver = nil; player?.pause(); player = nil
         }
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -491,17 +492,12 @@ struct CutPreview: NSViewRepresentable {
             view.player?.pause()
             let player = AVPlayer(url: url); view.player = player; context.coordinator.install(player)
         }
-        if let seek, context.coordinator.lastSeek != seek.id {
-            context.coordinator.lastSeek = seek.id
-            let coordinator = context.coordinator, generation = coordinator.generation
-            view.player?.seek(to: CMTime(seconds: seek.seconds, preferredTimescale: 60_000), toleranceBefore: .zero, toleranceAfter: .zero) { finished in
-                Task { @MainActor in
-                    guard coordinator.generation == generation, coordinator.lastSeek == seek.id else { return }
-                    coordinator.owner.onSeekCompleted(finished)
-                }
-            }
-        }
+        view.onSelect = onSelect
+        view.onSpace = { [weak control] in onSelect?(); control?.toggle() }
+        control.onSeekRequested = onSeekRequested
+        control.onSeekCompleted = onSeekCompleted
     }
+
     static func dismantleNSView(_ view: ClautoVideoCanvas, coordinator: Coordinator) {
         coordinator.teardown()
         view.player?.pause()
@@ -509,16 +505,15 @@ struct CutPreview: NSViewRepresentable {
     }
 }
 
-struct ReviewSeek { var id = UUID(); var seconds: Double }
-@MainActor final class ReviewPlaybackControl { weak var player: AVPlayer? }
 
 struct VersionReview: View {
     @Bindable var store: EditorStore
     var project: Project
+    let playbackRouter: ReviewWindowRouter
     var version: CutVersion
     var url: URL
     @State private var playhead = 0.0
-    @State private var seek: ReviewSeek?
+    @State private var endpoint: ReviewPlaybackEndpoint?
     @State private var control = ReviewPlaybackControl()
     @State private var start = "0"
     @State private var end = ""
@@ -530,51 +525,64 @@ struct VersionReview: View {
     @State private var ready = false
     @State private var playbackIssue: String?
     @State private var voiceToken = UUID()
-    @State private var seeking = false
     private var voice: VoiceReviewController? { store.voiceReviews[project.id] }
     private func livePlayhead() -> VoiceLivePlayhead {
         guard let player = control.player else { return .init(host: VoiceLivePlayhead.now, seconds: 0, rate: 0, available: false) }
         let time = player.currentTime().seconds
         return .init(host: VoiceLivePlayhead.now, seconds: time.isFinite && time >= 0 ? time : 0,
             rate: player.timeControlStatus == .playing ? 1 : 0,
-            available: ready && !seeking && playbackIssue == nil && time.isFinite && time >= 0 && time <= duration)
+            available: ready && !control.seeking && playbackIssue == nil && time.isFinite && time >= 0 && time <= duration)
     }
     private func selectForVoiceReview() {
         guard let controller = store.voiceReview(for: project) else { return }
         controller.willAttach(voiceToken)
         Task { await store.bindVoiceReview(version: version, project: project, token: voiceToken, sampler: livePlayhead) }
     }
-    private func requestSeek(_ seconds: Double) {
-        voice?.record(livePlayhead(), token: voiceToken)
-        seeking = true
-        voice?.record(livePlayhead(), kind: .seekRequested, token: voiceToken)
-        seek = ReviewSeek(seconds: seconds)
-    }
+    private func requestSeek(_ seconds: Double) { control.seek(seconds: seconds) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            CutPreview(url: url, playhead: $playhead, playing: $playing, ready: $ready, failure: $playbackIssue, seek: seek, control: control,
+            CutPreview(url: url, playhead: $playhead, playing: $playing, ready: $ready, failure: $playbackIssue, control: control,
+                onSeekRequested: { voice?.record(livePlayhead(),kind: .seekRequested,token: voiceToken) },
                 onSeekCompleted: { completed in
-                    seeking = false
                     voice?.record(livePlayhead(), kind: completed ? .seekCompleted : .unavailable, token: voiceToken)
-                }, onTimeJump: { voice?.record(livePlayhead(), kind: seeking ? .seekRequested : .unavailable, token: voiceToken) })
+                }, onTimeJump: { voice?.record(livePlayhead(), kind: control.seeking ? .seekRequested : .unavailable, token: voiceToken) }, onSelect: { playbackRouter.select(voiceToken) })
                 .aspectRatio(16/9, contentMode: .fit).frame(maxHeight: 410).background(ClautoDesign.ink)
                 .overlay { if playbackIssue != nil { ClautoUnavailablePreview() } }
             if loading || (!ready && playbackIssue == nil) { ClautoActivity(label: "Loading the local cut…") }
             if let playbackIssue { Text(playbackIssue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).fixedSize(horizontal: false, vertical: true) }
             HStack(spacing: 12) {
                 ClautoAction(playing ? "Pause" : "Play", icon: playing ? .pause : .play, kind: .primary) {
-                    if playing { control.player?.pause() } else {
-                        if duration > 0 && playhead >= duration - 0.05 { requestSeek(0) }
-                        control.player?.play()
-                    }
-                }.disabled(duration <= 0 || !ready)
+                    control.toggle()
+                }.disabled(duration <= 0 || !ready || control.seeking)
                 ClautoSlider(value: Binding(get: { playhead }, set: { requestSeek($0) }), range: 0...max(1, duration), label: "Review playhead").disabled(duration <= 0 || !ready)
                 Text(String(format: "%02d:%02d / %02d:%02d", Int(playhead)/60, Int(playhead)%60, Int(duration)/60, Int(duration)%60))
                     .font(ClautoDesign.caption.monospacedDigit()).foregroundStyle(ClautoDesign.quiet)
             }
+            if let endpoint {
+                HStack {
+                    Button(playbackRouter.selectedID == endpoint.id ? "Shortcuts use this player" : "Use this player for shortcuts") { playbackRouter.select(endpoint.id) }
+                        .disabled(playbackRouter.selectedID == endpoint.id).accessibilityIdentifier("selectPlaybackPlayer")
+                    Button("Pause and Comment / Circle…") { playbackRouter.select(endpoint.id); playbackRouter.beginComment(endpoint) }
+                        .disabled(!endpoint.ready || voice?.canPresentCandidate != true).accessibilityIdentifier("addFrameComment")
+                }
+                Text("⌘⌥P play/pause · ⌘⌥← / → skip · ⌃⌥⌘M pause and comment · Space when the video has focus")
+                    .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                if let comments = store.frameComments[project.id] {
+                    ForEach(comments.comments.filter { $0.request.target.versionID == version.id }) { comment in
+                        HStack(alignment: .top) {
+                            Button(String(format: "Frame %d · %.6fs", comment.request.frame.frameIndex,comment.request.frame.seconds)) { requestSeek(comment.request.frame.seconds) }
+                            Text(comment.text).textSelection(.enabled)
+                            Text("\(comment.annotations.count) marks").font(ClautoDesign.caption)
+                            Spacer()
+                            Button("Open / Revise") { playbackRouter.edit(comment,project: project) }
+                        }
+                    }
+                    if let error = comments.error, comments.draft == nil { Text(error).foregroundStyle(ClautoDesign.ember) }
+                }
+            }
             if let voice { VoiceReviewView(controller: voice, versionID: version.id, engine: store.engineRoot, selected: voice.isAttached(to: voiceToken), select: selectForVoiceReview, seek: requestSeek, prepareCandidatePlayback: { token in
                 guard voice.isAttached(to: voiceToken), voice.beginCandidatePlayback(token) else { return false }
-                control.player?.pause(); playing = false
+                control.pause(); playing = false
                 voice.record(livePlayhead(),kind: .pause,token: voiceToken)
                 return true
             }) }
@@ -629,7 +637,7 @@ struct VersionReview: View {
             let wasSelected = controller?.isAttached(to: voiceToken) == true
             if wasSelected { controller?.willAttach(voiceToken) }
             await controller?.load()
-            loading = true; playbackIssue = nil; duration = 0; playhead = 0; playing = false; seek = nil; ready = false
+            loading = true; playbackIssue = nil; duration = 0; playhead = 0; playing = false; ready = false
             do {
                 let loaded = try await AVURLAsset(url: url).load(.duration)
                 guard !Task.isCancelled else { return }
@@ -648,6 +656,13 @@ struct VersionReview: View {
             }
             loading = false
             guard !Task.isCancelled else { return }
+            do {
+                let target = try await store.playbackTarget(version: version,project: project)
+                guard !Task.isCancelled else { return }
+                let next = ReviewPlaybackEndpoint(id: voiceToken,project: project,target: target,driver: control)
+                endpoint = next; playbackRouter.register(next)
+                await store.frameComment(for: project).load()
+            } catch { store.notice = error.localizedDescription }
             if wasSelected { await store.bindVoiceReview(version: version, project: project, token: voiceToken, sampler: livePlayhead) }
         }
         .task(id: voiceToken) {
@@ -660,7 +675,7 @@ struct VersionReview: View {
             if ready { Task { await store.recordReviewLaunch(version: version,project: project,playerSeconds: control.player?.currentTime().seconds ?? 0) } }
         }
         .onChange(of: playing) { voice?.record(livePlayhead(), kind: playing ? .play : .pause, token: voiceToken) }
-        .onDisappear { voice?.detach(voiceToken) }
+        .onDisappear { playbackRouter.unregister(voiceToken); voice?.detach(voiceToken) }
         .onChange(of: playhead) { if duration > 0 && playhead >= duration - 0.05 { playing = false } }
     }
 }

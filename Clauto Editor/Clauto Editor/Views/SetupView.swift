@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SetupView: View {
     @Bindable var store: EditorStore
+    @State private var skip = ""
+    @State private var skipError: String?
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -14,6 +16,20 @@ struct SetupView: View {
                 }
                 ClautoChoice(title: "Default export size for new videos", selection: Binding(get: { store.defaultExportResolution }, set: { store.setDefaultExportResolution($0) }), options: ExportResolution.allCases.map { ($0, $0.label) }).accessibilityIdentifier("defaultExportResolution")
                 Text("Each video keeps its own size. This default applies when you create a new project.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                ClautoSection("Playback shortcuts") {
+                    HStack {
+                        TextField("Skip interval in seconds (1–60)",text: $skip).textFieldStyle(.roundedBorder).frame(width: 230)
+                            .accessibilityIdentifier("playbackSkipSeconds")
+                        Button("Set Skip Interval") {
+                            do {
+                                guard let seconds = Double(skip) else { throw WorkflowFailure.invalid("Enter a number from 1 to 60 seconds.") }
+                                try store.playbackPreferences.setSkip(seconds); skipError = nil
+                            } catch { skipError = error.localizedDescription }
+                        }
+                    }
+                    Text("Current skip: \(store.playbackPreferences.skipSeconds) seconds. Choose a player in Cut, then use the Playback menu.").font(ClautoDesign.caption)
+                    if let skipError { Text(skipError).foregroundStyle(ClautoDesign.ember) }
+                }
                 ClautoAction(store.checking ? "Checking workspace…" : "Check workspace", icon: .check, kind: .primary) { Task { await store.checkSetup() } }.disabled(store.checking)
                 if store.checking { ClautoActivity(label: "Checking installed tools and project folders…") }
                 ForEach(store.setupChecks.sorted { priority($0.state) < priority($1.state) }) { check in
@@ -30,6 +46,7 @@ struct SetupView: View {
             }.padding(30)
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)
+            .onAppear { skip = String(store.playbackPreferences.skipSeconds) }
     }
     private func priority(_ state: SetupCheck.State) -> Int {
         switch state { case .needsAttention: 0; case .notChecked: 1; case .ready: 2 }

@@ -311,7 +311,7 @@ private struct VoiceCandidatePlayback: View {
         VStack(alignment: .leading,spacing: 14) {
             Text("Separate review candidate").font(.headline)
             Text("Review playback only; voice feedback is disabled here. The watched version is paused and unchanged. Original camera and graphics layers remain in the preserved parent timeline.").font(.caption)
-            CutPreview(url: url,playhead: $seconds,playing: $playing,ready: $ready,failure: $failure,seek: nil,control: control,onSeekCompleted: { _ in },onTimeJump: {})
+            CutPreview(url: url,playhead: $seconds,playing: $playing,ready: $ready,failure: $failure,control: control,onSeekCompleted: { _ in },onTimeJump: {})
                 .frame(minWidth: 800,minHeight: 450)
             if let failure { Text(failure).foregroundStyle(.red) }
             HStack {
