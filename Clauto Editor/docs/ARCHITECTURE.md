@@ -243,6 +243,9 @@ project-local cutout/font revision selection, draft recovery and actual transpar
 ProRes output with full frame/timing/alpha verification and a connected FCPXML
 graphic layer. Inputs, licenses, assumptions and earlier exports remain immutable.
 See [GRAPHICS_STUDIO.md](GRAPHICS_STUDIO.md) for limits and evidence levels.
-Standalone scene export does not yet insert into a saved cut; that integration,
-native interaction/VoiceOver/NAS/Final Cut and full-product acceptance remain
-separate unfinished work during the background-only hold.
+Saved-version exports can now select one immutable scene revision and compose its
+cutout/font/model pixels into a separate verified movie and editable Graphics
+layer. Exact request, selected revision and copied input metadata are rechecked
+before admitting the DerivedCut; the parent/current cut stays unchanged. See
+[GRAPHIC_COMPOSITION.md](GRAPHIC_COMPOSITION.md). Native interaction/VoiceOver/NAS/
+Final Cut and full-product acceptance remain unfinished under the foreground hold.

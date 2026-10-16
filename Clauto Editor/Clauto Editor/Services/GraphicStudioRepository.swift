@@ -145,10 +145,39 @@ extension GraphicStudioRepository {
     func currentExport(_ project: Project,sceneID: UUID) async throws -> GraphicExportResult? {
         try await GraphicArtifactFiles.executor.perform { job in try self.currentExportLocal(project,sceneID: sceneID,check: job.checkCancellation) }
     }
-    private nonisolated func currentExportLocal(_ project: Project,sceneID: UUID,check: () throws -> Void) throws -> GraphicExportResult? {
+    func exportRevision(_ project: Project,sceneID: UUID,revisionID: UUID) async throws -> GraphicExportResult {
+        try await GraphicArtifactFiles.executor.perform { job in
+            guard let result = try self.currentExportLocal(project,sceneID: sceneID,revisionID: revisionID,check: job.checkCancellation) else { throw ProjectFailure.invalidProject }
+            return result
+        }
+    }
+    /// Only bounded revision metadata is read for the chooser. Export verifies
+    /// every frozen input and the complete movie before any composition starts.
+    func exportedChoices(_ project: Project) async throws -> [GraphicCutChoice] {
+        try await GraphicArtifactFiles.executor.perform { job in
+            let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+            let root = try self.parent(lease),state = try lease.root.child(".clauto")
+            var choices: [GraphicCutChoice] = []
+            for sceneID in try self.index(state,project: project.id).scenes {
+                try job.checkCancellation()
+                let scene = try root.child(sceneID.uuidString),draft = try self.read(scene,project: project.id,id: sceneID).draft
+                guard let id = draft.currentRevisionID else { continue }
+                let folder = try scene.child("revisions").child(id.uuidString),bytes = try folder.read("revision.json",limit: 65536)
+                let revision = try CreativeAssetFiles.decode(bytes,as: GraphicExportRevision.self)
+                guard revision.schemaVersion==1,revision.projectID==project.id,revision.sceneID==sceneID,revision.id==id,
+                      (1...2880).contains(revision.proof.frameCount),let movie = revision.files["animation.mov"],
+                      CutoutSourceInfo.validHash(movie.sha256) else { throw CutoutFailure.changedSource }
+                let selected = GraphicCutSelection(projectID: project.id,sceneID: sceneID,revisionID: id,
+                    manifestSHA256: TranscriptSourceMap.sha(bytes),movieSHA256: movie.sha256,duration: Double(revision.proof.frameCount)*GraphicScene.frameDuration)
+                choices.append(.init(label: draft.label,validationLabel: revision.validationLabel,selection: selected))
+            }
+            try lease.validate(project);return choices
+        }
+    }
+    private nonisolated func currentExportLocal(_ project: Project,sceneID: UUID,revisionID: UUID? = nil,check: () throws -> Void) throws -> GraphicExportResult? {
         let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
         let scene = try parent(lease).child(sceneID.uuidString),snapshot = try read(scene,project: project.id,id: sceneID)
-        guard let id = snapshot.draft.currentRevisionID else { return nil }
+        guard let id = revisionID ?? snapshot.draft.currentRevisionID else { return nil }
         let folder = try scene.child("revisions").child(id.uuidString),revision = try CreativeAssetFiles.decode(folder.read("revision.json",limit: 65536),as: GraphicExportRevision.self)
         guard revision.schemaVersion==1,revision.id==id,revision.sceneID==sceneID,revision.projectID==project.id,revision.files.count<=100,Set(["scene.json","animation.mov","annotation-font.ttf","annotation-OFL.txt","frame-first.png","frame-last.png","timeline.fcpxml","decode-proof.json"]).isSubset(of: Set(revision.files.keys)),
               revision.files["scene.json"]?.sha256==revision.draftSHA256,revision.files["animation.mov"]==revision.proof.movie,

@@ -102,9 +102,10 @@ window is opened by rendering. Reveal actions run only when the user clicks them
 
 ## Remaining acceptance
 
-The standalone scene export and Final Cut layer do not insert the graphic into a
-saved Clauto cut. Saved-cut insertion/rendered composition and its parent-version
-provenance are a separate unfinished increment. Native GUI/keyboard/VoiceOver,
+The saved-version export panel can select an immutable scene revision, compose it
+over that cut and retain exact parent/version/asset provenance in a separate export.
+See [GRAPHIC_COMPOSITION.md](GRAPHIC_COMPOSITION.md) for its limits and milestone
+evidence. Native GUI/keyboard/VoiceOver,
 actual NAS behavior, Final Cut import and visual acceptance of the complete
 product remain unobserved during the background-only hold. Synthetic headless
 Metal/CoreText/AVFoundation checks use generated media and disposable local test

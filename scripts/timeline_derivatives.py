@@ -22,6 +22,7 @@ from xml.parsers import expat
 import config as C
 import fcpxml as FX
 from duration_bounds import final_sequence_duration
+from graphic_scene_cue import GraphicCue, strict_json
 
 
 def sha(path: Path) -> str:
@@ -351,7 +352,7 @@ def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: s
 
 def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080p', start=0.0, end=None,
            conform='fit', position=(0.0,0.0), effects: AudioEffects | None = None, captions: Path | None = None,
-           sound: SoundCue | None = None) -> Path:
+           sound: SoundCue | None = None, graphic: GraphicCue | None = None) -> Path:
     if aspect not in C.ASPECTS or conform not in ('fit','fill'): raise ValueError('Unsupported aspect or framing mode.')
     if destination.is_symlink(): raise ValueError('An export folder cannot be a symbolic-link alias.')
     timeline, destination = timeline.resolve(), destination.resolve()
@@ -368,6 +369,16 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
     if effects is not None: effects.validate()
     caption_hash = sha(captions) if captions else None
     primary,connected = trim_layers(primary,start,end),trim_layers(connected,start,end)
+    graphic_capture = None
+    if graphic:
+        movie, metadata, raw_revision, raw_scene = graphic.inspect(end-start)
+        info=FX.probe(movie)
+        if not info['has_video'] or info['has_audio'] or info['fps'] is None or abs(info['fps']-C.FPS)>1e-8 or [info['width'],info['height']]!=metadata['source_dimensions'] or abs(info['duration']-metadata['source_frame_count']/C.FPS)>1/C.FPS:
+            raise ValueError('The generated graphic must keep its verified video-only frame rate.')
+        placement=metadata['placement'];lane=max([0]+[x.lane for x in connected if not x.audio_only])+1
+        connected.append(Layer(movie,placement['at'],placement['source_start'],placement['duration'],
+            'Clauto generated graphic',lane,role=C.ROLE_GRAPHICS,video_only=True,scale=placement['scale'],position=(placement['x'],placement['y'])))
+        graphic_capture=(metadata,raw_revision,raw_scene)
     sound_manifest=None
     if sound:
         sound.validate(end-start)
@@ -386,8 +397,13 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
         if (not item.audio_only and not info['has_video']) or (item.audio_only and not info['has_audio']):
             raise ValueError(f'A required media stream is missing from {item.source.name}.')
     source_hashes = {str(x):sha(x) for x in sources}
+    if graphic_capture and any(source_hashes.get(path,digest)!=digest for path,digest in graphic_capture[0]['source_sha256'].items()):
+        raise ValueError('The selected graphic changed before composition.')
     destination.mkdir(parents=True,exist_ok=False)
     try:
+        if graphic_capture:
+            (destination/'graphic-revision.json').write_bytes(graphic_capture[1])
+            (destination/'graphic-scene.json').write_bytes(graphic_capture[2])
         for index,item in enumerate(primary):
             item.conform=conform; item.position=(item.position[0]+position[0],item.position[1]+position[1])
             if effects is not None and FX.probe(item.source)['has_audio'] and not item.video_only:
@@ -406,6 +422,10 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
         if problems: raise ValueError('Derived timeline validation failed: '+'; '.join(problems))
         caption_out=remap_captions(captions,destination/'captions.itt',start,end,aspect,resolution,expected_sha=caption_hash) if captions else None
         out=render(primary,connected,destination,aspect,resolution,caption_out)
+        if graphic:
+            _,metadata,raw_revision,raw_scene=graphic.inspect(end-start)
+            if (metadata,raw_revision,raw_scene)!=graphic_capture:
+                raise ValueError('The immutable graphic inputs changed during composition.')
         if sha(timeline)!=parent_hash or any(sha(Path(p))!=h for p,h in source_hashes.items()) or (captions and sha(captions)!=caption_hash): raise ValueError('A source changed during export; derivative is unverified.')
         outputs={p.name:sha(p) for p in destination.iterdir() if p.is_file()}
         recipe={'schema_version':1,'state':'complete','parent_timeline':str(timeline.resolve()),'parent_sha256':parent_hash,
@@ -413,6 +433,7 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
                 'framing':{'conform':conform,'position_percent_of_height':list(position)},
                 'audio_effects':asdict(effects) if effects else None,'effects_revision':'ffmpeg-local-v1',
                 'sound_effect':sound_manifest,'engine_version':C.ENGINE_VERSION,
+                'generated_graphic':graphic_capture[0] if graphic_capture else None,
                 'caption_source':str(captions.resolve()) if captions else None,'caption_sha256':caption_hash,
                 'output_sha256':outputs,'full_decode_passed':True,'schema_checked':FX.dtd_problems(exported) is not None,
                 'upscaled_sources':[str(x.source) for x in primary if FX.probe(x.source).get('width',0)<C.canvas_spec(aspect,resolution)['author'][0] or FX.probe(x.source).get('height',0)<C.canvas_spec(aspect,resolution)['author'][1]],
@@ -436,12 +457,17 @@ def main(argv=None):
     ap.add_argument('--captions',type=Path)
     ap.add_argument('--sound',type=Path); ap.add_argument('--sound-at',type=float,default=0)
     ap.add_argument('--sound-gain-db',type=float,default=-12)
+    ap.add_argument('--graphic-revision',type=Path)
+    ap.add_argument('--graphic-selection',help='Exact generated-scene revision, timing and framing JSON')
     args=ap.parse_args(argv)
     try:
         effects=AudioEffects(**json.loads(args.audio_effects)) if args.audio_effects else None
+        if bool(args.graphic_revision)!=bool(args.graphic_selection):
+            raise ValueError('A graphic selection needs its exact local revision manifest.')
         out=derive(args.timeline,args.destination,aspect=args.aspect,resolution=args.resolution,start=args.start,end=args.end,
                    conform=args.framing,position=(args.x,args.y),effects=effects,captions=args.captions,
-                   sound=SoundCue(args.sound,args.sound_at,args.sound_gain_db) if args.sound else None)
+                   sound=SoundCue(args.sound,args.sound_at,args.sound_gain_db) if args.sound else None,
+                   graphic=GraphicCue(args.graphic_revision,strict_json(args.graphic_selection)) if args.graphic_revision else None)
         print(json.dumps({'state':'complete','review':str(out),'receipt':str(args.destination/'derivative.json')})); return 0
     except (ValueError,RuntimeError,OSError,TypeError,KeyError,ArithmeticError,expat.ExpatError,ET.ParseError,subprocess.CalledProcessError) as exc:
         print(json.dumps({'state':'failed','detail':str(exc)})); return 1

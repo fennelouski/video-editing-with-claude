@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import AVFoundation
+import Darwin
 
 struct EditRun: Codable, Identifiable, Sendable {
     enum State: String, Codable, Sendable { case prepared, running, needsReview, needsAssets, failed, cancelled, complete }
@@ -783,24 +784,60 @@ actor WorkflowRepository {
     }
 
     func derivativeSource(_ requested: CutVersion, project: Project) throws -> SavedCutSource {
+        let root = try ProjectMutationLease.checkedRoot(project)
         let target = try feedbackTarget(requested.id, project: project)
         guard let timeline = target.version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }) else { throw ProjectFailure.invalidProject }
         let folder = try safe("cuts/" + target.version.folderName, in: project.folder)
         let captions = try target.version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".itt") }).map { try safe($0, in: folder) }
+        try root.checkPath()
         return SavedCutSource(timeline: try safe(timeline, in: folder), captions: captions, timelineSHA256: target.sha, duration: target.duration, engineVersion: target.version.engineVersion)
     }
 
     func derivativeFolder(_ id: UUID, project: Project) throws -> URL {
-        let root = try safe("build/derivatives", in: project.folder)
-        try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        return try safe("build/derivatives/" + id.uuidString, in: project.folder)
+        let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+        let parent = try lease.root.child("build",create: true).child("derivatives",create: true)
+        try lease.root.checkPath();try parent.checkPath()
+        return parent.url.appendingPathComponent(id.uuidString)
     }
 
+    private struct DerivativeVerification {
+        let root: SourceRenderDirectory
+        let output: SourceRenderDirectory
+        let signatures: [String:SourceFileSignature]
+        let recipeSHA256: String
+        func check() throws {
+            try Task.checkCancellation();try root.checkPath();try output.checkPath()
+            for (name,signature) in signatures {
+                guard try WorkflowRepository.derivativeSignature(name,in: output)==signature else {
+                    throw WorkflowFailure.invalid("An export changed before publication. Its parent is preserved; create another export.")
+                }
+            }
+            try root.checkPath();try output.checkPath()
+        }
+    }
+    private nonisolated static func derivativeSignature(_ name: String,in directory: SourceRenderDirectory) throws -> SourceFileSignature {
+        guard CreativeAssetFiles.validLeaf(name) else { throw ProjectFailure.invalidProject }
+        var value = stat()
+        guard fstatat(directory.descriptor,name,&value,AT_SYMLINK_NOFOLLOW)==0,value.st_mode&S_IFMT==S_IFREG,value.st_size>=0 else { throw ProjectFailure.invalidProject }
+        return .init(device: value.st_dev,inode: value.st_ino,size: value.st_size,
+            modifiedSeconds: Int64(value.st_mtimespec.tv_sec),modifiedNanoseconds: Int64(value.st_mtimespec.tv_nsec),
+            changedSeconds: Int64(value.st_ctimespec.tv_sec),changedNanoseconds: Int64(value.st_ctimespec.tv_nsec))
+    }
     func verifyDerivative(folder: URL, parentVersionID: UUID, parentHash: String, request: DerivativeRequest, project: Project) throws -> String {
-        guard let id = UUID(uuidString: folder.lastPathComponent),
-              folder.resolvingSymlinksInPath().path == (try derivativeFolder(id, project: project)).resolvingSymlinksInPath().path else { throw ProjectFailure.invalidProject }
-        let recipeURL = try safe("derivative.json", in: folder)
-        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: recipeURL)) as? [String: Any]
+        let root = try ProjectMutationLease.checkedRoot(project)
+        return try inspectDerivative(folder: folder,parentVersionID: parentVersionID,parentHash: parentHash,request: request,project: project,root: root).recipeSHA256
+    }
+    private func inspectDerivative(folder: URL,parentVersionID: UUID,parentHash: String,request: DerivativeRequest,project: Project,root: SourceRenderDirectory) throws -> DerivativeVerification {
+        guard let id = UUID(uuidString: folder.lastPathComponent) else { throw ProjectFailure.invalidProject }
+        let owned = try root.child("build").child("derivatives").child(id.uuidString)
+        // URL equality also compares directory hints. The caller captured this
+        // URL before the worker created the directory; compare path spelling,
+        // while the checked root/child descriptors pin physical identity.
+        guard folder.standardizedFileURL.path==owned.url.standardizedFileURL.path else { throw ProjectFailure.invalidProject }
+        var signatures = ["derivative.json":try Self.derivativeSignature("derivative.json",in: owned)]
+        let recipeBytes = try owned.read("derivative.json",limit: 8*1024*1024)
+        try TranscriptJSONKeys.validate(recipeBytes)
+        let object = try JSONSerialization.jsonObject(with: recipeBytes) as? [String: Any]
         let target = try feedbackTarget(parentVersionID, project: project)
         try request.validate(duration: target.duration)
         let range = object?["selected_range_seconds"] as? [Double]
@@ -817,16 +854,26 @@ actor WorkflowRepository {
               framing?["position_percent_of_height"] as? [Double] == [request.x, request.y], actualEffects == request.effects,
               object?["aspect"] as? String == request.aspect, object?["resolution"] as? String == request.resolution.rawValue,
               object?["full_decode_passed"] as? Bool == true, let hashes = object?["output_sha256"] as? [String: String],
-              hashes["review.mp4"] != nil, hashes["timeline.fcpxml"] != nil else {
+              hashes.count<=100,hashes["review.mp4"] != nil, hashes["timeline.fcpxml"] != nil else {
             throw WorkflowFailure.invalid("The export receipt does not match this saved version and its selected output settings.")
         }
         for (leaf, hash) in hashes {
-            guard URL(fileURLWithPath: leaf).lastPathComponent == leaf,
-                  try DerivativeService.digest(safe(leaf, in: folder)) == hash else { throw WorkflowFailure.invalid("An exported file changed. Create a new verified export.") }
+            let before = try Self.derivativeSignature(leaf,in: owned)
+            guard CutoutSourceInfo.validHash(hash),before.size<=GraphicArtifactFiles.movieLimit,
+                  try owned.voiceHash(leaf,limit: GraphicArtifactFiles.movieLimit)==hash,
+                  try Self.derivativeSignature(leaf,in: owned)==before else { throw WorkflowFailure.invalid("An exported file changed. Create a new verified export.") }
+            signatures[leaf] = before
         }
+        let composed = object?["generated_graphic"]
+        if let graphic = request.graphic {
+            guard let metadata = composed as? [String:Any],hashes["graphic-revision.json"]==graphic.manifestSHA256,
+                  hashes["graphic-scene.json"] != nil else { throw WorkflowFailure.invalid("The selected graphic is missing from this export receipt.") }
+            try graphic.verifyMetadata(metadata,revisionBytes: owned.read("graphic-revision.json",limit: 65536),
+                sceneBytes: owned.read("graphic-scene.json",limit: 1024*1024),project: project)
+        } else if composed != nil && !(composed is NSNull) { throw WorkflowFailure.invalid("This export contains an unexpected generated graphic.") }
         let sound = object?["sound_effect"] as? [String: Any]
         if let soundID = request.soundFileID {
-            let manifest = try decoder.decode(ProjectManifest.self, from: Data(contentsOf: safe("clauto-project.json", in: project.folder)))
+            let manifest = try decoder.decode(ProjectManifest.self, from: root.read("clauto-project.json",limit: 8*1024*1024))
             guard manifest.id == project.id, let file = manifest.files.first(where: { $0.id == soundID && [.audio, .music].contains($0.group) }),
                   !file.relativePath.hasPrefix("/"), !file.relativePath.split(separator: "/").contains("..") else { throw ProjectFailure.invalidProject }
             let soundURL = project.folder.appendingPathComponent(file.relativePath)
@@ -838,17 +885,32 @@ actor WorkflowRepository {
                 throw WorkflowFailure.invalid("The sound-effect export does not match the selected local sound and its timing.")
             }
         } else if sound != nil { throw WorkflowFailure.invalid("The export added an unexpected sound effect.") }
-        return try DerivativeService.digest(recipeURL)
+        let verification = DerivativeVerification(root: root,output: owned,signatures: signatures,recipeSHA256: TranscriptSourceMap.sha(recipeBytes))
+        try verification.check();return verification
     }
 
     func saveDerivative(_ record: DerivedCut, project: Project) throws {
         guard record.projectID == project.id else { throw ProjectFailure.invalidProject }
-        let folder = try derivativeFolder(record.id, project: project)
-        guard try verifyDerivative(folder: folder, parentVersionID: record.parentVersionID, parentHash: record.parentTimelineSHA256, request: record.request, project: project) == record.recipeSHA256 else { throw ProjectFailure.invalidProject }
-        try encoder.encode(record).write(to: safe("clauto-derivative.json", in: folder), options: .atomic)
+        let root = try ProjectMutationLease.checkedRoot(project)
+        let folder = root.url.appendingPathComponent("build/derivatives/"+record.id.uuidString)
+        // Stream hashes outside the common project lease; feedback/draft writers
+        // must remain available during large movie reads. Recheck every physical
+        // artifact signature under the short publication lease.
+        let verified = try inspectDerivative(folder: folder,parentVersionID: record.parentVersionID,parentHash: record.parentTimelineSHA256,request: record.request,project: project,root: root)
+        guard verified.recipeSHA256==record.recipeSHA256 else { throw ProjectFailure.invalidProject }
+        let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+        guard lease.root.identity==root.identity else { throw ProjectFailure.invalidProject }
+        try verified.check();try lease.root.checkPath()
+        let bytes = try encoder.encode(record)
+        if try CreativeAssetFiles.exists("clauto-derivative.json",in: verified.output) {
+            guard try verified.output.read("clauto-derivative.json",limit: 65536)==bytes else { throw ProjectFailure.invalidProject }
+        } else { try verified.output.writeNew(bytes,name: "clauto-derivative.json") }
+        try lease.root.checkPath();try verified.output.checkPath()
     }
 
     func derivatives(project: Project) throws -> [DerivedCut] {
+        let physical = try ProjectMutationLease.checkedRoot(project)
+        defer { withExtendedLifetime(physical) {} }
         let root = try safe("build/derivatives", in: project.folder)
         guard fm.fileExists(atPath: root.path) else { return [] }
         return try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).compactMap { folder in

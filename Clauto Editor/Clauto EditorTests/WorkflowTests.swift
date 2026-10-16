@@ -34,7 +34,8 @@ private actor FixtureRunner: CommandRunning {
 
 private actor DerivativeProtocolRunner: CommandRunning {
     var mode: String
-    init(_ mode: String) { self.mode = mode }
+    let rootToReplace: URL?
+    init(_ mode: String,rootToReplace: URL? = nil) { self.mode = mode;self.rootToReplace = rootToReplace }
     func cancel() {}
     func run(_ command: ProcessCommand, onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
         let parent = URL(fileURLWithPath: command.arguments[1]), folder = URL(fileURLWithPath: command.arguments[2])
@@ -60,6 +61,11 @@ private actor DerivativeProtocolRunner: CommandRunning {
                     "at": mode == "badSoundTime" ? DerivativeRequest.snapped(at) + 0.1 : DerivativeRequest.snapped(at), "gain_db": gain]
             }
             try JSONSerialization.data(withJSONObject: recipe).write(to: folder.appendingPathComponent("derivative.json"))
+        }
+        if let rootToReplace {
+            let preserved = rootToReplace.appendingPathExtension("original")
+            try FileManager.default.moveItem(at: rootToReplace,to: preserved)
+            try FileManager.default.copyItem(at: preserved,to: rootToReplace)
         }
         return ProcessResult(exitCode: 0, output: "Synthetic protocol fixture", error: "", cancelled: false)
     }
@@ -128,8 +134,38 @@ struct WorkflowTests {
         #expect(result.parentVersionID == parent.id && result.request == request)
         #expect(try await disk.current(project: project)?.id == parent.id)
         let folder = try await disk.derivativeFolder(result.id, project: project)
+        for directoryHint in [false,true] {
+            let equivalent = URL(fileURLWithPath: folder.path,isDirectory: directoryHint)
+            let hash = try await disk.verifyDerivative(folder: equivalent,parentVersionID: parent.id,parentHash: result.parentTimelineSHA256,request: request,project: project)
+            #expect(hash==result.recipeSHA256)
+        }
         try Data("changed".utf8).write(to: folder.appendingPathComponent("review.mp4"))
         #expect(try await disk.derivatives(project: project).isEmpty)
+    }
+
+    @Test(arguments: [false,true]) func derivativeCannotAdmitAnIdenticalReplacementRootAfterItsWorkerReturns(legacyUnpinnedHandle: Bool) async throws {
+        let (root,engine,original) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository();var run = try await disk.prepare(project: original,engine: engine,label: "Physical root protocol fixture")
+        try plan(run);try outputs(run,project: original)
+        run.state = .complete;run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run,project: original)
+        var project = original;if legacyUnpinnedHandle { project.folderIdentity = nil }
+        let oldCurrent = try Data(contentsOf: original.folder.appendingPathComponent("cuts/current.json"))
+        await #expect(throws: (any Error).self) {
+            _ = try await DerivativeService(runner: DerivativeProtocolRunner("complete",rootToReplace: original.folder),disk: disk)
+                .export(DerivativeRequest(resolution: .hd,end: 0.5),version: parent,project: project,engine: engine,onLine: { _ in })
+        }
+        let physicalOriginal = original.folder.appendingPathExtension("original")
+        for folder in [physicalOriginal,original.folder] {
+            #expect(try Data(contentsOf: folder.appendingPathComponent("cuts/current.json"))==oldCurrent)
+            let children = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent("build/derivatives"),includingPropertiesForKeys: nil)
+            #expect(children.count==1)
+            for child in children { #expect(!FileManager.default.fileExists(atPath: child.appendingPathComponent("clauto-derivative.json").path)) }
+        }
+        await #expect(throws: (any Error).self) { _ = try await disk.derivativeFolder(UUID(),project: original) }
+        await #expect(throws: (any Error).self) { _ = try await disk.derivatives(project: original) }
+        let reopened = try await ProjectRepository().open(original.folder)
+        #expect(try await disk.derivatives(project: reopened).isEmpty)
     }
 
     @Test func derivativeSoundIdentityTimingAndHashMustMatchTheChosenLocalFile() async throws {

@@ -31,10 +31,11 @@ struct DerivativeRequest: Codable, Equatable, Sendable {
     var x = 0.0
     var y = 0.0
     var effects: LocalAudioEffects? = nil
+    var graphic: GraphicCutSelection? = nil
     var soundFileID: UUID? = nil
     var soundAt = 0.0
     var soundGainDB = -12.0
-    enum CodingKeys: String, CodingKey { case aspect, resolution, start, end, framing, x, y, effects, soundFileID, soundAt, soundGainDB }
+    enum CodingKeys: String, CodingKey { case aspect, resolution, start, end, framing, x, y, effects, graphic, soundFileID, soundAt, soundGainDB }
     static func snapped(_ seconds: Double) -> Double {
         // Match config.frames(): multiply by the precomputed floating-point FPS.
         (seconds * (24000.0 / 1001.0)).rounded(.toNearestOrEven) * 1001.0 / 24000.0
@@ -47,6 +48,7 @@ struct DerivativeRequest: Codable, Equatable, Sendable {
             throw WorkflowFailure.invalid("Choose a time range inside this saved cut and framing positions within −100…100 percent.")
         }
         try effects?.validate()
+        try graphic?.validate(cutDuration: Self.snapped(end ?? duration)-Self.snapped(start))
         if soundFileID != nil {
             guard soundAt.isFinite, soundAt >= 0, soundAt < (end ?? duration) - start,
                   soundGainDB.isFinite, (-60...12).contains(soundGainDB) else { throw WorkflowFailure.invalid("Choose a sound time inside the export and a gain of −60…12dB.") }
@@ -64,6 +66,7 @@ extension DerivativeRequest {
         framing = try values.decode(String.self, forKey: .framing)
         x = try values.decode(Double.self, forKey: .x); y = try values.decode(Double.self, forKey: .y)
         effects = try values.decodeIfPresent(LocalAudioEffects.self, forKey: .effects)
+        graphic = try values.decodeIfPresent(GraphicCutSelection.self,forKey: .graphic)
         soundFileID = try values.decodeIfPresent(UUID.self, forKey: .soundFileID)
         soundAt = try values.decodeIfPresent(Double.self, forKey: .soundAt) ?? 0
         soundGainDB = try values.decodeIfPresent(Double.self, forKey: .soundGainDB) ?? -12
@@ -99,6 +102,11 @@ struct DerivativeService: Sendable {
     }
     func export(_ request: DerivativeRequest, version: CutVersion, project: Project, engine: URL,
                 onLine: @escaping @Sendable (ProcessLine) async -> Void) async throws -> DerivedCut {
+        // Keep this open handle's physical root through all asynchronous work.
+        // Portable older callers may omit identity; bind it before the first await.
+        let root = try ProjectMutationLease.checkedRoot(project)
+        var pinned = project;pinned.folderIdentity = root.identity
+        let project = pinned
         let source = try await disk.derivativeSource(version, project: project)
         let engineVersion = try String(contentsOf: engine.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         guard engineVersion == source.engineVersion else { throw WorkflowFailure.invalid("This saved cut requires its original engine version before exporting.") }
@@ -118,8 +126,24 @@ struct DerivativeService: Sendable {
             try ProjectRepository.validateDrive(sound)
             arguments += ["--sound", sound.path, "--sound-at", String(request.soundAt), "--sound-gain-db", String(request.soundGainDB)]
         }
+        if let graphic = request.graphic {
+            guard graphic.projectID==project.id else { throw ProjectFailure.invalidProject }
+            let exported = try await GraphicStudioRepository().exportRevision(project,sceneID: graphic.sceneID,revisionID: graphic.revisionID)
+            try graphic.validateSource(exported.revision,project: project.id)
+            let manifest = project.folder.appendingPathComponent(graphic.relativeManifestPath)
+            let expected = graphic.manifestSHA256
+            try await GraphicArtifactFiles.executor.perform { job in
+                try job.checkCancellation();let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+                let folder = try lease.root.child("assets").child("generated-scenes").child(graphic.sceneID.uuidString).child("revisions").child(graphic.revisionID.uuidString)
+                guard TranscriptSourceMap.sha(try folder.read("revision.json",limit: 65536))==expected else { throw CutoutFailure.changedSource }
+                try lease.validate(project)
+            }
+            arguments += ["--graphic-revision",manifest.path,"--graphic-selection",String(decoding: try JSONEncoder().encode(graphic),as: UTF8.self)]
+        }
+        try Task.checkCancellation();try root.checkPath()
         let result = try await runner.run(ProcessCommand(executable: engine.appendingPathComponent("run"), arguments: arguments,
             directory: engine, environment: ["CLAUTO_OFFLINE": "1"], timeout: .seconds(86_400)), onLine: onLine)
+        try Task.checkCancellation();try root.checkPath()
         guard result.succeeded else { throw WorkflowFailure.invalid(result.cancelled ? "Export stopped. The saved parent cut is unchanged." : "The local export stopped. " + String(result.output.suffix(1800))) }
         let recipe = try await disk.verifyDerivative(folder: folder, parentVersionID: version.id, parentHash: source.timelineSHA256, request: request, project: project)
         let record = DerivedCut(id: id, projectID: project.id, parentVersionID: version.id, parentTimelineSHA256: source.timelineSHA256,
