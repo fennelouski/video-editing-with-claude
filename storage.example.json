@@ -1,0 +1,5 @@
+{
+  "mount_path": "/Volumes/YourShare",
+  "mount_source": "//server/share",
+  "destination": "/Volumes/YourShare/VideoEditing"
+}

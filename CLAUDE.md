@@ -146,8 +146,15 @@ stages 1–5  ─────►  FINAL CUT PRO  ─────►  stage 6
 
 ## Verification expectations
 
-There is currently **no committed test suite** — the pipeline was verified manually against
-throwaway fixtures. Building that suite is early work.
+The committed test suite uses synthetic fixtures. Run it with `./run -m pytest`. Tests
+must put generated files in temporary folders and must not write into configured media paths.
+
+On macOS, read `MAC_STUDIO_SETUP.md` before processing media. Keep originals, project
+media, proxies, renders and exports on the configured storage volume. Never create a local
+fallback when a required share is unavailable, and never erase a camera card. Ask before
+including non-public footage, images, audio or transcripts in an external service. The
+card importer is opt-in, accepts only explicitly enrolled volume UUIDs, preserves source
+cards, and requires a verified completion receipt before imported media is used.
 
 Anything added should be verifiable without a human watching a video:
 

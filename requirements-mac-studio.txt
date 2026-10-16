@@ -1,0 +1,59 @@
+# Local editing and tests; optional Kokoro handoff narration omitted.
+# Handmade video pipeline — Python dependencies
+# Install into the venv:
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install --upgrade pip && pip install -r requirements.txt
+
+# --- Stage 1: transcription -------------------------------------------------
+# whisperx pulls torch, faster-whisper, and the alignment models.
+# On Apple Silicon it runs on CPU; expect roughly 1x realtime with large-v3.
+whisperx==3.8.6
+
+# --- Stages 4/5/6: image work ----------------------------------------------
+pillow>=10.2.0
+numpy>=1.26.0
+
+# Connected components, distance transforms and morphology, for the sheet tools
+# in scripts/tools/. Already arrives as a whisperx dependency; declared because
+# the segmenter imports it directly.
+scipy>=1.11.0
+
+# DTD validation of generated FCPXML against Final Cut's own schema, which ships
+# inside the app. stdlib ElementTree cannot validate against a DTD, and this is
+# the one check that speaks the importer's actual contract rather than our
+# reading of it. Optional at runtime: the check reports "not installed" and skips.
+lxml>=5.0.0
+
+# --- Stage 3: script parsing ------------------------------------------------
+# .docx comments are read straight from the package XML (stdlib zipfile +
+# ElementTree), so python-docx is only needed if you want to write docx output.
+python-docx>=1.1.0
+
+# --- Font builder (scripts/tools/build_font.py) -----------------------------
+# fontTools builds the TTF directly via fontBuilder and compiles the calt
+# feature via feaLib; brotli is what lets it write woff2. uharfbuzz shapes the
+# compiled font in the tests, so the acceptance check runs against real shaping
+# rather than against our own reading of the feature file.
+fonttools>=4.50.0
+brotli>=1.1.0
+uharfbuzz>=0.39.0
+
+# --- Handoff video narration ------------------------------------------------
+# Kokoro-82M (Apache-2.0), run locally on the GPU for the instruction video's
+# voiceover. macOS `say` is the fallback and sounds like one. Only needed to
+# rebuild handoff/what-to-make-first.mp4.
+soundfile>=0.12
+
+# --- Tests ------------------------------------------------------------------
+# The suite runs without footage, fonts, or her asset library — every input is
+# synthesised in tests/fixtures.py. ffmpeg is the one external requirement.
+pytest>=8.0.0
+
+# --- Optional ---------------------------------------------------------------
+# Face detection for Stage 6 check 3 (no text over faces). Uncomment if wanted;
+# it's a large install and the check degrades gracefully without it.
+# mediapipe>=0.10.9
+
+# Colour-accurate LUT work, if you end up building the channel LUT in Python
+# rather than in the NLE.
+# colour-science>=0.4.4

@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "mount_path": "/Volumes/YourShare",
+  "mount_source": "//server/share",
+  "destination": "/Volumes/YourShare/VideoEditing",
+  "approved_card_uuids": [],
+  "reserve_bytes": 0,
+  "local_state": "/Users/REPLACE_ME/Library/Application Support/video-editing/card-ingest"
+}

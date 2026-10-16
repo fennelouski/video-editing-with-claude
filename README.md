@@ -51,13 +51,13 @@ Prerequisites — run these in your own Terminal:
 
 ```bash
 # macOS
-brew install ffmpeg git python@3.11
+brew install ffmpeg git python@3.12
 ```
 
 Then, from this folder:
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt

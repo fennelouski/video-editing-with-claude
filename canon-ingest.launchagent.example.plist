@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.example.video-editing.card-ingest</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/ABSOLUTE/PATH/TO/PROJECT/.venv/bin/python</string>
+		<string>/ABSOLUTE/PATH/TO/PROJECT/scripts/canon_ingest.py</string>
+		<string>--config</string>
+		<string>/ABSOLUTE/PATH/TO/PROJECT/canon-ingest.json</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartOnMount</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>60</integer>
+</dict>
+</plist>

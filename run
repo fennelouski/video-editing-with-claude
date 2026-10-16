@@ -30,8 +30,9 @@ if [ -f "$here/storage.json" ]; then
     case "${1:-}" in
         -m|canon_ingest.py|scripts/canon_ingest.py) ;;
         *) "$python" "$here/scripts/check_storage.py"
-           export HF_HOME="/Volumes/Videos/Food Videos/Katie YouTube/Models/huggingface"
-           export TORCH_HOME="/Volumes/Videos/Food Videos/Katie YouTube/Models/torch"
+           storage_root=$("$python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["destination"])' "$here/storage.json")
+           export HF_HOME="$storage_root/Models/huggingface"
+           export TORCH_HOME="$storage_root/Models/torch"
            export HF_HUB_DISABLE_TELEMETRY=1
            export PYANNOTE_METRICS_ENABLED=0
            ;;
