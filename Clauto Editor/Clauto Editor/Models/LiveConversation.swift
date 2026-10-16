@@ -30,6 +30,9 @@ struct LiveConversationDocument: Codable, Equatable, Sendable {
         let created: Date
         // Only text explicitly sent in this composer may leave the app.
         let explicitlySubmitted: Bool
+        // Optional for old history. This local-only typed request is never part
+        // of prompt(for:); free-form messages carry no inferred editing intent.
+        var localEdit: ConversationLocalEditInstruction? = nil
     }
     struct Turn: Codable, Equatable, Identifiable, Sendable {
         enum State: String, Codable, Sendable { case running, succeeded, failed, cancelled, interrupted }
@@ -84,6 +87,7 @@ struct LiveConversationDocument: Codable, Equatable, Sendable {
               messages.allSatisfy({ $0.explicitlySubmitted && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text.utf8.count <= 16_384 && !$0.text.utf8.contains(0) && $0.created.timeIntervalSince1970.isFinite }),
               turns.filter({ $0.state == .running }).count <= 1, (retiredDrafts?.count ?? 0) <= 512,
               (retiredDrafts ?? [:]).values.allSatisfy({ (1...1_000_000).contains($0) }) else { throw ProjectFailure.invalidProject }
+        for message in messages { try message.localEdit?.validate(text: message.text,project: project) }
         let recovered = recoveredDrafts ?? []
         guard recovered.count <= 512, Set(recovered.map(\.id)).count == recovered.count,
               recovered.allSatisfy({ Self.validDraft($0.draft) && !$0.draft.text.isEmpty && $0.created.timeIntervalSince1970.isFinite }) else { throw ProjectFailure.invalidProject }

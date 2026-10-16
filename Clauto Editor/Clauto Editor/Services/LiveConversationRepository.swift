@@ -35,12 +35,17 @@ actor LiveConversationRepository {
         try lease.root.checkPath(); try state.checkPath(); try state.replacePointer(bytes,name: "live-conversation.json")
         try lease.root.checkPath(); try state.checkPath(); return value
     }
-    func enqueue(_ text: String,id: UUID,created: Date) throws -> LiveConversationDocument {
+    /// Called under the local job repository's existing common lease. This does
+    /// not expose project content to the provider or acquire a nested lock.
+    nonisolated static func localEditingSnapshot(_ state: SourceRenderDirectory,project: UUID) throws -> LiveConversationDocument {
+        try read(state,project: project)
+    }
+    func enqueue(_ text: String,id: UUID,created: Date,localEdit: ConversationLocalEditInstruction? = nil) throws -> LiveConversationDocument {
         try mutate { value in
             if let previous = value.messages.first(where: { $0.id == id }) {
                 guard previous.text.utf8.elementsEqual(text.utf8), previous.explicitlySubmitted else { throw ProjectFailure.invalidProject }; return
             }
-            value.messages.append(.init(id: id,text: text,created: created,explicitlySubmitted: true))
+            value.messages.append(.init(id: id,text: text,created: created,explicitlySubmitted: true,localEdit: localEdit))
         }
     }
     private func checkDraft(_ draft: LiveConversationDocument.Draft,expected: LiveConversationDocument.Draft?,value: LiveConversationDocument) throws {
@@ -60,14 +65,14 @@ actor LiveConversationRepository {
             value.draft = draft
         }
     }
-    func submitDraft(_ draft: LiveConversationDocument.Draft,expected: LiveConversationDocument.Draft?) throws -> LiveConversationDocument {
+    func submitDraft(_ draft: LiveConversationDocument.Draft,expected: LiveConversationDocument.Draft?,localEdit: ConversationLocalEditInstruction? = nil) throws -> LiveConversationDocument {
         try mutate { value in
             if let previous = value.messages.first(where: { $0.id == draft.submissionID }) {
                 guard previous.text.utf8.elementsEqual(draft.text.utf8), previous.explicitlySubmitted else { throw ProjectFailure.invalidProject }
             } else {
                 guard draft.revision > (value.retiredDrafts?[draft.id] ?? 0) else { throw ProjectFailure.invalidProject }
                 try checkDraft(draft,expected: expected,value: value)
-                value.messages.append(.init(id: draft.submissionID,text: draft.text,created: Date(),explicitlySubmitted: true))
+                value.messages.append(.init(id: draft.submissionID,text: draft.text,created: Date(),explicitlySubmitted: true,localEdit: localEdit))
             }
             var retired = value.retiredDrafts ?? [:]; retired[draft.id] = max(retired[draft.id] ?? 0,draft.revision); value.retiredDrafts = retired
             if let saved = value.draft, saved.id == draft.id, saved.revision <= draft.revision { value.draft = nil }

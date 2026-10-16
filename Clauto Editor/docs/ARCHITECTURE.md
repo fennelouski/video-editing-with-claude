@@ -249,3 +249,23 @@ layer. Exact request, selected revision and copied input metadata are rechecked
 before admitting the DerivedCut; the parent/current cut stays unchanged. See
 [GRAPHIC_COMPOSITION.md](GRAPHIC_COMPOSITION.md). Native interaction/VoiceOver/NAS/
 Final Cut and full-product acceptance remain unfinished under the foreground hold.
+
+## Conversation local editing
+
+`ConversationLocalEditInterpreter` recognizes complete explicit local commands.
+Their typed instructions bind at submission to a saved-cut identity, timeline SHA
+and engine/duration. This metadata is excluded from text-provider prompts.
+`ConversationLocalEditRepository` uses the existing common mutation lease to read
+conversation state and publish a separate SHA-linked job ledger. Its idle claim
+includes the exact submitted frontier and folded commands. A fresh
+`ConversationLocalEditWorker` revalidates the saved source and invokes the existing
+local `DerivativeService`; its output remains a separate `DerivedCut`.
+
+`ConversationLocalEditController` owns the idle timer, worker attempt, physical
+cancel/join and pending terminal acknowledgement. `LiveConversationController`
+forwards composer/draft/history changes; provider turns retain their independent
+runner and authorization. `EditorStore` admits local jobs to the shared derivative
+slot with an owner token and publishes completed exports only after ledger success.
+No nested common lease, media upload, inferred free-form edit or main-cut promotion
+is introduced. See [Local edit jobs](LOCAL_EDIT_JOBS.md) for bounds and remaining
+runtime/product acceptance.

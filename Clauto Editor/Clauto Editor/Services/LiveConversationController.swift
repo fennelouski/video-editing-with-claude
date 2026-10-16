@@ -25,6 +25,9 @@ private actor LiveReplyReceiver {
     private(set) var storagePending = false
     private(set) var nextPacketAt: Date?
     var error: String?
+    let localUpdates: ConversationLocalEditController?
+    private(set) var localEditNotice: String?
+    @ObservationIgnored private let localTarget: (@MainActor () async throws -> ConversationLocalEditTarget)?
     @ObservationIgnored let repository: LiveConversationRepository
     @ObservationIgnored private var factory: (@Sendable () -> any ClaudeTurnTransport)?
     @ObservationIgnored private let injectedFactory: (@Sendable () -> any ClaudeTurnTransport)?
@@ -44,15 +47,18 @@ private actor LiveReplyReceiver {
     @ObservationIgnored private var draftBase: LiveConversationDocument.Draft?
     @ObservationIgnored private var draftWrite: (UUID,Task<LiveConversationDocument,Error>)?
     @ObservationIgnored private var draftRecoveryGeneration = UUID()
-    private enum DraftMutation { case save, submit, preserve, restore(UUID,UUID) }
+    private enum DraftMutation { case save, submit(ConversationLocalEditInstruction?), preserve, restore(UUID,UUID) }
     init(project: Project,syntheticFactory: (@Sendable () -> any ClaudeTurnTransport)? = nil,
          setupRunnerFactory: @escaping @Sendable () -> any CommandRunning = { ProcessRunner() },
-         clientLocator: @escaping @Sendable () -> URL? = { ClaudeClientContract.locate() },idleInterval: TimeInterval = 120) {
+         clientLocator: @escaping @Sendable () -> URL? = { ClaudeClientContract.locate() },idleInterval: TimeInterval = 120,
+         localUpdates: ConversationLocalEditController? = nil,
+         localTarget: (@MainActor () async throws -> ConversationLocalEditTarget)? = nil) {
         self.project = project; repository = .init(project: project)
         self.setupRunnerFactory = setupRunnerFactory; self.clientLocator = clientLocator
         self.injectedFactory = syntheticFactory; self.idleInterval = idleInterval
+        self.localUpdates = localUpdates;self.localTarget = localTarget
     }
-    var hasPendingWork: Bool { draftDirty || draftWrite != nil || resolvingDraft || submitting || connecting || disconnecting || worker != nil || storagePending }
+    var hasPendingWork: Bool { draftDirty || draftWrite != nil || resolvingDraft || submitting || connecting || disconnecting || worker != nil || storagePending || localUpdates?.hasPendingWork == true }
     var savingDraft: Bool { draftWrite != nil }
     var canSend: Bool { !submitting && !resolvingDraft && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.text.utf8.count <= 16_384 && !storagePending }
     var canRetryReply: Bool {
@@ -60,9 +66,13 @@ private actor LiveReplyReceiver {
         return [.failed,.cancelled,.interrupted].contains(last.state)
     }
     private func apply(_ value: LiveConversationDocument) {
-        guard value.projectID == project.id, value.revision >= (document?.revision ?? 0) else { return }; document = value
+        guard value.projectID == project.id, value.revision >= (document?.revision ?? 0) else { return }; document = value;refreshLocalUpdates()
+    }
+    private func refreshLocalUpdates() {
+        if let document { localUpdates?.observe(document,hasUnsentDraft: draftDirty || resolvingDraft || submitting || !draft.text.isEmpty) }
     }
     func load() async {
+        await localUpdates?.load()
         do {
             let value = try await repository.recover(); guard value.revision >= (document?.revision ?? 0) else { return }; apply(value)
             if !draftDirty, !submitting, !resolvingDraft, draftWrite == nil {
@@ -75,6 +85,7 @@ private actor LiveReplyReceiver {
     func edit(_ text: String) {
         guard !text.utf8.elementsEqual(draft.text.utf8), draft.revision < 1_000_000 else { return }
         draft.text = text; draft.revision += 1; draft.updated = Date(); draftDirty = true
+        localUpdates?.steer()
         idleTask?.cancel(); idleTask = nil; nextPacketAt = nil
         autosave?.cancel(); let snapshot = draft
         autosave = Task {
@@ -99,8 +110,8 @@ private actor LiveReplyReceiver {
             case .save:
                 value = try await repository.saveDraft(snapshot,expected: draftBase)
                 if value.draft == snapshot { draftBase = snapshot }
-            case .submit:
-                value = try await repository.submitDraft(snapshot,expected: draftBase)
+            case .submit(let instruction):
+                value = try await repository.submitDraft(snapshot,expected: draftBase,localEdit: instruction)
                 if value.draft == nil { draftBase = nil }
             case .preserve: value = try await repository.preserveLocalDraft(snapshot)
             case .restore(let archive,let newID): value = try await repository.restoreRecoveredDraft(archive,newID: newID,local: snapshot)
@@ -178,7 +189,13 @@ private actor LiveReplyReceiver {
         let snapshot = draft, generation = connectionGeneration, earlier = activeTransport
         do {
             autosave?.cancel(); autosave = nil
-            _ = try await writeDraft(snapshot,mutation: .submit)
+            let instruction = await localInstruction(for: snapshot.text)
+            let committed = try await writeDraft(snapshot,mutation: .submit(instruction))
+            if let attached = committed.messages.first(where: { $0.id==snapshot.submissionID })?.localEdit {
+                localEditNotice = "Local update attached to saved v\(attached.target.versionNumber). Keep steering; it starts after two quiet minutes."
+            } else if instruction != nil {
+                localEditNotice = "This message was already saved as feedback without a local command. Its original context is preserved."
+            }
             if draft == snapshot { autosave?.cancel(); autosave = nil; draft = .empty(); draftDirty = false }
             error = nil
             guard connectionGeneration == generation, !disconnecting else { return true }
@@ -198,6 +215,20 @@ private actor LiveReplyReceiver {
             } else { kick() }
             return true
         } catch { reportDraft(error); return false }
+    }
+    /// Exact local commands bind to the saved cut selected at submission. The
+    /// anchor is private metadata; only the original text enters a provider turn.
+    private func localInstruction(for text: String) async -> ConversationLocalEditInstruction? {
+        localEditNotice = nil
+        guard let patches = ConversationLocalEditInterpreter.parse(text),let localTarget else { return nil }
+        do {
+            let value = ConversationLocalEditInstruction(target: try await localTarget(),textSHA256: TranscriptSourceMap.sha(Data(text.utf8)),patches: patches)
+            try value.validate(text: text,project: project.id)
+            return value
+        } catch {
+            localEditNotice = "Your words are saved as feedback. A local update could not be attached: \(error.localizedDescription)"
+            return nil
+        }
     }
     func retryReply() async {
         guard canRetryReply else { return }
@@ -330,12 +361,14 @@ private actor LiveReplyReceiver {
         await worker?.value
     }
     func flushForExit() async -> Bool {
+        let localSaved = await localUpdates?.flushForExit() ?? true
         await disconnect(); autosave?.cancel(); autosave = nil
         if let draftWrite { _ = try? await draftWrite.1.value }
         await retryStorage()
-        return !draftDirty && draftWrite == nil && !resolvingDraft && !storagePending && !submitting && !connecting && !disconnecting
+        return localSaved && !draftDirty && draftWrite == nil && !resolvingDraft && !storagePending && !submitting && !connecting && !disconnecting
     }
     private func schedulePacket() {
+        refreshLocalUpdates()
         idleTask?.cancel(); idleTask = nil; nextPacketAt = nil
         guard !draftDirty, !submitting, !resolvingDraft, !storagePending, document?.running == nil,
               document?.queued.isEmpty == true, draft.text.isEmpty, let last = document?.latestActivity,

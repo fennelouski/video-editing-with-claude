@@ -1,4 +1,4 @@
-# Continuous conversation — bounded transport increment
+# Continuous conversation and local edit jobs
 
 The project composer saves submitted messages before connecting, streams replies,
 and accepts steering while a reply runs. New feedback interrupts the owned reply
@@ -6,9 +6,12 @@ and continues with the same session. Partial words and every terminal attempt
 remain in history. There is no required Stop and Finalize action. Disconnect is a
 privacy control; Retry Reply preserves the earlier failed/interrupted attempt.
 
-This increment supplies the conversation mechanism. It does not apply a cut or
-claim to have watched, edited, approved or rendered video. Connecting idle packets
-to longer local editing jobs remains unfinished.
+The composer also attaches supported local commands to an exact saved cut. After
+120 seconds without submitted or unsent feedback, its local job controller folds
+those commands into a separate verified export. Local rendering is independent of
+provider connection, sign-in or reply completion. General conversation text does
+not become an inferred edit. See [Local edit jobs](LOCAL_EDIT_JOBS.md) for the exact
+command grammar, persistence, cancellation and output scope.
 
 ## Guided connection and exact data boundary
 
@@ -103,5 +106,7 @@ and native source typechecking. No actual account check, sign-in, browser, model
 request, private media, app launch, microphone, Vision, VoiceOver or foreground
 acceptance is claimed. Real event shapes, sign-in, subscription/rate-limit recovery
 and responsive native interaction still need separately permitted runtime checks.
-Full conversational editing also requires local job/version and clean-user setup
-integration. Immutable receipts determine acceptance of each exact source pin.
+Broader conversational editing, main-version promotion, clean-user setup and
+history rollover remain unfinished. Immutable receipts determine acceptance of
+each exact source pin. Local jobs use only synthetic media in verification; this
+document is not native runtime or full-product acceptance.

@@ -50,7 +50,31 @@ final class EditorStore {
     var liveConversations: [UUID: LiveConversationController] = [:]
     func liveConversation(for project: Project) -> LiveConversationController {
         if let current = liveConversations[project.id] { return current }
-        let next = LiveConversationController(project: project); liveConversations[project.id] = next; return next
+        let updates = ConversationLocalEditController(project: project,engine: engineRoot,
+            admit: { [weak self] owner in
+                guard let self,self.exportingDerivativeProjectID==nil,self.runningProjectID==nil,!self.checking,!self.working else { return false }
+                self.localExportOwner = (owner,project.id);self.exportingDerivativeProjectID = project.id;return true
+            },release: { [weak self] owner in
+                guard let self,self.localExportOwner?.0==owner else { return }
+                self.localExportOwner = nil;self.exportingDerivativeProjectID = nil
+            },onExport: { [weak self] result in
+                guard let self else { return }
+                if !(self.derivedCuts[project.id] ?? []).contains(where: { $0.id==result.id }) { self.derivedCuts[project.id,default: []].append(result) }
+            })
+        let next = LiveConversationController(project: project,localUpdates: updates,localTarget: { [weak self] in
+            guard let self else { throw ProjectFailure.invalidProject }
+            let storedVersion = self.currentCuts[project.id]
+            let version: CutVersion?
+            if let storedVersion { version = storedVersion } else { version = try await self.workflow.current(project: project) }
+            guard let version else {
+                throw WorkflowFailure.invalid("Create or select a saved cut in this project first.")
+            }
+            let source = try await self.workflow.derivativeSource(version,project: project)
+            return .init(projectID: project.id,versionID: version.id,versionNumber: version.number,timelineSHA256: source.timelineSHA256,
+                engineVersion: source.engineVersion,duration: source.duration,aspect: version.aspect ?? project.manifest.aspect,
+                resolution: version.exportResolution ?? project.manifest.exportResolution ?? self.defaultExportResolution)
+        })
+        liveConversations[project.id] = next;return next
     }
     var reviewPlayers: [UUID: ReviewPlayerSession] = [:]
     func reviewPlayer(project: Project,version: CutVersion,url: URL,ownerID: UUID) -> ReviewPlayerSession {
@@ -66,6 +90,7 @@ final class EditorStore {
     @ObservationIgnored private let workflow = WorkflowRepository()
     @ObservationIgnored private let exporter = HandoffExportService()
     @ObservationIgnored private let derivativeRunner = ProcessRunner()
+    @ObservationIgnored private var localExportOwner: (UUID,UUID)?
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var presentationState = ProjectPresentationState()
     @ObservationIgnored private let defaults: UserDefaults
@@ -136,7 +161,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
@@ -151,11 +176,12 @@ final class EditorStore {
         for controller in liveConversations.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
-        return await flushTranscriptReviewsForExit() && voicesSaved && !presentationState.hasUnsavedBriefs && !working
+        return await flushTranscriptReviewsForExit() && voicesSaved && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
     }
 
     func resumeReviewWorkAfterCancelledExit() {
         for controller in voiceReviews.values { controller.resumeAfterCancelledExit() }
+        for controller in liveConversations.values { controller.localUpdates?.resume() }
     }
 
     var hasPendingTranscriptSaves: Bool { transcriptReviews.values.contains { $0.dirty || $0.saving || $0.loading } }
@@ -242,7 +268,7 @@ final class EditorStore {
     }
 
     func checkSetup() async {
-        guard !checking, runningProjectID == nil else { return }
+        guard !checking, runningProjectID == nil, exportingDerivativeProjectID == nil, !working else { return }
         checking = true; defer { checking = false }
         setupChecks = await SetupService(runner: runner).check(engine: engineRoot, projectsRoot: projectRoot)
     }
@@ -267,7 +293,7 @@ final class EditorStore {
     }
 
     func checkProject() async {
-        guard let project = selected, !checking, runningProjectID == nil else { return }
+        guard let project = selected, !checking, runningProjectID == nil, exportingDerivativeProjectID == nil, !working else { return }
         checking = true; checkSummaries[project.id] = nil; runDetails[project.id] = ""; defer { checking = false }
         do {
             try ProjectRepository.validateDrive(project.folder)
@@ -379,7 +405,7 @@ final class EditorStore {
     }
 
     func continueCut(approve: Bool) async {
-        guard let project = selected, var run = runs[project.id], runningProjectID == nil, !checking else { return }
+        guard let project = selected, var run = runs[project.id], runningProjectID == nil, exportingDerivativeProjectID == nil, !checking, !working else { return }
         guard [.needsReview, .needsAssets, .failed].contains(run.state) else { return }
         runningProjectID = project.id; defer { runningProjectID = nil }
         do {
@@ -443,7 +469,7 @@ final class EditorStore {
     }
 
     func exportDerivative(_ request: DerivativeRequest, version: CutVersion, project: Project) async {
-        guard exportingDerivativeProjectID == nil, runningProjectID == nil else { return }
+        guard exportingDerivativeProjectID == nil, runningProjectID == nil, !checking, !working else { return }
         exportingDerivativeProjectID = project.id; defer { exportingDerivativeProjectID = nil }
         derivativeDetails[project.id] = "Preparing a local export from saved v\(version.number)…"
         do {
@@ -455,7 +481,10 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    func cancelDerivative() async { await derivativeRunner.cancel() }
+    func cancelDerivative() async {
+        if let owner = localExportOwner,let updates = liveConversations[owner.1]?.localUpdates { updates.stopCurrent() }
+        else { await derivativeRunner.cancel() }
+    }
 
     private func appendDerivativeLine(_ line: ProcessLine, projectID: UUID) {
         let previous = derivativeDetails[projectID] ?? ""

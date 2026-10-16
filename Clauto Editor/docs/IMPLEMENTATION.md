@@ -751,3 +751,13 @@ layer. Exact request, selected revision and copied input metadata are rechecked
 before admitting the DerivedCut; the parent/current cut stays unchanged. See
 [GRAPHIC_COMPOSITION.md](GRAPHIC_COMPOSITION.md). Native interaction/VoiceOver/NAS/
 Final Cut and full-product acceptance remain unfinished under the foreground hold.
+
+### Local conversation edit jobs
+
+The composer attaches exact supported range/aspect/resolution commands to a saved
+cut, combines them after 120 quiet seconds and runs a private local derivative
+worker independently of text-provider availability. Durable requests/events retain
+source/feedback hashes, cancel/join ownership, failed-save recovery and exact retry.
+Output is a separate verified export; general feedback and provider replies do not
+implicitly edit footage. Source/synthetic verification is separate from native UI
+and full-product acceptance. See [Local edit jobs](LOCAL_EDIT_JOBS.md).
