@@ -11,8 +11,8 @@ struct CutoutDecodedSource: Equatable, Sendable {
 
 enum CutoutImageIO {
     static let sourceLimit = 64*1024*1024
-    static func decode(_ bytes: Data) throws -> CutoutDecodedSource {
-        guard !bytes.isEmpty, bytes.count <= sourceLimit,
+    static func decode(_ bytes: Data,encodedLimit: Int = sourceLimit) throws -> CutoutDecodedSource {
+        guard encodedLimit > 0,encodedLimit <= 256*1024*1024,!bytes.isEmpty, bytes.count <= encodedLimit,
               let source = CGImageSourceCreateWithData(bytes as CFData,nil), CGImageSourceGetCount(source) == 1,
               let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,

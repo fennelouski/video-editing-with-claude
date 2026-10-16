@@ -44,7 +44,7 @@ struct ProjectView: View {
                     Group {
                         if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
                         else if tab == "Files" { FilesView(store: store, project: project) }
-                        else if tab == "Studio" { CutoutStudioView(controller: store.cutoutStudio(for: project)) }
+                        else if tab == "Studio" { CreativeStudioView(store: store,project: project) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
                         else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
                     }.frame(maxHeight: .infinity)

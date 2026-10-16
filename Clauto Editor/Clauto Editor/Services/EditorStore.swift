@@ -32,6 +32,11 @@ final class EditorStore {
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var fontStudios: [UUID: FontStudioController] = [:]
+    func fontStudio(for project: Project) -> FontStudioController {
+        if let current = fontStudios[project.id] { return current }
+        let next = FontStudioController(project: project,engine: engineRoot);fontStudios[project.id] = next;return next
+    }
     var cutoutStudios: [UUID: CutoutStudioController] = [:]
     func cutoutStudio(for project: Project) -> CutoutStudioController {
         if let current = cutoutStudios[project.id] { return current }
@@ -126,7 +131,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
@@ -135,6 +140,7 @@ final class EditorStore {
         }
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
+        for controller in fontStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in cutoutStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in liveConversations.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }

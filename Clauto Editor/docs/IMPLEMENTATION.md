@@ -725,3 +725,14 @@ Unicode range validation: saved UTF-16 positions must map to complete Character 
 The direct-region path now includes guided in-app local speech setup, immutable frame/region anchors, raw recognition revisions, manual-edit preservation, automatic final drain on Save/close and recoverable dictated-region history. See [DIRECT_REGION_DICTATION.md](DIRECT_REGION_DICTATION.md) for contracts, bounds and remaining native acceptance. Live conversation, spoken-name disambiguation and graphics/cutout/font completion remain separate requirements.
 
 The Cutout Studio module keeps source bytes, mask bases and generated PNG revisions under assets/generated-cutouts on the project drive. Descriptor-relative immutable publication and the shared project lease protect exact saved-base draft CAS; normal quit joins saves and retains failed corrections. Local detector work is independently bounded, and late responses cannot replace newer brush corrections. Native Vision/GUI and saved-cut composition acceptance remain separate. See CUTOUT_STUDIO.md.
+
+## Project-custom font workflow
+
+Studio now contains native controls for folder/image intake, sheet crops and
+character mappings, editable TrueType points/widths, explicit replacement, generated
+licensed fallback, actual TTF/WOFF2 builds and direct-byte revision previews. Raw
+mapping fields autosave and conflicting saves support verified Keep both recovery.
+All earlier font files and exact encoded originals remain immutable. See
+[FONT_STUDIO.md](FONT_STUDIO.md) for implementation contracts and remaining GUI,
+VoiceOver, NAS and saved-cut composition acceptance. Moving code or a passing
+component test alone does not establish source/full-product acceptance.

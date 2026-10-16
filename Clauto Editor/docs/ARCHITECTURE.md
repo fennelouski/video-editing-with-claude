@@ -223,3 +223,14 @@ mid-run. Each app version declares the engine versions it supports.
 | User edits `brief.md` outside the app | App watches the file and marks the cut stale |
 
 The Cutout Studio module keeps source bytes, mask bases and generated PNG revisions under assets/generated-cutouts on the project drive. Descriptor-relative immutable publication and the shared project lease protect exact saved-base draft CAS; normal quit joins saves and retains failed corrections. Local detector work is independently bounded, and late responses cannot replace newer brush corrections. Native Vision/GUI and saved-cut composition acceptance remain separate. See CUTOUT_STUDIO.md.
+
+## Project-custom fonts
+
+FontStudioController owns one project's mapping/outline draft and serialized
+autosave. FontStudioRepository verifies immutable encoded originals and canonical
+working rasters, saves exact-base drafts, and publishes source-bound font revisions.
+FontCompilerService releases the project lease around the fixed local Python job,
+then rechecks job/tool identities and inputs. The custom compiler emits actual TTF
+and WOFF2; generated fallback remains explicitly licensed/labelled. The standard
+HerMarker builder is unchanged. See [FONT_STUDIO.md](FONT_STUDIO.md) for bounds and
+unaccepted native/saved-cut behavior.
