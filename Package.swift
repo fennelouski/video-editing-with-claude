@@ -10,7 +10,7 @@ let package = Package(
     dependencies: [.package(path: "ThirdParty/VoiceKit")],
     targets: [
         .target(name: "ClautoCore", dependencies: [.product(name: "VoiceKit", package: "voicekit")], path: "Clauto Editor/Clauto Editor", exclude: ["Views", "ContentView.swift", "Clauto_EditorApp.swift", "Assets.xcassets", "Services/EditorStore.swift", "Services/Updater.swift"],
-                sources: ["Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
+                sources: ["Services/WorkspaceSetupController.swift", "Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
                 "Models/ConversationLocalEdit.swift",
                 "Services/ConversationLocalEditRepository.swift",
                 "Services/ConversationLocalEditWorker.swift",

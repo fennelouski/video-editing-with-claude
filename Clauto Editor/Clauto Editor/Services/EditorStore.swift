@@ -9,9 +9,11 @@ final class EditorStore {
     var selectedID: UUID?
     var notice: String? { didSet { noticeTitle = "Needs attention" } }
     var noticeTitle = "Needs attention"
-    var setupChecks: [SetupCheck] = []
+    let workspaceSetup = WorkspaceSetupController()
+    var setupChecks: [SetupCheck] { workspaceSetup.checks }
     var runDetails: [UUID: String] = [:]
-    var checking = false
+    private var checkingProject = false
+    var checking: Bool { workspaceSetup.busy || checkingProject }
     var working = false
     var checkSummaries: [UUID: String] = [:]
     var projectRoot: URL
@@ -161,9 +163,10 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
+        await workspaceSetup.pauseForExit()
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
         for project in projects {
             if let brief = presentationState.pendingBrief(for: project) { save(brief,for: project.id) }
@@ -180,6 +183,7 @@ final class EditorStore {
     }
 
     func resumeReviewWorkAfterCancelledExit() {
+        workspaceSetup.resumeAfterCancelledExit()
         for controller in voiceReviews.values { controller.resumeAfterCancelledExit() }
         for controller in liveConversations.values { controller.localUpdates?.resume() }
     }
@@ -269,8 +273,22 @@ final class EditorStore {
 
     func checkSetup() async {
         guard !checking, runningProjectID == nil, exportingDerivativeProjectID == nil, !working else { return }
-        checking = true; defer { checking = false }
-        setupChecks = await SetupService(runner: runner).check(engine: engineRoot, projectsRoot: projectRoot)
+        await workspaceSetup.run(engine: engineRoot,projects: projectRoot,prepare: false)
+    }
+
+    func prepareWorkspace() async {
+        guard !checking, runningProjectID == nil, exportingDerivativeProjectID == nil, !working else { return }
+        let requested = projectRoot
+        await workspaceSetup.run(engine: engineRoot,projects: requested,prepare: true)
+        if projectRoot == requested, workspaceSetup.checks.first(where: { $0.id == "folders" })?.state == .ready {
+            defaults.set(requested.path,forKey: "ClautoProjectsRoot")
+        }
+    }
+
+    var needsFirstWorkspaceSetup: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return env["CLAUTO_PROJECTS_ROOT"] == nil && defaults.string(forKey: "ClautoProjectsRoot") == nil
+            && (defaults.stringArray(forKey: recentKey) ?? []).isEmpty
     }
 
     func durationBounds(_ bounds: VideoDurationBounds, project: Project) async {
@@ -294,7 +312,7 @@ final class EditorStore {
 
     func checkProject() async {
         guard let project = selected, !checking, runningProjectID == nil, exportingDerivativeProjectID == nil, !working else { return }
-        checking = true; checkSummaries[project.id] = nil; runDetails[project.id] = ""; defer { checking = false }
+        checkingProject = true; checkSummaries[project.id] = nil; runDetails[project.id] = ""; defer { checkingProject = false }
         do {
             try ProjectRepository.validateDrive(project.folder)
             let missing = project.manifest.files.filter {
@@ -465,7 +483,7 @@ final class EditorStore {
     func setFolders(projects: URL? = nil, engine: URL? = nil) {
         if let projects { projectRoot = projects; defaults.set(projects.path, forKey: "ClautoProjectsRoot") }
         if let engine { engineRoot = engine; defaults.set(engine.path, forKey: "ClautoEngineRoot") }
-        setupChecks = []
+        workspaceSetup.invalidate()
     }
 
     func exportDerivative(_ request: DerivativeRequest, version: CutVersion, project: Project) async {

@@ -54,7 +54,7 @@ struct ContentView: View {
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).tint(ClautoDesign.citron).textSelection(.enabled)
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).clautoThemeAppearance()
             .background(PlaybackWindowRegistration(router: playbackRouter).frame(width: 0,height: 0))
-            .onAppear { playbackRouter.store = store; playbackRouter.tab = initialProjectTab }
+            .onAppear { playbackRouter.store = store; playbackRouter.tab = initialProjectTab; if store.needsFirstWorkspaceSetup { showSetup = true } }
             .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter).clautoThemeAppearance() }
             .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter).clautoThemeAppearance() }
             .sheet(item: $playbackRouter.editor) { controller in

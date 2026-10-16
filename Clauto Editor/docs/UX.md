@@ -1,5 +1,10 @@
 # UX
 
+Current local setup implementation: [WORKSPACE_SETUP.md](WORKSPACE_SETUP.md).
+Project-folder preparation and capability checks are available; automatic engine,
+tool/client/model installation and clean-machine native acceptance remain pending.
+The broader installation target below is not a claim of implemented bootstrap.
+
 One window, a sidebar, and a drop-friendly main area. Native SwiftUI, macOS 26 target as set in
 the Xcode project (lower it if older Macs matter).
 

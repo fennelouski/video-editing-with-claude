@@ -1,5 +1,10 @@
 # Implementation checklist
 
+Current local setup implementation: [WORKSPACE_SETUP.md](WORKSPACE_SETUP.md).
+Project-folder preparation and capability checks are available; automatic engine,
+tool/client/model installation and clean-machine native acceptance remain pending.
+The broader installation target below is not a claim of implemented bootstrap.
+
 ## Continuous conversation transport
 
 The composer has a durable explicit-text transport, streamed replies, interruption

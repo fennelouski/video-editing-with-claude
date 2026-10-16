@@ -8,7 +8,7 @@ struct SetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 HStack(spacing: 12) { ClautoIcon(.settings, size: 27); Text("Your workspace").font(ClautoDesign.heading) }
-                Text("Keep footage and editing files on your project drive. This build checks installed tools; installation and model downloads remain in development.").foregroundStyle(ClautoDesign.quiet)
+                Text("Keep footage and editing files on your project drive. Prepare the selected project folder, then see which local tools are available. Review and drawing work without a conversation account.").foregroundStyle(ClautoDesign.quiet)
                 Picker("Theme",selection: Binding(get: { ClautoThemeStore.shared.selected },set: { ClautoThemeStore.shared.choose($0) })) {
                     ForEach(ClautoThemeID.allCases) { theme in Text(theme.label).tag(theme) }
                 }.accessibilityIdentifier("clautoThemePicker")
@@ -33,7 +33,16 @@ struct SetupView: View {
                     Text("Current skip: \(store.playbackPreferences.skipSeconds) seconds. Choose a player in Cut, then use the Playback menu.").font(ClautoDesign.caption)
                     if let skipError { Text(skipError).foregroundStyle(ClautoDesign.ember) }
                 }
-                ClautoAction(store.checking ? "Checking workspace…" : "Check workspace", icon: .check, kind: .primary) { Task { await store.checkSetup() } }.disabled(store.checking)
+                HStack {
+                    ClautoAction("Prepare workspace", icon: .check, kind: .primary) { Task { await store.prepareWorkspace() } }.disabled(store.checking)
+                        .accessibilityIdentifier("prepareWorkspace")
+                    ClautoAction("Check again", icon: .settings) { Task { await store.checkSetup() } }.disabled(store.checking)
+                    if store.checking { Button(store.workspaceSetup.stopping ? "Cancelling…" : "Cancel") { Task { await store.workspaceSetup.stopAndWait() } }.disabled(store.workspaceSetup.stopping) }
+                }
+                if let error = store.workspaceSetup.error { Text(error).foregroundStyle(ClautoDesign.ember) }
+                if !store.fontStudios.isEmpty || !store.liveConversations.isEmpty {
+                    Text("Open project tools keep the engine they started with. A changed engine folder applies to those tools after reopening Clauto.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                }
                 if store.checking { ClautoActivity(label: "Checking installed tools and project folders…") }
                 ForEach(store.setupChecks.sorted { priority($0.state) < priority($1.state) }) { check in
                     HStack(alignment: .top, spacing: 12) {
