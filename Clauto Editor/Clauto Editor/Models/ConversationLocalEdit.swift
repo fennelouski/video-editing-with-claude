@@ -121,10 +121,17 @@ struct ConversationLocalEditRequest: Codable,Equatable,Sendable {
     let textSHA256: [String:String]
     let target: ConversationLocalEditTarget
     let output: DerivativeRequest
+    var feedbackSHA256: String? = nil
+    var inherited: ConversationHistory.LocalBase? = nil
+    func matches(_ document: LiveConversationDocument) -> Bool {
+        sessionID==document.sessionID && (feedbackSHA256.map { $0==document.feedbackSHA256 } ?? (document.historyEpoch==0 && feedbackIDs==document.messages.map(\.id)))
+    }
     func validate(project: UUID) throws {
         try target.validate(project: project)
+        if let inherited { try inherited.validate(project: project);guard inherited.target==target,feedbackSHA256 != nil else { throw ProjectFailure.invalidProject } }
+        guard feedbackSHA256.map(CutoutSourceInfo.validHash) ?? true else { throw ProjectFailure.invalidProject }
         guard schemaVersion==1,projectID==project,!feedbackIDs.isEmpty,feedbackIDs.count<=512,
-              Set(feedbackIDs).count==feedbackIDs.count,!commandIDs.isEmpty,
+              Set(feedbackIDs).count==feedbackIDs.count,(!commandIDs.isEmpty || inherited != nil),
               Set(commandIDs).count==commandIDs.count,Set(commandIDs).isSubset(of: Set(feedbackIDs)),
               Set(textSHA256.keys)==Set(commandIDs.map(\.uuidString)),textSHA256.values.allSatisfy(CutoutSourceInfo.validHash),
               output.graphic==nil,output.soundFileID==nil,output.effects==nil else { throw ProjectFailure.invalidProject }

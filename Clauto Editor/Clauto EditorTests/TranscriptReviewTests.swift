@@ -335,16 +335,26 @@ struct TranscriptReviewTests {
 
     @Test @MainActor func exitWaitsForAnInFlightUndo() async throws {
         let (root, project, input, catalog) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
-        try largeSyntheticCatalog(input)
-        let controller = TranscriptReviewController(project: project)
+        let gate = TranscriptCheckpointGate()
+        defer { Task { await gate.release() } }
+        let controller = TranscriptReviewController(project: project,beforeCheckpointSave: { await gate.wait() })
         await controller.importCatalog(input)
         controller.change(catalog.rows[0].id) { $0.keep = false }
-        #expect(await controller.flush())
+        // Undo owns a pending checkpoint before it restores the prior choices.
+        // Hold that existing async boundary, not a transient-duration observation
+        // or the unrelated project lock. Exit must join the whole owned Undo.
         let undo = Task { await controller.undo() }
         let deadline = ContinuousClock.now + .seconds(5)
-        while !controller.loading && ContinuousClock.now < deadline { await Task.yield() }
+        while (!(await gate.started) || !controller.loading) && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+        try #require(await gate.started)
         try #require(controller.loading)
-        #expect(await TranscriptReviewExit.flush([controller]))
+        var exitStarted = false,exitFinished = false
+        let exit = Task { exitStarted = true;let result = await TranscriptReviewExit.flush([controller]);exitFinished = true;return result }
+        while !exitStarted && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+        try #require(exitStarted)
+        #expect(!exitFinished && controller.loading)
+        await gate.release()
+        #expect(await exit.value)
         #expect(controller.loading == false)
         await undo.value
         let saved = try #require(try await TranscriptReviewRepository().load(project: project))

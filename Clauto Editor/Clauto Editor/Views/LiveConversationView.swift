@@ -42,6 +42,37 @@ struct LiveConversationView: View {
                                 .font(ClautoDesign.caption).textSelection(.enabled)
                         }
                     }
+                    if let count = controller.document?.history?.references.count,count>0 {
+                        HStack {
+                            Text("Earlier conversation · \(count) saved sections").font(ClautoDesign.caption)
+                            Spacer()
+                            Button("View Earlier Messages") { Task { await controller.showHistory(epoch: count-1) } }.disabled(controller.loadingHistory)
+                        }
+                        if let history = controller.historyWindow {
+                            HStack {
+                                Text("Section \(history.historyEpoch+1) of \(count)").font(ClautoDesign.caption)
+                                Button("Older") { Task { await controller.showHistory(epoch: history.historyEpoch-1) } }.disabled(history.historyEpoch==0 || controller.loadingHistory)
+                                Button("Newer") { Task { await controller.showHistory(epoch: history.historyEpoch+1) } }.disabled(history.historyEpoch+1>=count || controller.loadingHistory)
+                                Button("Close History") { controller.closeHistory() }
+                            }
+                            ForEach(history.messages) { message in
+                                Text("You").font(ClautoDesign.caption)
+                                Text(message.text).textSelection(.enabled)
+                                ForEach(history.turns.filter { $0.messageIDs.last==message.id }) { turn in
+                                    Text("Claude · \(turn.state.rawValue)").font(ClautoDesign.caption)
+                                    Text(turn.text).textSelection(.enabled)
+                                    if let failure = turn.failure { Text(failure).font(ClautoDesign.caption).textSelection(.enabled) }
+                                }
+                                ClautoRule()
+                            }
+                            ForEach(history.recoveredDrafts ?? []) { entry in
+                                Text("Unsent draft").font(ClautoDesign.caption)
+                                Text(entry.draft.text).textSelection(.enabled)
+                                Button("Continue This Draft") { Task { await controller.continueRecoveredDraft(entry.id,historyEpoch: history.historyEpoch) } }
+                                    .disabled(controller.resolvingDraft || controller.submitting)
+                            }
+                        }
+                    }
                     if !legacyRequests.isEmpty {
                         ClautoDisclosure("Earlier local requests") {
                             Text("These were saved without sending to Claude. They remain local.").font(ClautoDesign.caption)
@@ -62,7 +93,7 @@ struct LiveConversationView: View {
             }.frame(minHeight: compact ? 70:140,maxHeight: compact ? 150:.infinity)
             if let updates = controller.localUpdates { ConversationLocalUpdatesView(controller: updates) }
             ClautoField(label: "Message",text: Binding(get: { controller.draft.text },set: controller.edit),placeholder: "What should change?",axis: .vertical)
-                .lineLimit(2...5).accessibilityIdentifier("liveConversationComposer")
+                .lineLimit(2...5).disabled(controller.document==nil).accessibilityIdentifier("liveConversationComposer")
             HStack {
                 ClautoAction("Send",icon: .conversation,kind: .primary) { Task { _ = await controller.submit() } }
                     .disabled(!controller.canSend).accessibilityIdentifier("sendLiveConversation")
@@ -81,6 +112,9 @@ struct LiveConversationView: View {
                 } else if !controller.connected, !(controller.document?.queued.isEmpty ?? true) {
                     Button("Connect and Continue") { Task { await controller.connect() } }.disabled(controller.connecting)
                 }
+            }
+            if controller.document==nil,controller.error != nil {
+                Button("Retry Loading Conversation") { Task { await controller.load() } }
             }
             if let notice = controller.localEditNotice { Text(notice).font(ClautoDesign.caption).textSelection(.enabled) }
             if let detail = controller.connectionDetail { ClautoActivity(label: detail) }

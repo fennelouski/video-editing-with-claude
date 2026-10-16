@@ -48,24 +48,12 @@ actor ConversationLocalEditRepository {
         return try mutate { ledger,conversation in
             guard let latest = conversation.latestActivity,now.timeIntervalSince(latest)>=idleInterval,
                   conversation.draft?.text.isEmpty != false,!conversation.messages.isEmpty,
-                  let latestTarget = conversation.messages.last(where: { $0.localEdit != nil })?.localEdit?.target else { return }
-            let frontier = conversation.messages.map(\.id)
-            guard !ledger.jobs.contains(where: { $0.request.sessionID==conversation.sessionID && $0.request.feedbackIDs==frontier }) else { return }
-            // A later command on another cut starts a fresh local sequence. Older
-            // messages remain history and can never be silently retargeted.
-            let lastForeign = conversation.messages.lastIndex(where: { message in
-                guard let target = message.localEdit?.target else { return false };return target != latestTarget
-            }) ?? -1
-            let commands = conversation.messages.dropFirst(lastForeign+1).filter { $0.localEdit?.target==latestTarget }
-            guard !commands.isEmpty else { return }
-            var output = latestTarget.initialRequest
-            for message in commands {
-                guard let instruction = message.localEdit else { throw ProjectFailure.invalidProject }
-                try instruction.validate(text: message.text,project: project.id)
-                for patch in instruction.patches { output = try patch.applying(to: output,target: latestTarget) }
-            }
+                  let folded = try conversation.foldedLocalEdit() else { return }
+            guard !ledger.jobs.contains(where: { $0.request.matches(conversation) }) else { return }
+            let commands = folded.commands
             let request = ConversationLocalEditRequest(schemaVersion: 1,projectID: project.id,sessionID: conversation.sessionID,
-                feedbackIDs: frontier,commandIDs: commands.map(\.id),textSHA256: Dictionary(uniqueKeysWithValues: commands.map { ($0.id.uuidString,TranscriptSourceMap.sha(Data($0.text.utf8))) }),target: latestTarget,output: output)
+                feedbackIDs: conversation.messages.map(\.id),commandIDs: commands.map(\.id),textSHA256: Dictionary(uniqueKeysWithValues: commands.map { ($0.id.uuidString,TranscriptSourceMap.sha(Data($0.text.utf8))) }),target: folded.target,output: folded.output,
+                feedbackSHA256: conversation.feedbackSHA256,inherited: folded.inherited)
             try request.validate(project: project.id)
             for index in ledger.jobs.indices where ledger.jobs[index].state == .queued {
                 ledger.jobs[index].events.append(terminal(.superseded,detail: "New feedback replaced this waiting batch. Its request remains in history.",now: now))
@@ -78,7 +66,7 @@ actor ConversationLocalEditRepository {
     func retry(_ id: UUID,now: Date = Date()) throws -> ConversationLocalEditLedger {
         try mutate { ledger,conversation in
             guard let earlier = ledger.jobs.last,earlier.id==id,let state = earlier.state,[.failed,.cancelled].contains(state),
-                  earlier.request.sessionID==conversation.sessionID,earlier.request.feedbackIDs==conversation.messages.map(\.id),
+                  earlier.request.matches(conversation),
                   conversation.draft?.text.isEmpty != false else {
                 throw WorkflowFailure.invalid("New feedback is waiting. Its next quiet batch will use the newer instructions.")
             }
@@ -89,14 +77,13 @@ actor ConversationLocalEditRepository {
         try mutate { ledger,conversation in
             guard let index = ledger.jobs.firstIndex(where: { $0.id==id }) else { throw ProjectFailure.invalidProject }
             if ledger.jobs[index].state == .running,ledger.jobs[index].events.last?.ownerID==owner,ledger.jobs[index].events.last?.ownerPID==getpid() {
-                if ledger.jobs[index].request.sessionID != conversation.sessionID || ledger.jobs[index].request.feedbackIDs != conversation.messages.map(\.id) || conversation.draft?.text.isEmpty == false {
+                if !ledger.jobs[index].request.matches(conversation) || conversation.draft?.text.isEmpty == false {
                     ledger.jobs[index].events.append(terminal(.superseded,owner: owner,detail: "New feedback superseded the unacknowledged local claim.",now: now))
                 };return
             }
             guard ledger.jobs[index].state == .queued else { throw ProjectFailure.invalidProject }
             guard !ledger.jobs.contains(where: { $0.state == .running }) else { throw WorkflowFailure.invalid("Another local edit is still finishing. New feedback stays queued.") }
-            guard ledger.jobs[index].request.sessionID==conversation.sessionID,
-                  ledger.jobs[index].request.feedbackIDs==conversation.messages.map(\.id),conversation.draft?.text.isEmpty != false else {
+            guard ledger.jobs[index].request.matches(conversation),conversation.draft?.text.isEmpty != false else {
                 ledger.jobs[index].events.append(terminal(.superseded,detail: "Newer feedback is waiting for its idle batch.",now: now));return
             }
             ledger.jobs[index].events.append(terminal(.running,owner: owner,now: now))
@@ -121,7 +108,7 @@ actor ConversationLocalEditRepository {
             if cancelled || admission?.cancelled == true || Task.isCancelled {
                 ledger.jobs[index].events.append(terminal(.cancelled,owner: owner,detail: "New steering stopped this local attempt. Earlier exports and words remain saved.",now: now));return
             }
-            guard request.sessionID==conversation.sessionID,request.feedbackIDs==conversation.messages.map(\.id),conversation.draft?.text.isEmpty != false else {
+            guard request.matches(conversation),conversation.draft?.text.isEmpty != false else {
                 ledger.jobs[index].events.append(terminal(.superseded,owner: owner,detail: "New feedback arrived before this batch completed. Any completed export remains a separate earlier result.",now: now));return
             }
             if let export {

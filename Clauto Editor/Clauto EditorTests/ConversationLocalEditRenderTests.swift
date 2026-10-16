@@ -79,4 +79,66 @@ import Testing
         #expect(try await jobs.load().jobs.last?.request==job.request)
         completed = true
     }
+    @Test func archivedCommandBaseExecutesTheActualWorkerAfterComposerRolloverAndReopensItsVerifiedExport() async throws {
+        let engine = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-local-job-render-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at: root,withIntermediateDirectories: true)
+        var completed = false;defer { if completed { try? FileManager.default.removeItem(at: root) } else { print("SYNTHETIC_LOCAL_JOB_FAILURE_ROOT="+root.path) } }
+        let fixture = try await SyntheticSourceSpanFixture.generate(root: root,engine: engine)
+        let imported = try await ProjectRepository().add([fixture.project.folder.appendingPathComponent("synthetic-originals/a.mov")],to: fixture.project)
+        let project = try await ProjectRepository().approveScript("Synthetic local job fixture only.",project: imported)
+        let disk = WorkflowRepository(),version = try await parent(project: project,engine: engine)
+        let source = try await disk.derivativeSource(version,project: project),parentBytes = try Data(contentsOf: source.timeline)
+        let manifest = try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json"))
+        let target = ConversationLocalEditTarget(projectID: project.id,versionID: version.id,versionNumber: version.number,
+            timelineSHA256: source.timelineSHA256,engineVersion: source.engineVersion,duration: source.duration,aspect: "16:9",resolution: .fullHD)
+        let text = "trim from 0.08341666666666667 to 0.41708333333333336 in portrait at 720p"
+        var prior = LiveConversationDocument(projectID: project.id);prior.revision = 1
+        for n in 0..<128 {
+            let messageID = UUID(),words = n==0 ? text:"Synthetic archived feedback \(n)"
+            let instruction = n==0 ? ConversationLocalEditInstruction(target: target,textSHA256: TranscriptSourceMap.sha(Data(text.utf8)),patches: try #require(ConversationLocalEditInterpreter.parse(text))):nil
+            prior.messages.append(.init(id: messageID,text: words,created: Date(),explicitlySubmitted: true,localEdit: instruction))
+            prior.turns.append(.init(id: UUID(),messageIDs: [messageID],created: Date(),ownerPID: ProcessInfo.processInfo.processIdentifier,state: .succeeded,text: "Synthetic settled reply",events: [.session(prior.sessionID)],failure: nil))
+        }
+        try prior.validate(project: project.id)
+        do {
+            let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+            try lease.root.child(".clauto").replacePointer(ConversationHistoryStore.encode(prior),name: "live-conversation.json")
+        }
+        var exported: DerivedCut?
+        let updates = ConversationLocalEditController(project: project,engine: engine,idleInterval: 0.02,onExport: { exported = $0 })
+        let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
+        await conversation.load();conversation.edit("use 720p")
+        #expect(await conversation.submit())
+        for _ in 0..<4000 {
+            if exported != nil || updates.error != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        if let error = updates.error { throw WorkflowFailure.invalid(error) }
+        let result = try #require(exported),jobs = ConversationLocalEditRepository(project: project)
+        let terminal = try await jobs.load(),job = try #require(terminal.jobs.last)
+        #expect(job.state == .succeeded && job.events.last?.exportID==result.id)
+        #expect(conversation.document?.messages.first?.localEdit?.target==target && !conversation.connected)
+        #expect(conversation.document?.historyEpoch==1 && job.request.inherited != nil && job.request.commandIDs.count==1)
+        #expect(await conversation.flushForExit())
+        #expect(result.request.aspect=="9:16" && result.request.resolution == .hd)
+        #expect(try await disk.derivatives(project: project).contains { $0.id==result.id })
+        let folder = try await disk.derivativeFolder(result.id,project: project)
+        let recipe = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("derivative.json"))) as? [String:Any])
+        // The production bridge verifies a full decode and hashes on reopen.
+        // Assert its own persisted native request and independent container facts.
+        let movie = folder.appendingPathComponent("review.mp4")
+        let probe = try await ProcessRunner().run(.init(executable: URL(fileURLWithPath: "/opt/homebrew/bin/ffprobe"),arguments: ["-v","error","-select_streams","v:0","-show_entries","stream=width,height,nb_frames","-of","json",movie.path],directory: engine),onLine: nil)
+        #expect(probe.succeeded)
+        let info = try #require(JSONSerialization.jsonObject(with: Data(probe.output.utf8)) as? [String:Any])
+        let stream = try #require((info["streams"] as? [[String:Any]])?.first)
+        #expect(stream["width"] as? Int==720 && stream["height"] as? Int==1280)
+        #expect(stream["nb_frames"] as? String=="8")
+        #expect(!recipe.isEmpty && result.parentTimelineSHA256==source.timelineSHA256)
+        #expect(try Data(contentsOf: source.timeline)==parentBytes)
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json"))==manifest)
+        #expect(try await disk.current(project: project)?.id==version.id)
+        #expect(try await jobs.load().jobs.last?.request==job.request)
+        completed = true
+    }
 }

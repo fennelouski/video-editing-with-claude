@@ -11,6 +11,9 @@ private actor LiveReplyReceiver {
     let project: Project
     private(set) var document: LiveConversationDocument?
     private(set) var draft = LiveConversationDocument.Draft.empty()
+    private(set) var historyWindow: LiveConversationDocument?
+    private(set) var loadingHistory = false
+    @ObservationIgnored private var historyReadID = UUID()
     private(set) var draftDirty = false
     private(set) var draftConflict = false
     private(set) var resolvingDraft = false
@@ -40,14 +43,14 @@ private actor LiveReplyReceiver {
     @ObservationIgnored private var idleTask: Task<Void,Never>?
     @ObservationIgnored private var activeTransport: (UUID,any ClaudeTurnTransport,Task<Void,Error>)?
     @ObservationIgnored private var preempted: Set<UUID> = []
-    @ObservationIgnored private var pending: (UUID,LiveConversationReply,LiveConversationDocument.Turn.State,String?)?
-    @ObservationIgnored private var unacknowledgedClaim: (UUID,UUID)?
+    @ObservationIgnored private var pending: (UUID,LiveConversationReply,LiveConversationDocument.Turn.State,String?,Int)?
+    @ObservationIgnored private var unacknowledgedClaim: (UUID,UUID,Int)?
     @ObservationIgnored private var connectionGeneration = UUID()
     @ObservationIgnored private var requestedRetry: UUID?
     @ObservationIgnored private var draftBase: LiveConversationDocument.Draft?
     @ObservationIgnored private var draftWrite: (UUID,Task<LiveConversationDocument,Error>)?
     @ObservationIgnored private var draftRecoveryGeneration = UUID()
-    private enum DraftMutation { case save, submit(ConversationLocalEditInstruction?), preserve, restore(UUID,UUID) }
+    private enum DraftMutation { case save, submit(ConversationLocalEditInstruction?), preserve, restore(UUID,UUID,Int?) }
     init(project: Project,syntheticFactory: (@Sendable () -> any ClaudeTurnTransport)? = nil,
          setupRunnerFactory: @escaping @Sendable () -> any CommandRunning = { ProcessRunner() },
          clientLocator: @escaping @Sendable () -> URL? = { ClaudeClientContract.locate() },idleInterval: TimeInterval = 120,
@@ -60,7 +63,7 @@ private actor LiveReplyReceiver {
     }
     var hasPendingWork: Bool { draftDirty || draftWrite != nil || resolvingDraft || submitting || connecting || disconnecting || worker != nil || storagePending || localUpdates?.hasPendingWork == true }
     var savingDraft: Bool { draftWrite != nil }
-    var canSend: Bool { !submitting && !resolvingDraft && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.text.utf8.count <= 16_384 && !storagePending }
+    var canSend: Bool { document != nil && !submitting && !resolvingDraft && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.text.utf8.count <= 16_384 && !storagePending }
     var canRetryReply: Bool {
         guard worker == nil, !storagePending, let last = document?.turns.last else { return false }
         return [.failed,.cancelled,.interrupted].contains(last.state)
@@ -76,14 +79,16 @@ private actor LiveReplyReceiver {
         do {
             let value = try await repository.recover(); guard value.revision >= (document?.revision ?? 0) else { return }; apply(value)
             if !draftDirty, !submitting, !resolvingDraft, draftWrite == nil {
-                if let saved = value.draft { draft = saved }
+                draft = value.draft ?? .empty(epoch: value.historyEpoch)
                 draftBase = value.draft; draftConflict = false
             }
             schedulePacket()
         } catch { self.error = error.localizedDescription }
     }
     func edit(_ text: String) {
+        guard document != nil else { return }
         guard !text.utf8.elementsEqual(draft.text.utf8), draft.revision < 1_000_000 else { return }
+        if draft.text.isEmpty,!draftDirty,(draft.historyEpoch ?? 0) != document?.historyEpoch,let document { draft = .empty(epoch: document.historyEpoch);draftBase = document.draft }
         draft.text = text; draft.revision += 1; draft.updated = Date(); draftDirty = true
         localUpdates?.steer()
         idleTask?.cancel(); idleTask = nil; nextPacketAt = nil
@@ -92,7 +97,7 @@ private actor LiveReplyReceiver {
             do {
                 try await Task.sleep(for: .milliseconds(250)); try Task.checkCancellation()
                 _ = try await writeDraft(snapshot)
-                if draft == snapshot { draftDirty = false; draftConflict = false; autosave = nil; schedulePacket() }
+                if draft.sameWordsAndRevision(as: snapshot) { draftDirty = false; draftConflict = false; autosave = nil; schedulePacket() }
             } catch is CancellationError {} catch { reportDraft(error) }
         }
     }
@@ -109,12 +114,17 @@ private actor LiveReplyReceiver {
             switch mutation {
             case .save:
                 value = try await repository.saveDraft(snapshot,expected: draftBase)
-                if value.draft == snapshot { draftBase = snapshot }
+                if let saved = value.draft,saved.sameWordsAndRevision(as: snapshot) {
+                    draftBase = saved
+                    if draft.sameWordsAndRevision(as: snapshot) { draft = saved }
+                }
             case .submit(let instruction):
                 value = try await repository.submitDraft(snapshot,expected: draftBase,localEdit: instruction)
-                if value.draft == nil { draftBase = nil }
+                if value.draft == nil {
+                    draftBase = value.historyEpoch>(snapshot.historyEpoch ?? 0) && draft.id==snapshot.id && draft.revision>snapshot.revision ? snapshot:nil
+                }
             case .preserve: value = try await repository.preserveLocalDraft(snapshot)
-            case .restore(let archive,let newID): value = try await repository.restoreRecoveredDraft(archive,newID: newID,local: snapshot)
+            case .restore(let archive,let newID,let epoch): value = try await repository.restoreRecoveredDraft(archive,newID: newID,local: snapshot,historyEpoch: epoch)
             }
             apply(value); return value
         }
@@ -122,20 +132,29 @@ private actor LiveReplyReceiver {
         return try await task.value
     }
     func keepBothDrafts() async { await recoverDraft(nil) }
-    func continueRecoveredDraft(_ id: UUID) async { await recoverDraft(id) }
-    private func recoverDraft(_ archive: UUID?) async {
+    func continueRecoveredDraft(_ id: UUID,historyEpoch: Int? = nil) async { await recoverDraft(id,historyEpoch: historyEpoch) }
+    func showHistory(epoch: Int) async {
+        let id = UUID();historyReadID = id;loadingHistory = true
+        defer { if historyReadID==id { loadingHistory = false } }
+        do {
+            let value = try await repository.archivedWindow(epoch: epoch)
+            guard historyReadID==id else { return };historyWindow = value
+        } catch { if historyReadID==id { self.error = error.localizedDescription } }
+    }
+    func closeHistory() { historyReadID = UUID();historyWindow = nil;loadingHistory = false }
+    private func recoverDraft(_ archive: UUID?,historyEpoch: Int? = nil) async {
         guard !resolvingDraft, !submitting else { return }
         let snapshot = draft, generation = UUID(); draftRecoveryGeneration = generation
         resolvingDraft = true; autosave?.cancel(); autosave = nil
         defer { resolvingDraft = false; schedulePacket() }
         do {
-            let mutation: DraftMutation = archive.map { .restore($0,UUID()) } ?? .preserve
+            let mutation: DraftMutation = archive.map { .restore($0,UUID(),historyEpoch) } ?? .preserve
             let value = try await writeDraft(snapshot,mutation: mutation)
             guard draftRecoveryGeneration == generation, draft == snapshot else {
                 draftDirty = true; draftConflict = true
                 error = "The earlier words are saved in Recovered Unsent Drafts. Keep Both Drafts again to preserve your newer changes."; return
             }
-            draft = value.draft ?? .empty(); draftBase = value.draft
+            draft = value.draft ?? .empty(epoch: value.historyEpoch); draftBase = value.draft
             draftDirty = false; draftConflict = false; error = nil
         } catch { reportDraft(error) }
     }
@@ -194,9 +213,11 @@ private actor LiveReplyReceiver {
             if let attached = committed.messages.first(where: { $0.id==snapshot.submissionID })?.localEdit {
                 localEditNotice = "Local update attached to saved v\(attached.target.versionNumber). Keep steering; it starts after two quiet minutes."
             } else if instruction != nil {
-                localEditNotice = "This message was already saved as feedback without a local command. Its original context is preserved."
+                localEditNotice = committed.messages.contains(where: { $0.id==snapshot.submissionID })
+                    ? "This message was already saved as feedback without a local command. Its original context is preserved."
+                    : "Your earlier message is already saved in the conversation history. Its original context is preserved."
             }
-            if draft == snapshot { autosave?.cancel(); autosave = nil; draft = .empty(); draftDirty = false }
+            if draft.sameWordsAndRevision(as: snapshot) { autosave?.cancel(); autosave = nil; draft = .empty(epoch: committed.historyEpoch); draftBase = nil; draftDirty = false }
             error = nil
             guard connectionGeneration == generation, !disconnecting else { return true }
             if let active = earlier {
@@ -244,7 +265,7 @@ private actor LiveReplyReceiver {
             defer { worker = nil; streaming = false; preparingReply = false; activeTransport = nil; schedulePacket(); if mayRestart { kick() } }
             while connected, !storagePending, connectionGeneration == generation {
                 preparingReply = true
-                var acknowledgedClaim: (UUID,UUID)?
+                var acknowledgedClaim: (UUID,UUID,Int)?
                 do {
                     let current = try await repository.recover(); apply(current)
                     guard connected, connectionGeneration == generation else { return }
@@ -254,23 +275,23 @@ private actor LiveReplyReceiver {
                         requestedRetry = nil; mayRestart = false
                         error = "This reply changed in another window. Its history is saved; choose the latest reply to retry."; return
                     }
-                    let id = UUID(); unacknowledgedClaim = (id,current.sessionID)
+                    let id = UUID(); unacknowledgedClaim = (id,current.sessionID,current.historyEpoch)
                     let claimed: LiveConversationDocument
                     if let previous = requestedRetry {
                         claimed = try await repository.retryTurn(previous,id: id); requestedRetry = nil
                     } else { claimed = try await repository.beginTurn(id: id) }
                     apply(claimed)
-                    unacknowledgedClaim = nil; acknowledgedClaim = (id,claimed.sessionID)
+                    unacknowledgedClaim = nil; acknowledgedClaim = (id,claimed.sessionID,claimed.historyEpoch)
                     let turn = try claimed.turns.first(where: { $0.id == id }).unwrap()
                     let prompt = try claimed.prompt(for: turn.messageIDs)
                     let workspace = try await repository.textOnlyWorkspace(session: claimed.sessionID)
                     guard connected, connectionGeneration == generation else {
-                        try await saveCompletion(id,reply: .init(sessionID: claimed.sessionID),state: .cancelled,failure: nil)
+                        try await saveCompletion(id,reply: .init(sessionID: claimed.sessionID),state: .cancelled,failure: nil,historyEpoch: claimed.historyEpoch)
                         return
                     }
                     guard let factory else { throw ClaudeFailure.disabled }
                     let transport = factory(); streaming = true
-                    let resume = claimed.turns.dropLast().contains { $0.events.contains(.session(claimed.sessionID)) }
+                    let resume = claimed.history?.identifiedSession==true || claimed.turns.dropLast().contains { $0.events.contains(.session(claimed.sessionID)) }
                     var request = ClaudeTurnRequest(sessionID: claimed.sessionID,resume: resume,prompt: prompt,project: project.folder,engine: project.folder)
                     request.projectID = project.id; request.textOnlyWorkspace = workspace
                     request.textAuthorization = .init(projectID: project.id,text: prompt)
@@ -283,7 +304,7 @@ private actor LiveReplyReceiver {
                         try Task.checkCancellation()
                         try await transport.turn(outgoing) { line in
                             let reply = try await receiver.receive(line)
-                            let value = try await repository.updateTurn(id,reply: reply)
+                            let value = try await repository.updateTurn(id,reply: reply,historyEpoch: claimed.historyEpoch)
                             await self?.receiveProgress(value)
                         }
                     }
@@ -305,12 +326,12 @@ private actor LiveReplyReceiver {
                     }
                     else { state = .failed; failure = failure ?? ClaudeFailure.incomplete.localizedDescription }
                     preempted.remove(id); activeTransport = nil; streaming = false
-                    try await saveCompletion(id,reply: reply,state: state,failure: failure)
+                    try await saveCompletion(id,reply: reply,state: state,failure: failure,historyEpoch: claimed.historyEpoch)
                     if state == .failed { error = failure ?? reply.text; connected = false; mayRestart = false; return }
                 } catch {
                     mayRestart = false
                     if pending == nil, let claim = acknowledgedClaim {
-                        pending = (claim.0,.init(sessionID: claim.1),connected ? .failed:.cancelled,"This reply could not start. Your submitted message remains saved.")
+                        pending = (claim.0,.init(sessionID: claim.1),connected ? .failed:.cancelled,"This reply could not start. Your submitted message remains saved.",claim.2)
                     }
                     if unacknowledgedClaim != nil || pending != nil { storagePending = true }
                     self.error = error.localizedDescription; return
@@ -318,9 +339,9 @@ private actor LiveReplyReceiver {
             }
         }
     }
-    private func saveCompletion(_ id: UUID,reply: LiveConversationReply,state: LiveConversationDocument.Turn.State,failure: String?) async throws {
-        pending = (id,reply,state,failure); unacknowledgedClaim = nil; storagePending = true
-        apply(try await repository.updateTurn(id,reply: reply,state: state,failure: failure))
+    private func saveCompletion(_ id: UUID,reply: LiveConversationReply,state: LiveConversationDocument.Turn.State,failure: String?,historyEpoch: Int) async throws {
+        pending = (id,reply,state,failure,historyEpoch); unacknowledgedClaim = nil; storagePending = true
+        apply(try await repository.updateTurn(id,reply: reply,state: state,failure: failure,historyEpoch: historyEpoch))
         pending = nil; storagePending = false
     }
     private func receiveProgress(_ value: LiveConversationDocument) { apply(value) }
@@ -329,22 +350,22 @@ private actor LiveReplyReceiver {
         if worker == nil, storagePending, let claim = unacknowledgedClaim {
             do {
                 let value = try await repository.load(); apply(value)
-                if value.turns.contains(where: { $0.id == claim.0 }) {
-                    pending = (claim.0,.init(sessionID: claim.1),.failed,"This reply could not start. Your submitted message remains saved.")
+                if let turn = value.turns.first(where: { $0.id == claim.0 }) {
+                    pending = (claim.0,.init(sessionID: claim.1),.failed,"This reply could not start. Your submitted message remains saved.",turn.historyEpoch ?? 0)
                 }
                 unacknowledgedClaim = nil; storagePending = pending != nil
             } catch { self.error = error.localizedDescription; return }
         }
         if worker == nil, let pending {
             do {
-                apply(try await repository.updateTurn(pending.0,reply: pending.1,state: pending.2,failure: pending.3))
+                apply(try await repository.updateTurn(pending.0,reply: pending.1,state: pending.2,failure: pending.3,historyEpoch: pending.4))
                 self.pending = nil; storagePending = false; error = nil
             } catch { self.error = error.localizedDescription; return }
         }
         if draftDirty {
             autosave?.cancel(); autosave = nil
             let snapshot = draft
-            do { _ = try await writeDraft(snapshot); if draft == snapshot { draftDirty = false; draftConflict = false } }
+            do { _ = try await writeDraft(snapshot); if draft.sameWordsAndRevision(as: snapshot) { draftDirty = false; draftConflict = false } }
             catch { reportDraft(error); return }
         }
         kick(); schedulePacket()

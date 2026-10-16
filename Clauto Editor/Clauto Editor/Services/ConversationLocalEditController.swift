@@ -54,7 +54,7 @@ import Observation
     var savingPendingResult: Bool { pending != nil }
     var latestMatchesFeedback: Bool {
         guard !unsent,let document,let request = ledger?.jobs.last?.request else { return false }
-        return request.sessionID==document.sessionID && request.feedbackIDs==document.messages.map(\.id)
+        return request.matches(document)
     }
     private func applyLedger(_ value: ConversationLocalEditLedger) {
         guard value.projectID==project.id,value.revision >= (ledger?.revision ?? 0) else { return }
@@ -67,7 +67,7 @@ import Observation
     }
     func observe(_ value: LiveConversationDocument,hasUnsentDraft: Bool) {
         guard value.projectID==project.id,value.revision >= (document?.revision ?? 0) else { return }
-        if document?.messages.map(\.id) != value.messages.map(\.id) || hasUnsentDraft && !unsent { interruptOwnedWork() }
+        if document?.feedbackSHA256 != value.feedbackSHA256 || hasUnsentDraft && !unsent { interruptOwnedWork() }
         document = value;unsent = hasUnsentDraft || value.draft?.text.isEmpty == false;schedule()
     }
     func steer() { unsent = true;interruptOwnedWork() }
@@ -102,7 +102,7 @@ import Observation
         guard loaded,!paused,!unsent,storageTask==nil,retryTask==nil,worker==nil,pending==nil,error==nil,
               idleInterval.isFinite,(0...86400).contains(idleInterval),let document,
               let last = document.latestActivity,!document.messages.isEmpty,
-              document.messages.contains(where: { $0.localEdit != nil }) else { return }
+              (document.messages.contains(where: { $0.localEdit != nil }) || document.history?.localBase != nil) else { return }
         let expected = generation,token = UUID(),deadline = last.addingTimeInterval(idleInterval);nextUpdateAt = deadline;idleID = token
         idleTask = Task {
             do {

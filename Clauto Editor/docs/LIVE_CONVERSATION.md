@@ -99,7 +99,7 @@ it also permits 512 recovered unsent snapshots, each with the same draft bounds.
 16 KiB per message/draft; four messages and 64 KiB per prompt; 1 MiB reply text and
 8192 events; 12 MiB decoded / 16 MiB encoded history. Streams allow 4 MiB across
 8192 lines, with 256 KiB per line. A bound refuses publication and preserves prior
-history. Automatic archival/rollover is unfinished. OS/NAS I/O has no hard deadline.
+history. Completed local windows now roll as described below; unresolved queues and the local-job ledger remain bounded. OS/NAS I/O has no hard deadline.
 
 Verification uses synthetic text, fake clients/transports, local process fixtures
 and native source typechecking. No actual account check, sign-in, browser, model
@@ -107,6 +107,10 @@ request, private media, app launch, microphone, Vision, VoiceOver or foreground
 acceptance is claimed. Real event shapes, sign-in, subscription/rate-limit recovery
 and responsive native interaction still need separately permitted runtime checks.
 Broader conversational editing, main-version promotion, clean-user setup and
-history rollover remain unfinished. Immutable receipts determine acceptance of
+provider-context rollover remain unfinished. Immutable receipts determine acceptance of
 each exact source pin. Local jobs use only synthetic media in verification; this
 document is not native runtime or full-product acceptance.
+
+## Completed local history
+
+[Conversation history rollover](CONVERSATION_HISTORY.md) describes automatic local sections, earlier-message browsing, recovered-draft continuation, stable provider resume and archive ownership. Rollover preserves the typed local-edit base. It does not extend a provider's context limit or roll pending/offline feedback and the separate local-job ledger.
