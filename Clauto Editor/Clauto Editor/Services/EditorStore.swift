@@ -32,6 +32,11 @@ final class EditorStore {
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var graphicStudios: [UUID: GraphicStudioController] = [:]
+    func graphicStudio(for project: Project) -> GraphicStudioController {
+        if let current = graphicStudios[project.id] { return current }
+        let next = GraphicStudioController(project: project);graphicStudios[project.id] = next;return next
+    }
     var fontStudios: [UUID: FontStudioController] = [:]
     func fontStudio(for project: Project) -> FontStudioController {
         if let current = fontStudios[project.id] { return current }
@@ -131,7 +136,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
@@ -140,6 +145,7 @@ final class EditorStore {
         }
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
+        for controller in graphicStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in fontStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in cutoutStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in liveConversations.values { if !(await controller.flushForExit()) { voicesSaved = false } }

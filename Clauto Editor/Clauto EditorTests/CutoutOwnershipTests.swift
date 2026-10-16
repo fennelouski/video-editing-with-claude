@@ -29,7 +29,7 @@ private struct GatedCutoutStore: CutoutAssetStoring {
     func masks(_ project: Project,snapshot: CutoutDraftSnapshot) async throws -> CutoutBasisPixels? { try await base.masks(project,snapshot: snapshot) }
     func storeDetection(_ project: Project,snapshot: CutoutDraftSnapshot,id: UUID,detection: CutoutDetection) async throws -> CutoutMaskBasis { try await base.storeDetection(project,snapshot: snapshot,id: id,detection: detection) }
     func storeManualMask(_ project: Project,snapshot: CutoutDraftSnapshot,id: UUID,encodedMask: Data) async throws -> CutoutMaskBasis { try await base.storeManualMask(project,snapshot: snapshot,id: id,encodedMask: encodedMask) }
-    func save(_ project: Project,base: CutoutDraftSnapshot,draft: CutoutDraft) async throws -> CutoutDraftSnapshot { try await self.base.save(project,base: base,draft: draft) }
+    func save(_ project: Project,base: CutoutDraftSnapshot,draft: CutoutDraft) async throws -> CutoutDraftSnapshot { await gate.pause("save",id: base.source.id); return try await self.base.save(project,base: base,draft: draft) }
     func copyDraft(_ project: Project,snapshot: CutoutDraftSnapshot,draft: CutoutDraft,newID: UUID,createdMilliseconds: Int64) async throws -> CutoutDraftSnapshot { try await base.copyDraft(project,snapshot: snapshot,draft: draft,newID: newID,createdMilliseconds: createdMilliseconds) }
     func preview(_ project: Project,snapshot: CutoutDraftSnapshot) async throws -> CutoutPixels { try await base.preview(project,snapshot: snapshot) }
     func export(_ project: Project,snapshot: CutoutDraftSnapshot,id: UUID,created: Date) async throws -> CutoutExport { let value = try await base.export(project,snapshot: snapshot,id: id,created: created); await gate.pause("export",id: snapshot.source.id); return value }
@@ -82,6 +82,63 @@ struct CutoutOwnershipTests {
         controller.keepBoth(); try await wait { controller.busy == nil }
         #expect(controller.saved?.source.id != a && controller.draft?.recipe.strokes.count == 2 && !controller.dirty)
         #expect(await controller.flushForExit())
+    }
+    @MainActor @Test func oldSourceSaveCannotBlockCloseOrMarkACleanKeptCopyConflicted() async throws {
+        let (root,project,a,_) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let gate = CutoutOwnershipGate(),store = GatedCutoutStore(gate: gate),controller = CutoutStudioController(project: project,repository: store)
+        controller.open(a);try await wait { controller.saved != nil && controller.busy == nil }
+        let original = try #require(controller.saved);var foreign = original.draft;foreign.recipe.featherPixels = 4
+        let foreignSaved = try await store.base.save(project,base: original,draft: foreign)
+        controller.brushRadius = 1;controller.addStroke([.init(x: 0.5,y: 0.5)])
+        #expect(!(await controller.saveNow()) && controller.conflict)
+        await gate.arm("save",target: a)
+        let oldSave = Task { await controller.saveNow() };try await entered(gate)
+        controller.keepBoth();try await wait { controller.busy == nil && controller.saved?.source.id != a }
+        let copy = try #require(controller.saved)
+        #expect(!controller.dirty && !controller.conflict && copy.draft.recipe.strokes.count == 1)
+        let close = Task { await controller.flushForExit() }
+        await Task.yield();await gate.release()
+        #expect(!(await oldSave.value))
+        #expect(await close.value)
+        #expect(!controller.hasPendingWork && !controller.conflict && controller.issue == nil)
+        #expect(try await store.base.load(project,id: a)==foreignSaved)
+        #expect(try await store.base.load(project,id: copy.source.id)==copy)
+    }
+    @MainActor @Test func oldSourceFailureCannotSkipSavingANewerStrokeOnTheKeptCopy() async throws {
+        let (root,project,a,_) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let gate = CutoutOwnershipGate(),store = GatedCutoutStore(gate: gate),controller = CutoutStudioController(project: project,repository: store)
+        controller.open(a);try await wait { controller.saved != nil && controller.busy == nil }
+        let original = try #require(controller.saved);var foreign = original.draft;foreign.recipe.featherPixels = 4
+        let foreignSaved = try await store.base.save(project,base: original,draft: foreign)
+        controller.brushRadius = 1;controller.addStroke([.init(x: 0.5,y: 0.5)])
+        #expect(!(await controller.saveNow()))
+        await gate.arm("save",target: a)
+        let oldSave = Task { await controller.saveNow() };try await entered(gate)
+        controller.keepBoth();try await wait { controller.busy == nil && controller.saved?.source.id != a }
+        let copyID = try #require(controller.saved?.source.id)
+        controller.addStroke([.init(x: 0.25,y: 0.5)]);#expect(controller.dirty)
+        let close = Task { await controller.flushForExit() }
+        await Task.yield();await gate.release()
+        #expect(!(await oldSave.value));#expect(await close.value)
+        let latest = try await store.base.load(project,id: copyID)
+        #expect(latest.draft.recipe.strokes.count == 2 && latest == controller.saved)
+        #expect(!controller.hasPendingWork && !controller.conflict && controller.issue == nil)
+        #expect(try await store.base.load(project,id: a)==foreignSaved)
+    }
+    @MainActor @Test func joiningAFailedCurrentSourceSaveStillRefusesCloseAndRetainsItsDirtyCorrection() async throws {
+        let (root,project,a,_) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let gate = CutoutOwnershipGate(),store = GatedCutoutStore(gate: gate),controller = CutoutStudioController(project: project,repository: store)
+        controller.open(a);try await wait { controller.saved != nil && controller.busy == nil }
+        let original = try #require(controller.saved);var foreign = original.draft;foreign.recipe.featherPixels = 4
+        let foreignSaved = try await store.base.save(project,base: original,draft: foreign)
+        controller.brushRadius = 1;controller.addStroke([.init(x: 0.5,y: 0.5)])
+        await gate.arm("save",target: a)
+        let pending = Task { await controller.saveNow() };try await entered(gate)
+        let close = Task { await controller.flushForExit() }
+        await Task.yield();await gate.release()
+        #expect(!(await pending.value));#expect(!(await close.value))
+        #expect(controller.dirty && controller.conflict && controller.draft?.recipe.strokes.count == 1)
+        #expect(try await store.base.load(project,id: a)==foreignSaved)
     }
     @MainActor @Test func exportAcknowledgementKeepsLaterStrokesAndTheirAutomaticSave() async throws {
         let (root,project,a,_) = try await fixture(); defer { try? FileManager.default.removeItem(at: root) }

@@ -736,3 +736,15 @@ All earlier font files and exact encoded originals remain immutable. See
 [FONT_STUDIO.md](FONT_STUDIO.md) for implementation contracts and remaining GUI,
 VoiceOver, NAS and saved-cut composition acceptance. Moving code or a passing
 component test alone does not establish source/full-product acceptance.
+
+
+## Generated graphics scenes
+
+Studio → Graphics adds editable bounded model inputs, live exact-frame previews,
+project-local cutout/font revision selection, draft recovery and actual transparent
+ProRes output with full frame/timing/alpha verification and a connected FCPXML
+graphic layer. Inputs, licenses, assumptions and earlier exports remain immutable.
+See [GRAPHICS_STUDIO.md](GRAPHICS_STUDIO.md) for limits and evidence levels.
+Standalone scene export does not yet insert into a saved cut; that integration,
+native interaction/VoiceOver/NAS/Final Cut and full-product acceptance remain
+separate unfinished work during the background-only hold.

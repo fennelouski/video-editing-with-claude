@@ -24,6 +24,8 @@ import Observation
     private var editNumber = 0
     private var autosave: Task<Void,Never>?
     private var saveTask: Task<Bool,Never>?
+    private var saveID: UUID?
+    private var saveSourceID: UUID?
     private var previewTask: Task<Void,Never>?
     private var operation: Task<Void,Never>?
     private var operationID: UUID?
@@ -158,9 +160,19 @@ import Observation
     }
     func saveNow() async -> Bool {
         autosave?.cancel(); autosave = nil
-        if let saveTask { return await saveTask.value }
+        if let saveTask {
+            let sourceID = saveSourceID
+            let result = await saveTask.value
+            // Keep Both can install a clean new source while an older save is
+            // suspended. Its failed acknowledgement does not dirty that source.
+            if !dirty { return true }
+            if !result && saved?.source.id == sourceID { return false }
+            return await saveNow()
+        }
+        let id = UUID(); saveID = id; saveSourceID = saved?.source.id
         let task = Task { [weak self] () -> Bool in
-            guard let self else { return false }; saving = true; defer { saving = false }
+            guard let self else { return false }; saving = true
+            defer { if saveID == id { saving = false; saveTask = nil; saveID = nil; saveSourceID = nil } }
             while dirty {
                 guard let base = saved, let snapshot = draft else { return false }
                 let number = editNumber
@@ -172,13 +184,14 @@ import Observation
                     else { draft?.generation = next.draft.generation; draft?.currentRevisionID = next.draft.currentRevisionID }
                     conflict = false
                 } catch {
+                    guard saved?.source.id == base.source.id else { return false }
                     conflict = (error as? CutoutFailure).map { if case .storageConflict = $0 { return true }; return false } ?? false
                     issue = error.localizedDescription; return false
                 }
             }
             return true
         }
-        saveTask = task; let value = await task.value; saveTask = nil; return value
+        saveTask = task; return await task.value
     }
     func keepBoth() {
         guard busy == nil, conflict, let saved, let draft else { return }

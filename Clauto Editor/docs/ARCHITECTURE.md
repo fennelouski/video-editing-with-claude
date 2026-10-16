@@ -234,3 +234,15 @@ then rechecks job/tool identities and inputs. The custom compiler emits actual T
 and WOFF2; generated fallback remains explicitly licensed/labelled. The standard
 HerMarker builder is unchanged. See [FONT_STUDIO.md](FONT_STUDIO.md) for bounds and
 unaccepted native/saved-cut behavior.
+
+
+## Generated graphics scenes
+
+Studio → Graphics adds editable bounded model inputs, live exact-frame previews,
+project-local cutout/font revision selection, draft recovery and actual transparent
+ProRes output with full frame/timing/alpha verification and a connected FCPXML
+graphic layer. Inputs, licenses, assumptions and earlier exports remain immutable.
+See [GRAPHICS_STUDIO.md](GRAPHICS_STUDIO.md) for limits and evidence levels.
+Standalone scene export does not yet insert into a saved cut; that integration,
+native interaction/VoiceOver/NAS/Final Cut and full-product acceptance remain
+separate unfinished work during the background-only hold.
