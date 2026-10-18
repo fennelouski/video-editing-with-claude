@@ -63,6 +63,7 @@ struct CutVersion: Codable, Identifiable, Sendable {
     var aspect: String? = nil
     var scriptInputSHA256: String? = nil
     var scriptSelectionReceiptSHA256: String? = nil
+    var localEditOrigin: SavedVersionOrigin? = nil
     func preferredArtifact(_ suffix: String) -> String? {
         if let prefix = primaryOutputPrefix, [".heard.txt", ".edl.json", ".preview.mp4", ".mp4"].contains(suffix) {
             return artifacts.contains(prefix + suffix) ? prefix + suffix : nil
@@ -73,6 +74,98 @@ struct CutVersion: Codable, Identifiable, Sendable {
     func briefChanged(_ project: Project) -> Bool {
         guard let briefHash else { return false }
         return briefHash != SHA256.hash(data: Data(project.brief.markdown.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// Saving a verified local export inherits its parent's approved inputs. It is
+/// not a new editorial, scientific or production approval.
+struct SavedVersionOrigin: Codable, Equatable, Sendable {
+    var derivativeID: UUID
+    var parentVersionID: UUID
+    var parentTimelineSHA256: String
+    var recipeSHA256: String
+    var parentMetadataSHA256: String
+    var receiptSHA256: String
+}
+
+struct SavedVersionPromotionReceipt: Codable, Sendable {
+    var schemaVersion = 1
+    var projectID: UUID
+    var versionID: UUID
+    var versionNumber: Int
+    var derivativeID: UUID
+    var parentVersionID: UUID
+    var parentMetadataSHA256: String
+    var projectManifestSHA256: String
+    var parentTimelineSHA256: String
+    var recipeSHA256: String
+    var savedTimelineSHA256: String
+    var savedPreviewSHA256: String
+    var savedOutputSHA256: [String: String]
+    var newEditorialApproval = false
+    var newFactApproval = false
+    var productionAuthorized = false
+}
+
+struct SavedCutPointer: Equatable, Sendable {
+    let id: UUID?
+    let signature: SourceFileSignature?
+}
+
+enum SavedCutStorage {
+    /// The caller holds the common project lease and uniquely reserved this
+    /// version folder. Stage/fsync first, then publish the complete record by
+    /// descriptor-relative rename. A crash leaves no partially written final
+    /// metadata. This is owned-slot coordination, not a generic no-replace API.
+    static func publishMetadata(_ bytes: Data, to folder: SourceRenderDirectory, lease: ProjectMutationLease,
+                                validatePublication: @Sendable () throws -> Void = { try Task.checkCancellation() }) throws {
+        try lease.root.checkPath(); try folder.checkPath()
+        guard !(try CreativeAssetFiles.exists("clauto-version.json", in: folder)) else { throw ProjectFailure.invalidProject }
+        let pending = ".clauto-version-pending-"+UUID().uuidString
+        try folder.writeNew(bytes, name: pending)
+        try validatePublication(); try Task.checkCancellation()
+        try lease.root.checkPath(); try folder.checkPath()
+        guard !(try CreativeAssetFiles.exists("clauto-version.json", in: folder)),
+              renameat(folder.descriptor,pending,folder.descriptor,"clauto-version.json")==0 else { throw ProjectFailure.invalidProject }
+        _ = fsync(folder.descriptor)
+    }
+    static func currentState(_ root: SourceRenderDirectory) throws -> SavedCutPointer {
+        let cuts = try root.child("cuts")
+        guard try CreativeAssetFiles.exists("current.json", in: cuts) else { return .init(id: nil, signature: nil) }
+        func signature() throws -> SourceFileSignature {
+            var value = stat()
+            guard fstatat(cuts.descriptor,"current.json",&value,AT_SYMLINK_NOFOLLOW)==0,
+                  value.st_mode&S_IFMT==S_IFREG,value.st_size>=0 else { throw ProjectFailure.invalidProject }
+            return .init(device: value.st_dev,inode: value.st_ino,size: value.st_size,
+                modifiedSeconds: Int64(value.st_mtimespec.tv_sec),modifiedNanoseconds: Int64(value.st_mtimespec.tv_nsec),
+                changedSeconds: Int64(value.st_ctimespec.tv_sec),changedNanoseconds: Int64(value.st_ctimespec.tv_nsec))
+        }
+        let before = try signature()
+        let id = try JSONDecoder().decode(UUID.self, from: cuts.read("current.json", limit: 1024))
+        guard try signature() == before else { throw ProjectFailure.invalidProject }
+        return .init(id: id, signature: before)
+    }
+    static func currentID(_ root: SourceRenderDirectory) throws -> UUID? {
+        try currentState(root).id
+    }
+
+    /// Reserve a distinct name briefly under the common lease. Missing version
+    /// metadata denotes incomplete retained work, not an accepted saved version.
+    static func reserve(_ project: Project) throws -> (Int, SourceRenderDirectory) {
+        let lease = try ProjectMutationLease.acquire(project)
+        defer { withExtendedLifetime(lease) {} }
+        let cuts = try lease.root.child("cuts", create: true)
+        let names = try FileManager.default.contentsOfDirectory(atPath: cuts.url.path)
+        let numbers = names.compactMap { name -> Int? in
+            guard name.range(of: "^v[0-9]+$", options: .regularExpression) != nil else { return nil }
+            return Int(name.dropFirst())
+        }
+        let last = numbers.max() ?? 0
+        guard last >= 0, last < 999_999 else { throw ProjectFailure.invalidProject }
+        let number = last + 1
+        let folder = try cuts.child(String(format: "v%03d", number), create: true, exclusive: true)
+        try lease.root.checkPath(); try cuts.checkPath()
+        return (number, folder)
     }
 }
 
@@ -451,12 +544,16 @@ actor WorkflowRepository {
     }
 
     func versions(project: Project) throws -> [CutVersion] {
-        let root = try safe("cuts", in: project.folder)
+        let physical = try ProjectMutationLease.checkedRoot(project)
+        let cuts = try physical.child("cuts")
+        let root = cuts.url
         return try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.range(of: "^v[0-9]+$", options: .regularExpression) != nil }
-            .map { folder in
+            .compactMap { folder -> CutVersion? in
                 _ = try safe(folder.lastPathComponent, in: root)
-                let version = try decoder.decode(CutVersion.self, from: Data(contentsOf: folder.appendingPathComponent("clauto-version.json")))
+                let owned = try cuts.child(folder.lastPathComponent)
+                guard try CreativeAssetFiles.exists("clauto-version.json", in: owned) else { return nil }
+                let version = try decoder.decode(CutVersion.self, from: owned.read("clauto-version.json", limit: 1024*1024))
                 guard version.number > 0, version.folderName == folder.lastPathComponent else { throw ProjectFailure.invalidProject }
                 for artifact in version.artifacts { _ = try safe(artifact, in: folder) }
                 return version
@@ -475,12 +572,20 @@ actor WorkflowRepository {
     }
 
     func restore(_ version: CutVersion, project: Project) throws {
+        let lease = try ProjectMutationLease.acquire(project)
+        defer { withExtendedLifetime(lease) {} }
+        let cuts = try lease.root.child("cuts")
         guard try versions(project: project).contains(where: { $0.id == version.id }) else { throw ProjectFailure.invalidProject }
-        try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
+        try lease.root.checkPath(); try cuts.checkPath()
+        try cuts.replacePointer(encoder.encode(version.id), name: "current.json")
     }
 
-    func snapshot(_ run: EditRun, project: Project) throws -> CutVersion {
+    func snapshot(_ run: EditRun, project: Project,
+                  reserveVersion: @Sendable (Project) throws -> (Int, SourceRenderDirectory) = { try SavedCutStorage.reserve($0) }) throws -> CutVersion {
         try validate(run, project: project)
+        let originalRoot = try ProjectMutationLease.checkedRoot(project)
+        let originalCuts = try originalRoot.child("cuts")
+        let originalCurrent = try SavedCutStorage.currentState(originalRoot)
         let settings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
         try validateScriptInput(run,project: project,settings: settings)
         let frozenBounds = try settings["duration_bounds"].map { try decoder.decode(VideoDurationBounds.self, from: Data($0.utf8)) }
@@ -491,10 +596,15 @@ actor WorkflowRepository {
         let exports = try safe("exports", in: run.folder)
         let timelines = try fm.contentsOfDirectory(at: exports, includingPropertiesForKeys: nil).filter { $0.pathExtension == "fcpxml" }
         guard !timelines.isEmpty else { throw WorkflowFailure.invalid("The engine did not produce a timeline. The previous cut is still current.") }
+        let sourceExports = try SourceRenderDirectory.open(exports)
+        var validatedXML = [String:Data](), validatedReports = [String:Data]()
+        for timeline in timelines {
+            validatedXML[timeline.lastPathComponent] = try sourceExports.read(timeline.lastPathComponent,limit: 16*1024*1024)
+        }
         if let resolution = run.exportResolution, let aspect = run.aspect {
             let expected = resolution.dimensions(aspect: aspect)
             for timeline in timelines {
-                let xml = try XMLDocument(contentsOf: safe(timeline.lastPathComponent, in: exports), options: .nodeLoadExternalEntitiesNever)
+                let xml = try XMLDocument(data: validatedXML[timeline.lastPathComponent]!, options: .nodeLoadExternalEntitiesNever)
                 let sequences = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence")
                 guard sequences.count == 1, let sequence = sequences[0] as? XMLElement,
                       let format = sequence.attribute(forName: "format")?.stringValue,
@@ -508,54 +618,75 @@ actor WorkflowRepository {
         if let bounds = run.durationBounds {
             // Validate actual emitted bytes independently of runner success and the EDL.
             guard timelines.count == 1 else { throw WorkflowFailure.invalid("A single finished timeline is required to verify duration limits.") }
-            let xml = try XMLDocument(contentsOf: safe(timelines[0].lastPathComponent, in: exports), options: .nodeLoadExternalEntitiesNever)
+            let xml = try XMLDocument(data: validatedXML[timelines[0].lastPathComponent]!, options: .nodeLoadExternalEntitiesNever)
             try bounds.check(try timelineDuration(xml))
         }
         struct Validation: Decodable { var timeline: String; var sha256: String; var problems: [String]; var schemaChecked: Bool }
         var schemaChecked = true
         for timeline in timelines {
-            let checked = try safe(timeline.lastPathComponent, in: exports)
-            let report = try decoder.decode(Validation.self, from: Data(contentsOf: safe(timeline.deletingPathExtension().lastPathComponent + ".validation.json", in: exports)))
-            let hash = SHA256.hash(data: try Data(contentsOf: checked)).map { String(format: "%02x", $0) }.joined()
+            let reportName = timeline.deletingPathExtension().lastPathComponent + ".validation.json"
+            let reportBytes = try sourceExports.read(reportName,limit: 8*1024*1024)
+            validatedReports[reportName] = reportBytes
+            let report = try decoder.decode(Validation.self, from: reportBytes)
+            let hash = TranscriptSourceMap.sha(validatedXML[timeline.lastPathComponent]!)
             guard report.timeline == timeline.lastPathComponent, report.sha256 == hash, report.problems.isEmpty else {
                 throw WorkflowFailure.invalid("The timeline's validation evidence is missing or changed. Re-run rendering before saving a version.")
             }
             schemaChecked = schemaChecked && report.schemaChecked
         }
-        let number = (try versions(project: project).map(\.number).max() ?? 0) + 1
-        let folder = try safe(String(format: "cuts/v%03d", number), in: project.folder)
-        try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        let (number, reserved) = try reserveVersion(project)
+        try reserved.checkPath()
         var artifacts: [String] = []
         var savedSchemaChecked = true
         do {
-            for section in ["exports", "roughcut", "plan", "inputs"] {
-                let source = try safe(section, in: run.folder)
-                guard fm.fileExists(atPath: source.path) else { continue }
-                for case let file as URL in fm.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey])! {
-                    guard (try file.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true,
-                          ["fcpxml", "itt", "mp4", "pdf", "txt", "md", "docx", "json"].contains(file.pathExtension.lowercased()) else { continue }
-                    let resolvedFile = file.resolvingSymlinksInPath()
-                    let resolvedRun = run.folder.resolvingSymlinksInPath()
-                    guard resolvedFile.path.hasPrefix(resolvedRun.path + "/") else { continue }
-                    var relative = String(resolvedFile.path.dropFirst(resolvedRun.path.count + 1))
-                    // This receipt validates the engine's source XML. URI rewriting below
-                    // creates different bytes, so keep its role explicit in the version.
-                    if relative.hasSuffix(".validation.json") { relative = String(relative.dropLast(".validation.json".count)) + ".source-validation.json" }
-                    let target = try safe(relative, in: folder)
-                    try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    if file.pathExtension == "fcpxml" {
-                        let xml = try XMLDocument(contentsOf: file, options: [.nodePreserveAll, .nodeLoadExternalEntitiesNever])
+            let runSource = try SourceRenderDirectory.open(run.folder)
+            let resolvedRun = run.folder.resolvingSymlinksInPath()
+            func location(_ relative: String, in base: SourceRenderDirectory, create: Bool = false) throws -> (SourceRenderDirectory, String) {
+                guard !relative.hasPrefix("/"), !relative.split(separator: "/").contains("..") else { throw ProjectFailure.invalidProject }
+                let parts = relative.split(separator: "/").map(String.init)
+                guard let leaf = parts.last else { throw ProjectFailure.invalidProject }
+                var parent = base
+                for part in parts.dropLast() { parent = try parent.child(part, create: create) }
+                return (parent, leaf)
+            }
+            var mediaHashes = [String:String]()
+            var copiedHashes = [String:String]()
+            var materializedXML = Set<String>(), materializedReports = Set<String>()
+            func copySection(_ source: SourceRenderDirectory, prefix: String) throws {
+                try runSource.checkPath(); try reserved.checkPath(); try source.checkPath()
+                for name in try fm.contentsOfDirectory(atPath: source.url.path).sorted() {
+                    try Task.checkCancellation()
+                    var info = stat()
+                    guard fstatat(source.descriptor,name,&info,AT_SYMLINK_NOFOLLOW)==0 else { throw ProjectFailure.invalidProject }
+                    if info.st_mode&S_IFMT==S_IFDIR {
+                        try copySection(source.child(name), prefix: prefix+"/"+name); continue
+                    }
+                    guard info.st_mode&S_IFMT==S_IFREG,
+                          ["fcpxml", "itt", "mp4", "pdf", "txt", "md", "docx", "json"].contains(URL(fileURLWithPath: name).pathExtension.lowercased()) else { continue }
+                    var relative = prefix+"/"+name
+                    if relative.hasSuffix(".validation.json") { relative = String(relative.dropLast(".validation.json".count))+".source-validation.json" }
+                    let (target, leaf) = try location(relative, in: reserved, create: true)
+                    if name.hasSuffix(".fcpxml") {
+                        let sourceBytes = try source.read(name, limit: 16*1024*1024)
+                        if prefix == "exports" || prefix.hasPrefix("exports/") {
+                            guard prefix == "exports", validatedXML[name] == sourceBytes else { throw WorkflowFailure.invalid("The validated source timeline changed while saving. The previous cut stays current.") }
+                        }
+                        let xml = try XMLDocument(data: sourceBytes, options: [.nodePreserveAll,.nodeLoadExternalEntitiesNever])
                         for case let node as XMLElement in try xml.nodes(forXPath: "//media-rep[@src] | //asset[@src]") {
                             guard let src = node.attribute(forName: "src"), let value = src.stringValue,
                                   let media = URL(string: value), media.isFileURL else { throw ProjectFailure.invalidProject }
                             let resolved = media.resolvingSymlinksInPath()
                             guard fm.fileExists(atPath: resolved.path) else { throw ProjectFailure.missingFile(resolved.lastPathComponent) }
-                            if resolved.path.hasPrefix(resolvedRun.path + "/") {
-                                let name = "media/\(SHA256.hash(data: Data(resolved.path.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined())-\(resolved.lastPathComponent)"
-                                let copied = try safe(name, in: folder)
-                                try fm.createDirectory(at: copied.deletingLastPathComponent(), withIntermediateDirectories: true)
-                                if !fm.fileExists(atPath: copied.path) { try fm.copyItem(at: resolved, to: copied) }
-                                src.stringValue = copied.absoluteString
+                            if resolved.path.hasPrefix(resolvedRun.path+"/") {
+                                let generated = String(resolved.path.dropFirst(resolvedRun.path.count+1))
+                                let (input, inputLeaf) = try location(generated, in: runSource)
+                                let mediaName = SHA256.hash(data: Data(resolved.path.utf8)).prefix(8).map { String(format: "%02x",$0) }.joined()+"-"+resolved.lastPathComponent
+                                let permanent = try reserved.child("media", create: true)
+                                if mediaHashes[mediaName] == nil {
+                                    mediaHashes[mediaName] = try input.voiceHash(inputLeaf, limit: GraphicArtifactFiles.movieLimit, copyTo: permanent, destinationName: mediaName)
+                                    copiedHashes["media/"+mediaName] = mediaHashes[mediaName]
+                                }
+                                src.stringValue = permanent.url.appendingPathComponent(mediaName).absoluteString
                             } else { src.stringValue = resolved.absoluteString }
                         }
                         let (saved, checkedSchema) = try serializedTimeline(xml)
@@ -563,21 +694,35 @@ actor WorkflowRepository {
                             try bounds.check(try timelineDuration(XMLDocument(data: saved, options: .nodeLoadExternalEntitiesNever)))
                         }
                         savedSchemaChecked = savedSchemaChecked && checkedSchema
-                        try saved.write(to: target, options: .atomic)
-                        let record = relative.replacingOccurrences(of: ".fcpxml", with: ".snapshot.json")
-                        let hashes: [String: Any] = [
-                            "source_sha256": SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined(),
-                            "saved_sha256": SHA256.hash(data: saved).map { String(format: "%02x", $0) }.joined(),
-                            "transformation": "Made local media references permanent; source validation is retained separately.",
-                            "saved_schema": checkedSchema ? "Passed the installed Final Cut DTD" : "Unavailable",
-                        ]
-                        try JSONSerialization.data(withJSONObject: hashes, options: [.prettyPrinted, .sortedKeys]).write(to: safe(record, in: folder), options: .atomic)
+                        try target.writeNew(saved, name: leaf)
+                        if prefix == "exports" { materializedXML.insert(name) }
+                        copiedHashes[relative] = TranscriptSourceMap.sha(saved)
+                        let record = relative.replacingOccurrences(of: ".fcpxml",with: ".snapshot.json")
+                        let hashes: [String:Any] = ["source_sha256":TranscriptSourceMap.sha(sourceBytes),"saved_sha256":TranscriptSourceMap.sha(saved),
+                            "transformation":"Made local media references permanent; source validation is retained separately.",
+                            "saved_schema":checkedSchema ? "Passed the installed Final Cut DTD":"Unavailable"]
+                        let (recordFolder, recordLeaf) = try location(record,in: reserved,create: true)
+                        let recordBytes = try JSONSerialization.data(withJSONObject: hashes,options: [.prettyPrinted,.sortedKeys])
+                        try recordFolder.writeNew(recordBytes,name: recordLeaf)
+                        copiedHashes[record] = TranscriptSourceMap.sha(recordBytes)
                         artifacts.append(record)
-                    } else { try fm.copyItem(at: file, to: target) }
+                    } else if prefix == "exports", let expected = validatedReports[name] {
+                        let bytes = try source.read(name,limit: 8*1024*1024)
+                        guard bytes == expected else { throw ProjectFailure.invalidProject }
+                        try target.writeNew(bytes,name: leaf)
+                        materializedReports.insert(name)
+                        copiedHashes[relative] = TranscriptSourceMap.sha(bytes)
+                    } else { copiedHashes[relative] = try source.voiceHash(name,limit: GraphicArtifactFiles.movieLimit,copyTo: target,destinationName: leaf) }
                     artifacts.append(relative)
                 }
             }
-            let runSettings = try decoder.decode([String: String].self, from: Data(contentsOf: safe("paths.json", in: run.folder)))
+            for section in ["exports","roughcut","plan","inputs"] {
+                if try CreativeAssetFiles.exists(section,in: runSource) { try copySection(runSource.child(section),prefix: section) }
+            }
+            guard materializedXML == Set(validatedXML.keys), materializedReports == Set(validatedReports.keys) else {
+                throw WorkflowFailure.invalid("A validated timeline or its report disappeared while saving. The previous cut stays current.")
+            }
+            let runSettings = try decoder.decode([String: String].self, from: runSource.read("paths.json",limit: 8*1024*1024))
             let assembled = (run.narrationCount ?? 1) > 1
             guard assembled == (runSettings["assembly"] != nil) else { throw ProjectFailure.invalidProject }
             if assembled {
@@ -588,27 +733,57 @@ actor WorkflowRepository {
                 }
             }
             let readbacks = artifacts.filter { $0.hasSuffix(".heard.txt") }
-            guard !readbacks.isEmpty, try readbacks.allSatisfy({ !(try String(contentsOf: safe($0, in: folder), encoding: .utf8)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            guard !readbacks.isEmpty, try readbacks.allSatisfy({ path in
+                let (directory, name) = try location(path,in: reserved)
+                guard let text = String(data: try directory.read(name,limit: 16*1024*1024),encoding: .utf8) else { throw ProjectFailure.invalidProject }
+                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }) else {
                 throw WorkflowFailure.invalid("Read-back is missing or empty. This cut remains unverified and the previous version stays current.")
             }
-            let briefHash = SHA256.hash(data: try Data(contentsOf: safe("inputs/brief.md", in: run.folder))).map { String(format: "%02x", $0) }.joined()
-            let planObject = try JSONSerialization.jsonObject(with: Data(try plan(run).text.utf8)) as? [String: Any]
+            let briefHash = TranscriptSourceMap.sha(try reserved.child("inputs").read("brief.md",limit: 16*1024*1024))
+            let planPaths = artifacts.filter { $0.hasPrefix("plan/") && $0.hasSuffix(".plan.json") }
+            guard planPaths.count == 1 else { throw ProjectFailure.invalidProject }
+            let (planFolder, planLeaf) = try location(planPaths[0],in: reserved)
+            let savedPlan = try planFolder.read(planLeaf,limit: 16*1024*1024)
+            guard TranscriptSourceMap.sha(savedPlan)==approval else { throw ProjectFailure.invalidProject }
+            let planObject = try JSONSerialization.jsonObject(with: savedPlan) as? [String:Any]
             guard let script = planObject?["script"] as? String, script == URL(fileURLWithPath: script).lastPathComponent,
                   artifacts.contains("inputs/script/" + script) else { throw WorkflowFailure.invalid("The approved script is missing from the run snapshot.") }
             if let sha = run.scriptInputSHA256 {
                 guard script == run.scriptInputName,
-                      TranscriptSourceMap.sha(try SourceRenderDirectory.open(folder).child("inputs").child("script").read(script,limit: ProjectScriptSelectionStore.limit)) == sha else { throw WorkflowFailure.invalid("The saved version's script differs from its selected run input.") }
+                      TranscriptSourceMap.sha(try reserved.child("inputs").child("script").read(script,limit: ProjectScriptSelectionStore.limit)) == sha else { throw WorkflowFailure.invalid("The saved version's script differs from its selected run input.") }
                 if let receiptSHA = run.scriptSelectionReceiptSHA256 {
-                    guard TranscriptSourceMap.sha(try SourceRenderDirectory.open(folder).child("inputs").read("script-selection.json",limit: 64*1024)) == receiptSHA else { throw ProjectFailure.invalidProject }
+                    guard TranscriptSourceMap.sha(try reserved.child("inputs").read("script-selection.json",limit: 64*1024)) == receiptSHA else { throw ProjectFailure.invalidProject }
                 }
                 try validateScriptInput(run,project: project,settings: settings)
             }
             let prefix = assembled ? "roughcut/assembly/selected" : nil
             let version = CutVersion(number: number, label: run.label, engineVersion: project.manifest.engineVersion, runID: run.id, artifacts: artifacts, approvedPlanHash: approval, sourceSchemaChecked: schemaChecked, savedSchemaChecked: savedSchemaChecked, briefHash: briefHash, approvedScript: "inputs/script/" + script, primaryOutputPrefix: prefix, durationBounds: run.durationBounds, exportResolution: run.exportResolution, aspect: run.aspect,scriptInputSHA256: run.scriptInputSHA256,scriptSelectionReceiptSHA256: run.scriptSelectionReceiptSHA256)
-            try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"), options: .atomic)
-            try encoder.encode(version.id).write(to: safe("cuts/current.json", in: project.folder), options: .atomic)
+            // Hash outside the common lease, then retain file identities for the
+            // short publication check. Completed bytes cannot drift unnoticed.
+            var copiedSignatures = [String:SourceFileSignature]()
+            for (path, hash) in copiedHashes {
+                let (directory, name) = try location(path,in: reserved)
+                let before = try Self.derivativeSignature(name,in: directory)
+                guard try directory.voiceHash(name,limit: GraphicArtifactFiles.movieLimit)==hash,
+                      try Self.derivativeSignature(name,in: directory)==before else { throw ProjectFailure.invalidProject }
+                copiedSignatures[path] = before
+            }
+            let lease = try ProjectMutationLease.acquire(project)
+            defer { withExtendedLifetime(lease) {} }
+            guard lease.root.identity == originalRoot.identity,
+                  try SavedCutStorage.currentState(lease.root) == originalCurrent else {
+                throw WorkflowFailure.invalid("The current version changed while saving. Your earlier versions are preserved; review the current cut before saving again.")
+            }
+            try reserved.checkPath(); try originalCuts.checkPath()
+            for (path, signature) in copiedSignatures {
+                let (directory, name) = try location(path,in: reserved)
+                guard try Self.derivativeSignature(name,in: directory)==signature else { throw ProjectFailure.invalidProject }
+            }
+            try SavedCutStorage.publishMetadata(encoder.encode(version), to: reserved, lease: lease)
+            try originalCuts.replacePointer(encoder.encode(version.id), name: "current.json")
             return version
-        } catch { try? fm.removeItem(at: folder); throw error }
+        } catch { throw error } // Retain incomplete owned work; never delete by a mutable pathname.
     }
 
     private func serializedTimeline(_ xml: XMLDocument) throws -> (Data, Bool) {
@@ -693,6 +868,26 @@ actor WorkflowRepository {
         } else if scriptURL.pathExtension.lowercased() == "docx", fm.fileExists(atPath: scriptURL.path) {
             sections.append(.init(title: "Approved script", text: "The original script is preserved with this version as a Word document. This PDF does not convert its comments."))
         } else { throw ProjectFailure.invalidProject }
+        if version.localEditOrigin != nil {
+            let bound = try feedbackTarget(version.id, project: project)
+            let receipt = try promotionReceipt(version, project: project)
+            let directory = try ProjectMutationLease.checkedRoot(project).child("cuts").child(version.folderName).child("exports")
+            for (name, hash) in receipt.savedOutputSHA256 {
+                guard try directory.voiceHash(name, limit: GraphicArtifactFiles.movieLimit) == hash else { throw ProjectFailure.invalidProject }
+            }
+            let xml = try XMLDocument(data: directory.read("timeline.fcpxml", limit: 16*1024*1024), options: .nodeLoadExternalEntitiesNever)
+            let assets = try xml.nodes(forXPath: "/fcpxml/resources/asset").compactMap { $0 as? XMLElement }
+            let clips = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence/spine//asset-clip").compactMap { $0 as? XMLElement }
+            let rows = clips.enumerated().map { index, clip in
+                let asset = assets.first { $0.attribute(forName: "id")?.stringValue == clip.attribute(forName: "ref")?.stringValue }
+                let source = asset?.elements(forName: "media-rep").first?.attribute(forName: "src")?.stringValue.flatMap(URL.init(string:))
+                return "Layer \(index+1) | \(source?.lastPathComponent ?? "Saved media") | Timeline \(clip.attribute(forName: "offset")?.stringValue ?? "inherited") | Source \(clip.attribute(forName: "start")?.stringValue ?? "0s") | Duration \(clip.attribute(forName: "duration")?.stringValue ?? "inherited")"
+            }
+            sections.append(.init(title: "Local update and review status", text: "Saved from parent version ID \(receipt.parentVersionID.uuidString). The approved script above is inherited reference material. This local export was fully decoded and its output hashes verified, but its edited audio has not been transcribed again. No new editorial, scientific or production approval is recorded. Review the saved movie before sharing."))
+            sections.append(.init(title: "Saved timeline layers", text: rows.joined(separator: "\n") + String(format: "\n\nSaved duration %.3f seconds. Times retain the editable timeline's rational-second notation; connected-layer offsets are relative to their parent clip.", bound.duration)))
+            return HandoffReport(title: project.manifest.name + " - " + version.folderName,
+                subtitle: version.label + " | Local update with inherited approved inputs", sections: sections)
+        }
         guard let readback = try text(".heard.txt") else { throw WorkflowFailure.invalid("Read-back is unavailable. Reconnect the version's drive and retry.") }
         sections.append(.init(title: "Rendered audio read-back", text: readback))
         if let edlFile = version.preferredArtifact(".edl.json") {
@@ -800,7 +995,7 @@ actor WorkflowRepository {
         return parent.url.appendingPathComponent(id.uuidString)
     }
 
-    private struct DerivativeVerification {
+    private struct DerivativeVerification: Sendable {
         let root: SourceRenderDirectory
         let output: SourceRenderDirectory
         let signatures: [String:SourceFileSignature]
@@ -908,6 +1103,235 @@ actor WorkflowRepository {
         try lease.root.checkPath();try verified.output.checkPath()
     }
 
+    /// Copies an already verified export into immutable main-version history.
+    /// It never rerenders, grants approval, deletes build evidence or overwrites
+    /// an earlier version. A concurrent current-version change refuses publication.
+    func saveDerivativeAsVersion(_ requested: DerivedCut, label: String, expectedCurrent: UUID?,
+                                 project original: Project,
+                                 fileExecutor: GraphicBlockingExecutor = GraphicArtifactFiles.executor) async throws -> CutVersion {
+        let title = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.utf8.count <= 240,
+              !title.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              requested.projectID == original.id else { throw WorkflowFailure.invalid("Give this version a short name.") }
+        let root = try ProjectMutationLease.checkedRoot(original)
+        var pinned = original; pinned.folder = root.url; pinned.folderIdentity = root.identity
+        let project = pinned
+        let originalCuts = try root.child("cuts")
+        let manifestBytes = try root.read("clauto-project.json", limit: 8*1024*1024)
+        try TranscriptJSONKeys.validate(manifestBytes)
+        let manifest = try decoder.decode(ProjectManifest.self, from: manifestBytes)
+        guard manifest.id == project.id else { throw ProjectFailure.invalidProject }
+        let versions = try versions(project: project)
+        if let existing = versions.first(where: { $0.localEditOrigin?.derivativeID == requested.id }) {
+            guard existing.localEditOrigin?.recipeSHA256 == requested.recipeSHA256,
+                  existing.localEditOrigin?.parentVersionID == requested.parentVersionID else { throw ProjectFailure.invalidProject }
+            let receipt = try promotionReceipt(existing, project: project)
+            let exports = try root.child("cuts").child(existing.folderName).child("exports")
+            for (name, sha) in receipt.savedOutputSHA256 {
+                guard try exports.voiceHash(name, limit: GraphicArtifactFiles.movieLimit) == sha else { throw ProjectFailure.invalidProject }
+            }
+            return existing // Retry acknowledges its version without changing a newer current cut.
+        }
+        let currentPointer = try SavedCutStorage.currentState(root)
+        guard currentPointer.id == expectedCurrent,
+              let parent = versions.first(where: { $0.id == requested.parentVersionID }),
+              let scriptPath = parent.approvedScript, scriptPath.hasPrefix("inputs/script/"),
+              parent.artifacts.contains(scriptPath), let briefSHA = parent.briefHash else {
+            throw WorkflowFailure.invalid("The current version changed or its saved inputs are unavailable. Review the current cut before saving again.")
+        }
+        let source = try root.child("build").child("derivatives").child(requested.id.uuidString)
+        let recordBytes = try source.read("clauto-derivative.json", limit: 65536)
+        try TranscriptJSONKeys.validate(recordBytes)
+        let stored = try decoder.decode(DerivedCut.self, from: recordBytes)
+        guard stored.id == requested.id, stored.projectID == project.id,
+              stored.parentVersionID == requested.parentVersionID,
+              stored.parentTimelineSHA256 == requested.parentTimelineSHA256,
+              stored.request == requested.request, stored.recipeSHA256 == requested.recipeSHA256 else { throw ProjectFailure.invalidProject }
+        let verified = try inspectDerivative(folder: source.url, parentVersionID: stored.parentVersionID,
+            parentHash: stored.parentTimelineSHA256, request: stored.request, project: project, root: root)
+        guard verified.recipeSHA256 == stored.recipeSHA256 else { throw ProjectFailure.invalidProject }
+        let recipe = try source.read("derivative.json", limit: 8*1024*1024)
+        guard TranscriptSourceMap.sha(recipe) == stored.recipeSHA256 else { throw ProjectFailure.invalidProject }
+        guard let object = try JSONSerialization.jsonObject(with: recipe) as? [String: Any],
+              let hashes = object["output_sha256"] as? [String: String], hashes.count <= 100 else { throw ProjectFailure.invalidProject }
+        // A separate short/portrait export is allowed, but moving it into main
+        // version history must not erase the parent's frozen duration gate.
+        let constraints = [parent.durationBounds, manifest.durationBounds].compactMap { $0 }
+        for bounds in constraints { try bounds.validate() }
+        let limits = VideoDurationBounds(minimum: constraints.compactMap(\.minimum).max(), maximum: constraints.compactMap(\.maximum).min())
+        try limits.validate()
+        let durationBounds = limits.enabled ? limits : nil
+        let actualDuration = try timelineDuration(XMLDocument(data: source.read("timeline.fcpxml", limit: 16*1024*1024), options: .nodeLoadExternalEntitiesNever))
+        try durationBounds?.check(actualDuration)
+        let copiedBytes = verified.signatures.values.reduce(Int64(0)) { $0 + $1.size }
+        guard copiedBytes <= GraphicArtifactFiles.movieLimit else {
+            throw WorkflowFailure.invalid("This export is too large to save as one version. Choose a shorter or smaller export.")
+        }
+        let parentRoot = try root.child("cuts").child(parent.folderName)
+        let parentMetadata = try parentRoot.read("clauto-version.json", limit: 1024*1024)
+        let plans = parent.artifacts.filter { $0.hasPrefix("plan/") && $0.hasSuffix(".plan.json") }
+        guard plans.count == 1 else { throw ProjectFailure.invalidProject }
+        let planName = String(plans[0].dropFirst("plan/".count))
+        let scriptName = String(scriptPath.dropFirst("inputs/script/".count))
+        let parentFiles = [
+            "plan/" + planName: try parentRoot.child("plan").read(planName, limit: 16*1024*1024),
+            "inputs/brief.md": try parentRoot.child("inputs").read("brief.md", limit: 16*1024*1024),
+            scriptPath: try parentRoot.child("inputs").child("script").read(scriptName, limit: ProjectScriptSelectionStore.limit)
+        ]
+        guard TranscriptSourceMap.sha(parentFiles["plan/" + planName]!) == parent.approvedPlanHash,
+              TranscriptSourceMap.sha(parentFiles["inputs/brief.md"]!) == briefSHA,
+              parent.scriptInputSHA256 == nil || parent.scriptInputSHA256 == TranscriptSourceMap.sha(parentFiles[scriptPath]!) else {
+            throw WorkflowFailure.invalid("The parent's approved inputs changed. Restore their verified version before saving.")
+        }
+        return try await fileExecutor.perform { job in
+            try job.checkCancellation(); try verified.check()
+            let (number, destination) = try SavedCutStorage.reserve(project)
+            let exports = try destination.child("exports", create: true)
+            let inputs = try destination.child("inputs", create: true)
+            _ = try inputs.child("script", create: true)
+            _ = try destination.child("plan", create: true)
+            var savedHashes = [String: String]()
+            var signatures = [String: SourceFileSignature]()
+            for (name, sha) in hashes.sorted(by: { $0.key < $1.key }) {
+                try job.checkCancellation()
+                guard CreativeAssetFiles.validLeaf(name),
+                      try source.voiceHash(name, limit: GraphicArtifactFiles.movieLimit, copyTo: exports) == sha else { throw ProjectFailure.invalidProject }
+                let before = try Self.derivativeSignature(name, in: exports)
+                guard try exports.voiceHash(name, limit: GraphicArtifactFiles.movieLimit) == sha,
+                      try Self.derivativeSignature(name, in: exports) == before else { throw ProjectFailure.invalidProject }
+                savedHashes[name] = sha
+                signatures[name] = before
+            }
+            try exports.writeNew(recipe, name: "derivative.json")
+            savedHashes["derivative.json"] = TranscriptSourceMap.sha(recipe)
+            signatures["derivative.json"] = try Self.derivativeSignature("derivative.json", in: exports)
+            let xml = try XMLDocument(data: exports.read("timeline.fcpxml", limit: 16*1024*1024), options: .nodeLoadExternalEntitiesNever)
+            for node in try xml.nodes(forXPath: "/fcpxml/resources/asset/media-rep") {
+                guard let representation = node as? XMLElement,
+                      let value = representation.attribute(forName: "src")?.stringValue,
+                      let url = URL(string: value), url.isFileURL else { throw ProjectFailure.invalidProject }
+                if url.deletingLastPathComponent().standardizedFileURL.path == source.url.standardizedFileURL.path {
+                    guard hashes[url.lastPathComponent] != nil else { throw ProjectFailure.invalidProject }
+                    representation.attribute(forName: "src")?.stringValue = exports.url.appendingPathComponent(url.lastPathComponent).absoluteString
+                }
+            }
+            xml.isStandalone = false
+            let declaration = XMLDTD(); declaration.name = "fcpxml"; xml.dtd = declaration
+            let savedXML = xml.xmlData(options: .nodePrettyPrint)
+            _ = try XMLDocument(data: savedXML, options: .nodeLoadExternalEntitiesNever)
+            try exports.replacePointer(savedXML, name: "timeline.fcpxml")
+            savedHashes["timeline.fcpxml"] = TranscriptSourceMap.sha(savedXML)
+            signatures["timeline.fcpxml"] = try Self.derivativeSignature("timeline.fcpxml", in: exports)
+            let snapshot = try JSONSerialization.data(withJSONObject: [
+                "source_sha256": hashes["timeline.fcpxml"]!,
+                "saved_sha256": savedHashes["timeline.fcpxml"]!,
+                "transformation": "Copied verified local-export assets into permanent saved-version storage."
+            ], options: [.sortedKeys])
+            try exports.writeNew(snapshot, name: "timeline.snapshot.json")
+            savedHashes["timeline.snapshot.json"] = TranscriptSourceMap.sha(snapshot)
+            signatures["timeline.snapshot.json"] = try Self.derivativeSignature("timeline.snapshot.json", in: exports)
+            for (path, bytes) in parentFiles {
+                let parts = path.split(separator: "/").map(String.init)
+                var folder = destination
+                for part in parts.dropLast() { folder = try folder.child(part, create: true) }
+                try folder.writeNew(bytes, name: parts.last!)
+            }
+            try inputs.writeNew(parentMetadata, name: "parent-version.json")
+            try inputs.writeNew(manifestBytes, name: "project-settings.json")
+            try inputs.writeNew(recordBytes, name: "derived-source.json")
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+            var artifacts = savedHashes.keys.sorted().map { "exports/" + $0 } + parentFiles.keys.sorted()
+            artifacts += ["inputs/parent-version.json", "inputs/project-settings.json", "inputs/derived-source.json", "inputs/local-edit-lineage.json"]
+            var version = CutVersion(number: number, label: title, engineVersion: parent.engineVersion, runID: stored.id,
+                artifacts: artifacts, approvedPlanHash: parent.approvedPlanHash,
+                sourceSchemaChecked: nil, savedSchemaChecked: false, briefHash: parent.briefHash,
+                approvedScript: scriptPath, durationBounds: durationBounds, exportResolution: stored.request.resolution, aspect: stored.request.aspect,
+                scriptInputSHA256: TranscriptSourceMap.sha(parentFiles[scriptPath]!))
+            let receipt = SavedVersionPromotionReceipt(projectID: project.id, versionID: version.id, versionNumber: number,
+                derivativeID: stored.id, parentVersionID: parent.id, parentMetadataSHA256: TranscriptSourceMap.sha(parentMetadata),
+                projectManifestSHA256: TranscriptSourceMap.sha(manifestBytes),
+                parentTimelineSHA256: stored.parentTimelineSHA256, recipeSHA256: stored.recipeSHA256,
+                savedTimelineSHA256: savedHashes["timeline.fcpxml"]!, savedPreviewSHA256: savedHashes["review.mp4"]!,
+                savedOutputSHA256: savedHashes)
+            let receiptBytes = try encoder.encode(receipt)
+            try inputs.writeNew(receiptBytes, name: "local-edit-lineage.json")
+            version.localEditOrigin = .init(derivativeID: stored.id, parentVersionID: parent.id,
+                parentTimelineSHA256: stored.parentTimelineSHA256, recipeSHA256: stored.recipeSHA256,
+                parentMetadataSHA256: TranscriptSourceMap.sha(parentMetadata), receiptSHA256: TranscriptSourceMap.sha(receiptBytes))
+            try job.checkCancellation()
+            let lease = try ProjectMutationLease.acquire(project)
+            defer { withExtendedLifetime(lease) {} }
+            guard lease.root.identity == root.identity,
+                  try SavedCutStorage.currentState(lease.root) == currentPointer else {
+                throw WorkflowFailure.invalid("The current version changed while saving. Your export and earlier versions are preserved; review the current cut before trying again.")
+            }
+            guard try lease.root.read("clauto-project.json", limit: 8*1024*1024) == manifestBytes else {
+                throw WorkflowFailure.invalid("Project settings changed while saving. The export is preserved; review its duration settings before retrying.")
+            }
+            try verified.check(); try destination.checkPath()
+            guard try parentRoot.read("clauto-version.json", limit: 1024*1024) == parentMetadata else { throw ProjectFailure.invalidProject }
+            for (path, bytes) in parentFiles {
+                let parts = path.split(separator: "/").map(String.init)
+                var folder = parentRoot
+                for part in parts.dropLast() { folder = try folder.child(part) }
+                guard try folder.read(parts.last!, limit: 16*1024*1024) == bytes else { throw ProjectFailure.invalidProject }
+                var copied = destination
+                for part in parts.dropLast() { copied = try copied.child(part) }
+                guard try copied.read(parts.last!, limit: 16*1024*1024) == bytes else { throw ProjectFailure.invalidProject }
+            }
+            guard try inputs.read("parent-version.json", limit: 1024*1024) == parentMetadata,
+                  try inputs.read("project-settings.json", limit: 8*1024*1024) == manifestBytes,
+                  try inputs.read("derived-source.json", limit: 65536) == recordBytes,
+                  try inputs.read("local-edit-lineage.json", limit: 65536) == receiptBytes else { throw ProjectFailure.invalidProject }
+            for (name, signature) in signatures {
+                guard try Self.derivativeSignature(name, in: exports) == signature else { throw ProjectFailure.invalidProject }
+            }
+            try job.checkCancellation()
+            try originalCuts.checkPath()
+            try SavedCutStorage.publishMetadata(encoder.encode(version), to: destination, lease: lease)
+            try originalCuts.replacePointer(encoder.encode(version.id), name: "current.json")
+            return version
+        }
+    }
+
+    private func promotionReceipt(_ version: CutVersion, project: Project) throws -> SavedVersionPromotionReceipt {
+        guard let origin = version.localEditOrigin else { throw ProjectFailure.invalidProject }
+        let folder = try ProjectMutationLease.checkedRoot(project).child("cuts").child(version.folderName)
+        let bytes = try folder.child("inputs").read("local-edit-lineage.json", limit: 65536)
+        guard TranscriptSourceMap.sha(bytes) == origin.receiptSHA256 else { throw ProjectFailure.invalidProject }
+        try TranscriptJSONKeys.validate(bytes)
+        let receipt = try decoder.decode(SavedVersionPromotionReceipt.self, from: bytes)
+        guard receipt.schemaVersion == 1, receipt.projectID == project.id, receipt.versionID == version.id,
+              receipt.versionNumber == version.number, receipt.derivativeID == origin.derivativeID,
+              receipt.parentVersionID == origin.parentVersionID, receipt.parentMetadataSHA256 == origin.parentMetadataSHA256,
+              receipt.parentTimelineSHA256 == origin.parentTimelineSHA256, receipt.recipeSHA256 == origin.recipeSHA256,
+              !receipt.newEditorialApproval, !receipt.newFactApproval, !receipt.productionAuthorized,
+              receipt.savedOutputSHA256["timeline.fcpxml"] == receipt.savedTimelineSHA256,
+              receipt.savedOutputSHA256["review.mp4"] == receipt.savedPreviewSHA256 else { throw ProjectFailure.invalidProject }
+        let parentBytes = try folder.child("inputs").read("parent-version.json", limit: 1024*1024)
+        guard TranscriptSourceMap.sha(parentBytes) == receipt.parentMetadataSHA256 else { throw ProjectFailure.invalidProject }
+        let parent = try decoder.decode(CutVersion.self, from: parentBytes)
+        let settings = try folder.child("inputs").read("project-settings.json", limit: 8*1024*1024)
+        guard TranscriptSourceMap.sha(settings) == receipt.projectManifestSHA256 else { throw ProjectFailure.invalidProject }
+        let manifest = try decoder.decode(ProjectManifest.self, from: settings)
+        guard manifest.id == project.id else { throw ProjectFailure.invalidProject }
+        let constraints = [parent.durationBounds, manifest.durationBounds].compactMap { $0 }
+        let limits = VideoDurationBounds(minimum: constraints.compactMap(\.minimum).max(), maximum: constraints.compactMap(\.maximum).min())
+        try limits.validate()
+        guard version.durationBounds == (limits.enabled ? limits : nil) else { throw ProjectFailure.invalidProject }
+        let plans = version.artifacts.filter { $0.hasPrefix("plan/") && $0.hasSuffix(".plan.json") }
+        guard parent.id == origin.parentVersionID, parent.approvedPlanHash == version.approvedPlanHash,
+              parent.briefHash == version.briefHash, parent.approvedScript == version.approvedScript,
+              plans.count == 1, let script = version.approvedScript, script.hasPrefix("inputs/script/"),
+              version.artifacts.contains(script), let scriptHash = version.scriptInputSHA256,
+              receipt.savedOutputSHA256.count <= 102,
+              receipt.savedOutputSHA256.allSatisfy({ CreativeAssetFiles.validLeaf($0.key) && CutoutSourceInfo.validHash($0.value) }),
+              TranscriptSourceMap.sha(try folder.child("plan").read(String(plans[0].dropFirst(5)), limit: 16*1024*1024)) == version.approvedPlanHash,
+              TranscriptSourceMap.sha(try folder.child("inputs").read("brief.md", limit: 16*1024*1024)) == version.briefHash,
+              TranscriptSourceMap.sha(try folder.child("inputs").child("script").read(String(script.dropFirst("inputs/script/".count)), limit: ProjectScriptSelectionStore.limit)) == scriptHash else { throw ProjectFailure.invalidProject }
+        return receipt
+    }
+
     func derivatives(project: Project) throws -> [DerivedCut] {
         let physical = try ProjectMutationLease.checkedRoot(project)
         defer { withExtendedLifetime(physical) {} }
@@ -948,6 +1372,10 @@ actor WorkflowRepository {
         let previewDuration = try await durationLoader(VoiceReviewProvenance.url(movie.relativePath, project: project))
         guard previewDuration.isFinite, abs(previewDuration - bound.duration) <= 1.0 / 24.0 else { throw WorkflowFailure.invalid("The saved preview duration does not match its verified timeline. Restore a matching preview before voice review.") }
         for artifact in [metadata, plan, xml, brief, approvedScript, movie] { try VoiceReviewProvenance.check(artifact, project: project) }
+        if version.localEditOrigin != nil {
+            let receipt = try promotionReceipt(version, project: project)
+            guard receipt.savedTimelineSHA256 == xml.sha256, receipt.savedPreviewSHA256 == movie.sha256 else { throw ProjectFailure.invalidProject }
+        }
         return VoiceReviewTarget(id: UUID(), projectID: project.id, versionID: version.id, versionNumber: version.number,
             versionMetadataSHA256: metadata.sha256,
             timeline: xml, preview: movie,
@@ -967,6 +1395,9 @@ actor WorkflowRepository {
         let receiptPath = String(relative.dropLast(".fcpxml".count)) + ".snapshot.json"
         let receipt = try decoder.decode([String: String].self, from: Data(contentsOf: safe(receiptPath, in: project.folder)))
         guard receipt["saved_sha256"] == sha else { throw WorkflowFailure.invalid("The saved timeline changed. Restore a verified version before attaching feedback.") }
+        if version.localEditOrigin != nil {
+            guard try promotionReceipt(version, project: project).savedTimelineSHA256 == sha else { throw ProjectFailure.invalidProject }
+        }
         let xml = try XMLDocument(data: data, options: .nodeLoadExternalEntitiesNever)
         let projectSequences = try xml.nodes(forXPath: "/fcpxml/library/event/project/sequence")
         guard projectSequences.count == 1, let sequence = projectSequences.first as? XMLElement,

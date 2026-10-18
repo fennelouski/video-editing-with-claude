@@ -34,6 +34,11 @@ final class EditorStore {
     var derivedCuts: [UUID: [DerivedCut]] = [:]
     var exportingDerivativeProjectID: UUID?
     var derivativeDetails: [UUID: String] = [:]
+    var savingVersionProjectID: UUID?
+    var savedDerivativeVersions: [UUID: CutVersion] = [:]
+    var versionSaveDetails: [UUID: String] = [:]
+    var versionSaveNames: [UUID: String] = [:]
+    var failedVersionSaves: [UUID: String] = [:]
     var missingPieces: [UUID: [MissingPiece]] = [:]
     var planReviews: [UUID: String] = [:]
     var runningProjectID: UUID?
@@ -100,6 +105,7 @@ final class EditorStore {
     @ObservationIgnored private let exporter = HandoffExportService()
     @ObservationIgnored private let derivativeRunner = ProcessRunner()
     @ObservationIgnored private var localExportOwner: (UUID,UUID)?
+    @ObservationIgnored private var versionSaveTask: Task<Void, Never>?
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var presentationState = ProjectPresentationState()
     @ObservationIgnored private let defaults: UserDefaults
@@ -173,10 +179,11 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         await workspaceSetup.pauseForExit()
+        if let task = versionSaveTask { await task.value }
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
         for project in projects {
             if let brief = presentationState.pendingBrief(for: project) { save(brief,for: project.id) }
@@ -189,7 +196,12 @@ final class EditorStore {
         for controller in liveConversations.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in frameComments.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in voiceReviews.values { if !(await controller.flushForExit()) { voicesSaved = false } }
-        return await flushTranscriptReviewsForExit() && voicesSaved && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
+        let transcriptsSaved = await flushTranscriptReviewsForExit()
+        if let failure = failedVersionSaves.values.sorted().first {
+            notice = failure + " Return to its verified export to retry, or choose Keep verified export only."
+            noticeTitle = "Version not saved"
+        }
+        return transcriptsSaved && voicesSaved && failedVersionSaves.isEmpty && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
     }
 
     func resumeReviewWorkAfterCancelledExit() {
@@ -549,6 +561,41 @@ final class EditorStore {
             }
             derivedCuts[project.id] = try await workflow.derivatives(project: project)
         } catch { notice = error.localizedDescription }
+    }
+
+    func saveDerivedVersion(_ export: DerivedCut, label: String, project: Project) async {
+        guard versionSaveTask == nil, !working, !checking, runningProjectID == nil,
+              exportingDerivativeProjectID == nil else { return }
+        let expectedCurrent = currentCuts[project.id]?.id
+        working = true; savingVersionProjectID = project.id
+        versionSaveNames[export.id] = label
+        versionSaveDetails[export.id] = "Saving verified media and editable layers…"
+        // Retain ownership independently of the view task. Closing a disclosure or
+        // switching projects does not abandon a publication; quit joins this task.
+        let task = Task { [self] in
+            defer { working = false; savingVersionProjectID = nil; versionSaveTask = nil }
+            do {
+                let disk = WorkflowRepository()
+                let saved = try await disk.saveDerivativeAsVersion(export, label: label,
+                    expectedCurrent: expectedCurrent, project: project)
+                cutVersions[project.id] = try await disk.versions(project: project)
+                currentCuts[project.id] = try await disk.current(project: project)
+                savedDerivativeVersions[export.id] = saved
+                failedVersionSaves.removeValue(forKey: export.id)
+                versionSaveDetails[export.id] = "Saved as v\(saved.number) · \(saved.label). Open Versions to review it; earlier versions remain available."
+            } catch {
+                versionSaveDetails[export.id] = "Could not save this version. \(error.localizedDescription) Your verified export and earlier versions remain available."
+                failedVersionSaves[export.id] = "\(project.manifest.name) · \(label): \(error.localizedDescription)"
+            }
+        }
+        versionSaveTask = task
+        await task.value
+    }
+
+    func keepVerifiedExportOnly(_ id: UUID) {
+        guard versionSaveTask == nil else { return }
+        failedVersionSaves.removeValue(forKey: id)
+        versionSaveDetails[id] = "Kept the verified export without creating a saved version. You can save it later."
     }
 
     func cancelDerivative() async {

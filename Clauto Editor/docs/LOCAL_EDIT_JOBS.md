@@ -94,3 +94,7 @@ checks dimensions/frame count and verified reopen, and preserves the parent/curr
 cut and project manifest. These are headless source/synthetic checks. Native UI,
 VoiceOver, real speech/provider/NAS/Final Cut and full-product acceptance remain
 separate. Immutable receipts define the exact tested source and results.
+
+## Named saved versions
+
+Working M27 adds optional promotion of a verified export into Versions with permanent copied layers, parent lineage and current-selection checks. See [SAVED_VERSION_UPDATES.md](SAVED_VERSION_UPDATES.md) for the exact scope and pending acceptance. Conversations remain open during a save.

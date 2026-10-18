@@ -60,6 +60,22 @@ private actor DerivativeProtocolRunner: CommandRunning {
                 recipe["sound_effect"] = ["source": mode == "badSoundIdentity" ? sound.path + ".different" : sound.path,
                     "at": mode == "badSoundTime" ? DerivativeRequest.snapped(at) + 0.1 : DerivativeRequest.snapped(at), "gain_db": gain]
             }
+            if mode == "promotion" {
+                let audio = folder.appendingPathComponent("dialogue-0001.wav")
+                try Data("synthetic processed dialogue".utf8).write(to: audio)
+                let xml = try XMLDocument(contentsOf: folder.appendingPathComponent("timeline.fcpxml"), options: .nodeLoadExternalEntitiesNever)
+                let sequence = try #require(xml.nodes(forXPath: "//sequence").first as? XMLElement)
+                sequence.attribute(forName: "duration")?.stringValue = "12012/24000s"
+                let clip = try #require(xml.nodes(forXPath: "//sequence/spine/asset-clip").first as? XMLElement)
+                clip.attribute(forName: "duration")?.stringValue = "12012/24000s"
+                let resource = try XMLElement(xmlString: "<asset id=\"r4\" name=\"Processed dialogue\" start=\"0s\" duration=\"12012/24000s\" hasAudio=\"1\"><media-rep kind=\"original-media\" src=\"\(audio.absoluteString)\"/></asset>")
+                try #require(xml.nodes(forXPath: "/fcpxml/resources").first as? XMLElement).addChild(resource)
+                clip.addChild(try XMLElement(xmlString: "<asset-clip ref=\"r4\" lane=\"-1\" offset=\"0s\" start=\"0s\" duration=\"12012/24000s\"/>"))
+                try xml.xmlData().write(to: folder.appendingPathComponent("timeline.fcpxml"))
+                recipe["output_sha256"] = ["review.mp4": try DerivativeService.digest(folder.appendingPathComponent("review.mp4")),
+                    "timeline.fcpxml": try DerivativeService.digest(folder.appendingPathComponent("timeline.fcpxml")),
+                    "dialogue-0001.wav": try DerivativeService.digest(audio)]
+            }
             try JSONSerialization.data(withJSONObject: recipe).write(to: folder.appendingPathComponent("derivative.json"))
         }
         if let rootToReplace {
@@ -781,4 +797,343 @@ struct WorkflowTests {
             "artifacts": version.artifacts, "original_unchanged": true]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: root.appendingPathComponent("acceptance-result.json"), options: .atomic)
     }
+
+    private func versionPromotionFixture(bounds: VideoDurationBounds? = nil) async throws -> (URL, Project, WorkflowRepository, CutVersion, DerivedCut) {
+        let (root, engine, original) = try await fixture()
+        let project: Project
+        if let bounds { project = try await ProjectRepository().durationBounds(bounds, project: original) }
+        else { project = original }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Parent")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run, project: project)
+        let export = try await DerivativeService(runner: DerivativeProtocolRunner("promotion"), disk: disk).export(
+            .init(resolution: .hd, end: 0.5), version: parent, project: project, engine: engine, onLine: { _ in })
+        return (root, project, disk, parent, export)
+    }
+
+    @Test func localVersionOwnsCopiedLayersAndSurvivesDisposableExportRemoval() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manifest = try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json"))
+        let parentMetadata = try Data(contentsOf: project.folder.appendingPathComponent("cuts/"+parent.folderName+"/clauto-version.json"))
+        let saved = try await disk.saveDerivativeAsVersion(export, label: "  Portrait and dialogue  ", expectedCurrent: parent.id, project: project)
+        #expect(saved.number == parent.number+1 && saved.label == "Portrait and dialogue")
+        #expect(saved.localEditOrigin?.parentVersionID == parent.id)
+        #expect(saved.approvedPlanHash == parent.approvedPlanHash && saved.approvedScript == parent.approvedScript)
+        #expect(saved.savedSchemaChecked == false)
+        #expect(try await disk.current(project: project)?.id == saved.id)
+        let output = project.folder.appendingPathComponent("cuts/"+saved.folderName+"/exports")
+        let xml = try XMLDocument(contentsOf: output.appendingPathComponent("timeline.fcpxml"), options: .nodeLoadExternalEntitiesNever)
+        let audio = try #require(xml.nodes(forXPath: "/fcpxml/resources/asset[@id='r4']/media-rep").first as? XMLElement)
+        #expect(audio.attribute(forName: "src")?.stringValue == output.appendingPathComponent("dialogue-0001.wav").absoluteString)
+        try FileManager.default.removeItem(at: project.folder.appendingPathComponent("build/derivatives/"+export.id.uuidString))
+        let target = try await disk.voiceReviewTarget(saved, project: project, durationLoader: { _ in 12012.0/24000 })
+        #expect(abs(target.duration-0.5005)<1e-9)
+        #expect(try await disk.derivativeSource(saved, project: project).timeline == output.appendingPathComponent("timeline.fcpxml"))
+        let comments = try await disk.addFeedback("Keep steering this cut", start: 0.1, version: saved, project: project)
+        #expect(comments.last?.attachment == .verified)
+        let report = try await disk.handoffReport(saved, project: project)
+        #expect(report.sections.contains { $0.title == "Local update and review status" && $0.text.contains("has not been transcribed again") })
+        #expect(report.sections.contains { $0.title == "Saved timeline layers" && $0.text.contains("dialogue-0001.wav") })
+        #expect(!report.sections.contains { $0.title == "Rendered audio read-back" })
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json")) == manifest)
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("cuts/"+parent.folderName+"/clauto-version.json")) == parentMetadata)
+    }
+
+    @Test func localVersionRetryIsIdempotentAndDoesNotOverrideRestoredCurrent() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try await disk.saveDerivativeAsVersion(export, label: "Update", expectedCurrent: parent.id, project: project)
+        try await disk.restore(parent, project: project)
+        let retried = try await WorkflowRepository().saveDerivativeAsVersion(export, label: "Retry", expectedCurrent: saved.id, project: project)
+        #expect(retried.id == saved.id)
+        #expect(try await disk.versions(project: project).count == 2)
+        #expect(try await disk.current(project: project)?.id == parent.id)
+    }
+
+    @Test func localVersionRejectsStaleCurrentWithoutPublishing() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await #expect(throws: (any Error).self) {
+            try await disk.saveDerivativeAsVersion(export, label: "Stale", expectedCurrent: UUID(), project: project)
+        }
+        #expect(try await disk.versions(project: project).count == 1)
+        #expect(try await disk.current(project: project)?.id == parent.id)
+    }
+
+    @Test(arguments: ["output", "parentBrief", "recipe"])
+    func localVersionRejectsChangedBoundInputs(_ kind: String) async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let relative = kind == "output" ? "build/derivatives/"+export.id.uuidString+"/review.mp4" :
+            kind == "recipe" ? "build/derivatives/"+export.id.uuidString+"/derivative.json" : "cuts/"+parent.folderName+"/inputs/brief.md"
+        try Data("replacement".utf8).write(to: project.folder.appendingPathComponent(relative))
+        await #expect(throws: (any Error).self) {
+            try await disk.saveDerivativeAsVersion(export, label: "Changed", expectedCurrent: parent.id, project: project)
+        }
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await disk.versions(project: project).count == 1)
+    }
+
+    @Test func localVersionRetainsIncompleteSlotsAndRejectsMissingCurrentRecord() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let partial = project.folder.appendingPathComponent("cuts/v002")
+        try FileManager.default.createDirectory(at: partial, withIntermediateDirectories: false)
+        try Data("retained interrupted work".utf8).write(to: partial.appendingPathComponent("partial"))
+        #expect(try await disk.versions(project: project).count == 1)
+        let saved = try await disk.saveDerivativeAsVersion(export, label: "After interrupted save", expectedCurrent: parent.id, project: project)
+        #expect(saved.number == 3)
+        #expect(try Data(contentsOf: partial.appendingPathComponent("partial")) == Data("retained interrupted work".utf8))
+        try JSONEncoder().encode(UUID()).write(to: project.folder.appendingPathComponent("cuts/current.json"))
+        await #expect(throws: (any Error).self) { try await disk.current(project: project) }
+    }
+
+    @Test func localVersionDetectsTamperedSavedPreviewAndLineage() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try await disk.saveDerivativeAsVersion(export, label: "Update", expectedCurrent: parent.id, project: project)
+        let folder = project.folder.appendingPathComponent("cuts/"+saved.folderName)
+        try Data("changed saved movie".utf8).write(to: folder.appendingPathComponent("exports/review.mp4"))
+        await #expect(throws: (any Error).self) {
+            try await disk.voiceReviewTarget(saved, project: project, durationLoader: { _ in 0.5005 })
+        }
+        await #expect(throws: (any Error).self) { try await disk.handoffReport(saved, project: project) }
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("inputs/local-edit-lineage.json"))
+        await #expect(throws: (any Error).self) { try await disk.derivativeSource(saved, project: project) }
+    }
+
+
+    @Test func cancelledLocalVersionSavePreservesCurrentAndExport() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let task = Task { try await disk.saveDerivativeAsVersion(export, label: "Cancelled", expectedCurrent: parent.id, project: project) }
+        task.cancel()
+        await #expect(throws: (any Error).self) { try await task.value }
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await disk.derivatives(project: project).contains { $0.id == export.id })
+    }
+
+    @Test func replacedProjectRootCannotReceiveLocalVersionPublication() async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = project.folder.appendingPathExtension("preserved")
+        try FileManager.default.moveItem(at: project.folder, to: original)
+        try FileManager.default.copyItem(at: original, to: project.folder)
+        let pointer = try Data(contentsOf: project.folder.appendingPathComponent("cuts/current.json"))
+        await #expect(throws: (any Error).self) {
+            try await disk.saveDerivativeAsVersion(export, label: "Replacement", expectedCurrent: parent.id, project: project)
+        }
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("cuts/current.json")) == pointer)
+        #expect(!FileManager.default.fileExists(atPath: project.folder.appendingPathComponent("cuts/v002").path))
+    }
+
+
+    @Test(arguments: ["parent", "project"])
+    func mainVersionPromotionHonorsFrozenAndCurrentDurationLimits(_ source: String) async throws {
+        let limits = VideoDurationBounds(minimum: 0.7, maximum: 1.5)
+        let (root, original, disk, parent, export) = try await versionPromotionFixture(bounds: source == "parent" ? limits : nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project: Project
+        if source == "project" { project = try await ProjectRepository().durationBounds(limits, project: original) }
+        else { project = original }
+        await #expect(throws: WorkflowFailure.self) {
+            try await disk.saveDerivativeAsVersion(export, label: "Too short for the main cut", expectedCurrent: parent.id, project: project)
+        }
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await disk.derivatives(project: project).contains { $0.id == export.id })
+        #expect(try await disk.versions(project: project).count == 1)
+    }
+
+    @Test func mainVersionPromotionRetainsApplicableDurationBounds() async throws {
+        let bounds = VideoDurationBounds(minimum: 0.4, maximum: 1.5)
+        let (root, project, disk, parent, export) = try await versionPromotionFixture(bounds: bounds)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try await disk.saveDerivativeAsVersion(export, label: "Within saved limits", expectedCurrent: parent.id, project: project)
+        #expect(saved.durationBounds == bounds)
+        #expect(try await disk.current(project: project)?.durationBounds == bounds)
+        #expect(try await disk.voiceReviewTarget(saved, project: project, durationLoader: { _ in 0.5005 }).versionID == saved.id)
+    }
+
+    @Test(arguments: [false, true])
+    func mainVersionPromotionObservesSameIDSelectionIntent(_ goAwayAndBack: Bool) async throws {
+        let (root, project, disk, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gate = DispatchSemaphore(value: 0), entered = DispatchSemaphore(value: 0)
+        let executor = GraphicBlockingExecutor(label: "ClautoM27-test-"+UUID().uuidString, capacity: 1)
+        let blocker = Task { try await executor.perform { _ in
+            entered.signal()
+            guard gate.wait(timeout: .now()+15) == .success else { throw WorkflowFailure.invalid("Test barrier was not released") }
+            return true
+        } }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while entered.wait(timeout: .now()) != .success, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+        let saving = Task { try await disk.saveDerivativeAsVersion(export, label: "Late update", expectedCurrent: parent.id, project: project, fileExecutor: executor) }
+        do {
+            while executor.waiting < 1, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+            try #require(executor.waiting == 1) // Only this operation can wait on its isolated executor.
+            if goAwayAndBack {
+                var other = parent; other.id = UUID(); other.number = 99
+                // A second valid version gives the restore operation a real B.
+                let directory = project.folder.appendingPathComponent("cuts/"+other.folderName)
+                try FileManager.default.copyItem(at: project.folder.appendingPathComponent("cuts/"+parent.folderName), to: directory)
+                let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+                try encoder.encode(other).write(to: directory.appendingPathComponent("clauto-version.json"))
+                try await disk.restore(other, project: project)
+            }
+            try await disk.restore(parent, project: project)
+            gate.signal(); _ = try await blocker.value
+            await #expect(throws: (any Error).self) { try await saving.value }
+            #expect(try await disk.current(project: project)?.id == parent.id)
+        } catch {
+            gate.signal(); _ = try? await blocker.value; _ = try? await saving.value; throw error
+        }
+    }
+
+    #if !canImport(ClautoCore)
+    @Test @MainActor func failedVersionSaveRetainsNameAndBlocksQuitUntilAcknowledged() async throws {
+        let (root, project, _, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "ClautoM27-"+UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let store = EditorStore(defaults: preferences)
+        store.projects = [project]; store.selectedID = project.id
+        var stale = parent; stale.id = UUID(); store.currentCuts[project.id] = stale
+        await store.saveDerivedVersion(export, label: "Retained name", project: project)
+        #expect(store.versionSaveNames[export.id] == "Retained name")
+        #expect(store.failedVersionSaves[export.id] != nil && store.hasPendingReviewWork)
+        #expect(!(await store.flushReviewWorkForExit()))
+        store.keepVerifiedExportOnly(export.id)
+        #expect(store.failedVersionSaves.isEmpty)
+        #expect(await store.flushReviewWorkForExit())
+    }
+
+    @Test @MainActor func retryingVersionSaveAcknowledgesFailureWithoutOverwritingAnotherNotice() async throws {
+        let (root, project, _, parent, export) = try await versionPromotionFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "ClautoM27-"+UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let store = EditorStore(defaults: preferences)
+        store.projects = [project]; store.selectedID = project.id
+        var stale = parent; stale.id = UUID(); store.currentCuts[project.id] = stale
+        await store.saveDerivedVersion(export, label: "My update", project: project)
+        store.currentCuts[project.id] = parent
+        store.notice = "Another project's unrelated notice"
+        await store.saveDerivedVersion(export, label: "My update", project: project)
+        #expect(store.failedVersionSaves.isEmpty && store.savedDerivativeVersions[export.id] != nil)
+        #expect(store.notice == "Another project's unrelated notice")
+        #expect(await store.flushReviewWorkForExit())
+    }
+    #endif
+
+
+    @Test(arguments: ["project", "cuts"])
+    func snapshotRefusesLateDirectoryReplacementWithoutWritingIntoIt(_ component: String) async throws {
+        let (root, engine, project) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Initial")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        _ = try await disk.snapshot(run, project: project)
+        func inventory(_ directory: URL) throws -> [String:String] {
+            var values = [String:String]()
+            for case let file as URL in FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey,.isDirectoryKey])! {
+                if try file.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true { values[String(file.path.dropFirst(directory.path.count+1))+"/"] = "directory" }
+                if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                    values[String(file.path.dropFirst(directory.path.count+1))] = try DerivativeService.digest(file)
+                }
+            }
+            return values
+        }
+        let replacement = component == "project" ? project.folder : project.folder.appendingPathComponent("cuts")
+        let baseline = root.appendingPathComponent("replacement-before.json")
+        await #expect(throws: (any Error).self) {
+            try await disk.snapshot(run, project: project, reserveVersion: { owner in
+                let reserved = try SavedCutStorage.reserve(owner)
+                let preserved = replacement.appendingPathExtension("preserved")
+                try FileManager.default.moveItem(at: replacement,to: preserved)
+                try FileManager.default.copyItem(at: preserved,to: replacement)
+                try JSONSerialization.data(withJSONObject: inventory(replacement), options: [.sortedKeys]).write(to: baseline)
+                return reserved
+            })
+        }
+        let expected = try JSONDecoder().decode([String:String].self, from: Data(contentsOf: baseline))
+        #expect(try inventory(replacement) == expected)
+    }
+
+    @Test func cancelledMetadataPublicationRetainsOnlyUnacceptedTemporaryWork() async throws {
+        let (root, _, project) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (_, folder) = try SavedCutStorage.reserve(project)
+        let lease = try ProjectMutationLease.acquire(project)
+        #expect(throws: CancellationError.self) {
+            try SavedCutStorage.publishMetadata(Data("{\"incomplete\":false}".utf8),to: folder,lease: lease,
+                validatePublication: { throw CancellationError() })
+        }
+        #expect(!(try CreativeAssetFiles.exists("clauto-version.json",in: folder)))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.url.path).contains { $0.hasPrefix(".clauto-version-pending-") })
+        #expect(try await WorkflowRepository().versions(project: project).isEmpty)
+        withExtendedLifetime(lease) {}
+    }
+
+
+    @Test(arguments: ["timeline", "validation"])
+    func snapshotBindsCopiedTimelineAndValidationToPrecheckedBytes(_ changed: String) async throws {
+        let (root, engine, project) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project, engine: engine, label: "Initial")
+        try plan(run); try outputs(run, project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run,project: project)
+        let source = run.folder.appendingPathComponent("exports/video.fcpxml")
+        let report = run.folder.appendingPathComponent("exports/video.validation.json")
+        await #expect(throws: (any Error).self) {
+            try await disk.snapshot(run,project: project,reserveVersion: { owner in
+                let reserved = try SavedCutStorage.reserve(owner)
+                if changed == "timeline" {
+                    let xml = try String(contentsOf: source,encoding: .utf8).replacingOccurrences(of: "width=\"1920\" height=\"1080\"",with: "width=\"1280\" height=\"720\"")
+                    try xml.write(to: source,atomically: true,encoding: .utf8)
+                } else {
+                    var object = try JSONSerialization.jsonObject(with: Data(contentsOf: report)) as! [String:Any]
+                    object["schemaChecked"] = true
+                    try JSONSerialization.data(withJSONObject: object).write(to: report)
+                }
+                return reserved
+            })
+        }
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await disk.versions(project: project).count == 1)
+    }
+
+
+    @Test(arguments: ["video.fcpxml", "video.validation.json", "validationAlias"])
+    func snapshotRequiresEveryPrevalidatedExportArtifact(_ missing: String) async throws {
+        let (root, engine, project) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disk = WorkflowRepository()
+        var run = try await disk.prepare(project: project,engine: engine,label: "Complete parent")
+        try plan(run); try outputs(run,project: project)
+        run.state = .complete; run.approvedPlanHash = try await disk.plan(run).hash
+        let parent = try await disk.snapshot(run,project: project)
+        let removed = run.folder.appendingPathComponent("exports/"+(missing == "validationAlias" ? "video.validation.json":missing))
+        await #expect(throws: (any Error).self) {
+            try await disk.snapshot(run,project: project,reserveVersion: { owner in
+                let reserved = try SavedCutStorage.reserve(owner)
+                try FileManager.default.removeItem(at: removed)
+                if missing == "validationAlias" {
+                    try Data("unrelated source leaf".utf8).write(to: run.folder.appendingPathComponent("exports/video.source-validation.json"))
+                }
+                return reserved
+            })
+        }
+        #expect(try await disk.current(project: project)?.id == parent.id)
+        #expect(try await disk.versions(project: project).count == 1)
+    }
+
 }

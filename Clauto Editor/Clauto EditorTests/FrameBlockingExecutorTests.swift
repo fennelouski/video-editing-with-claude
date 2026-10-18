@@ -58,7 +58,10 @@ struct FrameBlockingExecutorTests {
         #expect(!task.isCancelled && executor.inFlight == 1)
         await #expect(throws: (any Error).self) { _ = try await executor.perform(job: FrameBlockingJob<Int>()) { _ in 13 } }
         gate.open()
-        while executor.inFlight != 0 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+        // Draining starts after cancellation/admission assertions. Their elapsed
+        // time must not consume the worker's separate physical-release budget.
+        let releaseDeadline = ContinuousClock.now + .seconds(30)
+        while executor.inFlight != 0 && ContinuousClock.now < releaseDeadline { try await Task.sleep(for: .milliseconds(1)) }
         #expect(executor.inFlight == 0)
     }
     @Test func cancellationReleasesWaitersButKeepsPhysicalCapacityUntilTheBlockedWorkReturns() async throws {

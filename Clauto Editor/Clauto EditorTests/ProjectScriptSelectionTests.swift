@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 #if canImport(ClautoCore)
 @testable import ClautoCore
@@ -6,9 +7,49 @@ import Testing
 @testable import Clauto_Editor
 #endif
 
-private actor ScriptMutationProbeState {
-    var finished = false
-    func complete() { finished = true }
+private final class ScriptMutationProbeState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+    let attempted = DispatchSemaphore(value: 0)
+    var finished: Bool { lock.lock(); defer { lock.unlock() }; return completed }
+    func complete() { lock.lock(); completed = true; lock.unlock() }
+    func requireHeldLock(_ project: Project) throws {
+        defer { attempted.signal() }
+        let state = try ProjectMutationLease.checkedRoot(project).child(".clauto")
+        let descriptor = openat(state.descriptor,"project-mutation.lock",O_RDWR | O_NOFOLLOW)
+        guard descriptor >= 0 else { throw ProjectFailure.invalidProject }
+        defer { Darwin.close(descriptor) }
+        let result = flock(descriptor,LOCK_EX | LOCK_NB), failure = errno
+        if result == 0 { _ = flock(descriptor,LOCK_UN) }
+        guard result != 0, failure == EWOULDBLOCK else { throw ProjectFailure.invalidProject }
+    }
+}
+
+/// Keep the deliberately held OS lock independent of the cooperative executor:
+/// hundreds of parallel async tests must not postpone its scheduled release past
+/// the production lease's two-second contention limit.
+private final class ScriptAliasLeaseHolder: @unchecked Sendable {
+    private var lease: ProjectMutationLease?
+    init(_ project: Project) throws { lease = try ProjectMutationLease.acquire(project) }
+    func retarget(_ alias: URL, to destination: URL, afterAttempt probe: ScriptMutationProbeState) -> AsyncThrowingStream<Void,any Error> {
+        // Stream construction schedules this dedicated worker synchronously,
+        // before the async writer is launched by the caller.
+        AsyncThrowingStream { continuation in
+            DispatchQueue(label: "clauto.synthetic.alias-lease-release",qos: .userInitiated).async {
+                defer { self.lease = nil }
+                do {
+                    guard probe.attempted.wait(timeout: .now()+30) == .success else { throw ProjectFailure.invalidProject }
+                    usleep(40_000)
+                    guard !probe.finished else { throw ProjectFailure.invalidProject }
+                    try FileManager.default.removeItem(at: alias)
+                    try FileManager.default.createSymbolicLink(at: alias,withDestinationURL: destination)
+                    // Release before waking either async observer.
+                    self.lease = nil
+                    continuation.finish()
+                } catch { continuation.finish(throwing: error) }
+            }
+        }
+    }
 }
 
 struct ProjectScriptSelectionTests {
@@ -329,15 +370,12 @@ with zipfile.ZipFile(sys.argv[1],'w',compression=zipfile.ZIP_DEFLATED) as z:
         try FileManager.default.createSymbolicLink(at: link,withDestinationURL: f.project.folder)
         let handle = try await f.repository.open(URL(fileURLWithPath: link.path,isDirectory: false))
         #expect(handle.folder.path == f.project.folder.path)
-        var owner: ProjectMutationLease? = try ProjectMutationLease.acquire(handle)
+        let owner = try ScriptAliasLeaseHolder(handle)
         var brief = handle.brief; brief.about = "Words for the original project only"
         let words = brief, flag = ScriptMutationProbeState()
-        let waiter = Task { let saved = try await other.saveBrief(words,project: handle); await flag.complete(); return saved }
-        try await Task.sleep(for: .milliseconds(40))
-        #expect(await flag.finished == false)
-        try FileManager.default.removeItem(at: link)
-        try FileManager.default.createSymbolicLink(at: link,withDestinationURL: second.folder)
-        withExtendedLifetime(owner) {}; owner = nil
+        let retarget = owner.retarget(link,to: second.folder,afterAttempt: flag)
+        let waiter = Task { try flag.requireHeldLock(handle); let saved = try await other.saveBrief(words,project: handle); flag.complete(); return saved }
+        for try await _ in retarget {}
         let saved = try await waiter.value, first = try await f.repository.open(f.project.folder)
         #expect(saved.id == f.project.id && first.id == f.project.id && first.brief == words)
         #expect(try Data(contentsOf: second.folder.appendingPathComponent("clauto-project.json")) == secondManifest)

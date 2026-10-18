@@ -70,7 +70,7 @@ struct DerivativeView: View {
                         captured.effects = audioEnabled ? effects : nil
                         let capturedVersion = version, capturedProject = project
                         Task { await store.exportDerivative(captured, version: capturedVersion, project: capturedProject) }
-                    }.disabled(store.exportingDerivativeProjectID != nil || store.runningProjectID != nil)
+                    }.disabled(store.exportingDerivativeProjectID != nil || store.runningProjectID != nil || store.working || store.checking)
                         .accessibilityIdentifier("createDerivative")
                     if store.exportingDerivativeProjectID == project.id {
                         ClautoActivity(label: "Exporting locally…")
@@ -88,6 +88,7 @@ struct DerivativeView: View {
                             Button("Reveal Editable Timeline") { NSWorkspace.shared.activateFileViewerSelecting([folder.appendingPathComponent("timeline.fcpxml")]) }
                         }
                         Text("Full decode and output hashes verified. Review framing, captions and sound before sharing.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                        SavedExportVersionControls(store: store, project: project, export: item).id(item.id)
                     }
                 }
                 ClautoDisclosure("Export details") { Text(store.derivativeDetails[project.id] ?? "No export has run.").font(ClautoDesign.caption.monospacedDigit()).textSelection(.enabled) }
@@ -154,4 +155,37 @@ struct DerivativeView: View {
         } catch is CancellationError {} catch { if graphicLoadID==token { graphicError = error.localizedDescription } }
     }
 
+}
+
+private struct SavedExportVersionControls: View {
+    @Bindable var store: EditorStore
+    let project: Project
+    let export: DerivedCut
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let name = store.versionSaveNames[export.id] ?? "Local update"
+            ClautoField(label: "Version name", text: Binding(get: { store.versionSaveNames[export.id] ?? "Local update" }, set: { store.versionSaveNames[export.id] = $0 }), placeholder: "Describe this update")
+                .accessibilityIdentifier("localVersionName")
+            HStack {
+                ClautoAction("Save as new version", icon: .version, kind: .primary) {
+                    let capturedName = name
+                    Task { await store.saveDerivedVersion(export, label: capturedName, project: project) }
+                }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.working || store.checking || store.runningProjectID != nil || store.exportingDerivativeProjectID != nil || store.savedDerivativeVersions[export.id] != nil)
+                    .accessibilityIdentifier("saveLocalVersion")
+                if store.savingVersionProjectID == project.id { ClautoActivity(label: "Saving version…") }
+            }
+            if let message = store.versionSaveDetails[export.id] {
+                Text(message).font(ClautoDesign.caption).textSelection(.enabled)
+                    .accessibilityIdentifier("localVersionSaveStatus")
+            }
+            if store.failedVersionSaves[export.id] != nil {
+                Button("Keep verified export only") { store.keepVerifiedExportOnly(export.id) }
+                    .disabled(store.savingVersionProjectID != nil)
+                    .accessibilityIdentifier("keepVerifiedExportOnly")
+            }
+            Text("Keep giving feedback while this saves. The new version keeps its parent’s approved inputs; review the update before sharing.")
+                .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+        }
+    }
 }
