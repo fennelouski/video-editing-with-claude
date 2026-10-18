@@ -284,14 +284,82 @@ def caption_ass(source: Path, output: Path, aspect: str, resolution: str) -> Pat
     return output
 
 
+def picture_frames(value: float) -> int:
+    """A saved picture edit must already be on the supported frame grid."""
+    count = C.frames(value)
+    if value < 0 or abs(value-count*C.FPS_DEN/C.FPS_NUM) > 1e-6:
+        raise ValueError('Picture timing must use whole 24000/1001 frames before local export.')
+    return count
+
+
+def picture_duration(path: Path) -> Fraction:
+    """Video availability must not be inferred from a longer audio/container tail."""
+    stream_data = json.loads(subprocess.run(['ffprobe','-v','error','-select_streams','v:0',
+        '-show_entries','stream=time_base,duration_ts,start_pts','-of','json',str(path)],
+        capture_output=True,check=True).stdout)
+    streams = stream_data.get('streams',[])
+    if len(streams)!=1: raise ValueError('The selected picture stream is unavailable.')
+    stream = streams[0]
+    time_base = Fraction(stream['time_base'])
+    duration = stream.get('duration_ts')
+    if isinstance(duration,int) and duration>0:
+        return duration*time_base
+    # Some containers, including Matroska, omit a stream duration. Packet PTS
+    # and durations provide a separate video-only bound without decoding images.
+    packet_data = json.loads(subprocess.run(['ffprobe','-v','error','-select_streams','v:0',
+        '-show_packets','-show_entries','packet=pts,duration','-of','json',str(path)],
+        capture_output=True,check=True).stdout)
+    packets = packet_data.get('packets',[])
+    if not packets or any(not isinstance(p.get('pts'),int) or
+            not isinstance(p.get('duration'),int) or p['duration']<=0 for p in packets):
+        raise ValueError('The selected video duration cannot be verified; this export remains unverified.')
+    origin = stream.get('start_pts')
+    if not isinstance(origin,int): origin = min(p['pts'] for p in packets)
+    span = (max(p['pts']+p['duration'] for p in packets)-origin)*time_base
+    if span<=0: raise ValueError('The selected picture stream has no usable duration.')
+    if time_base>Fraction(1,1000):
+        raise ValueError('The video packet clock is too coarse to verify this source range.')
+    # A packet-clock tick is at most 1ms here. Account for its quantization so
+    # a valid final frame in Matroska is not mistaken for missing footage.
+    # This allowance is far smaller than one 41.708ms timeline frame.
+    return span+time_base
+
+
+def verify_picture_clock(path: Path, expected_frames: int) -> dict:
+    """Check decoded timestamps, not just the container's advertised frame rate."""
+    result = subprocess.run(['ffprobe','-v','error','-select_streams','v:0',
+        '-show_streams','-show_frames','-show_entries',
+        'stream=time_base,r_frame_rate,duration_ts:frame=best_effort_timestamp',
+        '-of','json',str(path)],capture_output=True,check=True)
+    probe = json.loads(result.stdout)
+    streams, frames = probe.get('streams',[]), probe.get('frames',[])
+    if (len(streams)!=1 or streams[0].get('time_base')!='1/24000'
+        or streams[0].get('r_frame_rate')!=C.FPS_STR
+        or int(streams[0].get('duration_ts',-1))!=expected_frames*C.FPS_DEN
+        or len(frames)!=expected_frames
+        or any(int(frame.get('best_effort_timestamp',-1))!=index*C.FPS_DEN
+               for index,frame in enumerate(frames))):
+        raise ValueError('Encoded picture cadence changed; this export remains unverified.')
+    return {'verified':True,'frame_count':expected_frames,'time_base':'1/24000',
+            'frame_duration_ticks':C.FPS_DEN,'duration_ticks':expected_frames*C.FPS_DEN}
+
+
 def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: str, resolution: str, captions: Path | None = None) -> Path:
     width,height = C.canvas_spec(aspect,resolution)['author']
+    counts = [picture_frames(item.duration) for item in primary]
+    if not all(counts): raise ValueError('Each primary picture needs at least one frame.')
+    total_frames = sum(counts)
+    duration = total_frames*C.FPS_DEN/C.FPS_NUM
+    # Matroska's default millisecond timestamps accumulate rounding at edit joins.
+    # MOV preserves the exact 24000-tick video clock and 48000Hz PCM separately.
     parts = []
-    for index,item in enumerate(primary):
-        part = folder / f'part-{index:04d}.mp4'
-        filters = framing(item,width,height) + ',fps='+C.FPS_STR
+    for index,(item,count) in enumerate(zip(primary,counts)):
+        part = folder / f'part-{index:04d}.mov'
+        filters = (framing(item,width,height)+',setpts=PTS-STARTPTS,fps='+C.FPS_STR+
+                   f':start_time=0,trim=end_frame={count},settb=1/24000,setpts=N*1001')
         info = FX.probe(item.source)
-        args = ['ffmpeg','-nostdin','-v','error','-ss',str(item.start),'-i',str(item.source)]
+        args = ['ffmpeg','-nostdin','-v','error','-threads','1','-filter_threads','1',
+                '-ss',str(item.start),'-i',str(item.source)]
         audio = next((x for x in connected if x.audio_only and x.processed_index == index),None)
         if audio:
             args += ['-i',str(audio.source)]
@@ -300,17 +368,23 @@ def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: s
             audio_map = '0:a:0'
         else:
             args += ['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']; audio_map = '1:a:0'
-        run(args + ['-t',str(item.duration),'-vf',filters,'-map','0:v:0','-map',audio_map,
-                    '-af',f'volume={item.gain_db if not audio else 0}dB','-ar','48000','-ac','2',
-                    '-c:v','libx264','-preset','veryfast','-crf','18','-pix_fmt','yuv420p','-c:a','pcm_s16le',
-                    '-f','matroska','-n',str(part)])
+        samples = count*2002  # exactly 48000 * 1001 / 24000 samples per frame
+        run(args + ['-t',str(count*C.FPS_DEN/C.FPS_NUM),'-frames:v',str(count),
+                    '-vf',filters,'-map','0:v:0','-map',audio_map,
+                    '-af',f'volume={item.gain_db if not audio else 0}dB,aresample=48000,apad=whole_len={samples},atrim=end_sample={samples}',
+                    '-ar','48000','-ac','2','-c:v','libx264','-threads:v','2',
+                    '-preset','veryfast','-crf','18','-pix_fmt','yuv420p','-c:a','pcm_s16le',
+                    '-fps_mode','passthrough','-enc_time_base:v','1/24000',
+                    '-video_track_timescale','24000','-movie_timescale','24000','-n',str(part)])
         parts.append(part)
     concat = folder/'parts.txt'
     concat.write_text(''.join("file '"+str(p).replace("'", "'\\''")+"'\n" for p in parts))
-    base = folder/'base.mkv'
-    run(['ffmpeg','-nostdin','-v','error','-f','concat','-safe','0','-i',str(concat),'-c','copy','-n',str(base)])
-    args = ['ffmpeg','-nostdin','-v','error','-i',str(base)]
-    filters, video, audio = [], '[0:v]', '[0:a]'
+    base = folder/'base.mov'
+    run(['ffmpeg','-nostdin','-v','error','-f','concat','-safe','0','-i',str(concat),
+         '-c','copy','-video_track_timescale','24000','-movie_timescale','24000','-n',str(base)])
+    args = ['ffmpeg','-nostdin','-v','error','-threads','1','-filter_complex_threads','1','-i',str(base)]
+    # Establish the exact main clock BEFORE framesync chooses connected frames.
+    filters, video, audio = ['[0:v]settb=1/24000,setpts=N*1001[base]'], '[base]', '[0:a]'
     # Positive lanes stack above the picture. Audio stays independent and is never retimed.
     layers = sorted([x for x in connected if x.processed_index is None],key=lambda x:x.lane)
     audio_labels = [audio]
@@ -322,8 +396,17 @@ def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: s
         else:
             if not item.video_only and FX.probe(item.source)['has_audio']:
                 raise ValueError('A connected picture with audio needs an explicit video-only or audio-only role before export.')
-            filters.append(f'[{index}:v]{framing(item,width,height,alpha=True)},trim=duration={item.duration},setpts=PTS-STARTPTS+{item.at}/TB[lay{index}]')
-            filters.append(f'{video}[lay{index}]overlay=eof_action=pass:repeatlast=0:enable=between(t\\,{item.at}\\,{item.at+item.duration})[v{index}]')
+            first, count = picture_frames(item.at), picture_frames(item.duration)
+            if not count: raise ValueError('A connected picture needs at least one frame.')
+            filters.append(f'[{index}:v]{framing(item,width,height,alpha=True)},setpts=PTS-STARTPTS,'
+                f'fps={C.FPS_STR}:start_time=0,trim=end_frame={count},settb=1/24000,'
+                f'setpts=N*1001+{first*C.FPS_DEN}[lay{index}]')
+            # Half-frame thresholds make the interval unambiguously half-open even
+            # when FFmpeg evaluates the enable expression in floating point.
+            lo = (first-.5)*C.FPS_DEN/C.FPS_NUM
+            hi = (first+count-.5)*C.FPS_DEN/C.FPS_NUM
+            filters.append(f'{video}[lay{index}]overlay=eof_action=pass:repeatlast=0:'
+                f'enable=gte(t\\,{lo:.12f})*lt(t\\,{hi:.12f})[v{index}]')
             video=f'[v{index}]'
     if captions is not None:
         # A fixed safe leaf is generated inside this new folder; avoid interpolating an input filename.
@@ -334,17 +417,22 @@ def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: s
     out = folder/'review.mp4'
     if filters: args += ['-filter_complex',';'.join(filters)]
     run(args+['-map',video if video!='[0:v]' else '0:v:0','-map',audio if audio!='[0:a]' else '0:a:0',
-              '-t',str(sum(x.duration for x in primary)),'-c:v','libx264','-preset','veryfast','-crf','18',
-              '-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart','-n',str(out)],directory=folder)
-    run(['ffmpeg','-nostdin','-v','error','-i',str(out),'-f','null','-'])
+              '-t',str(duration),'-frames:v',str(total_frames),'-c:v','libx264','-threads:v','2',
+              '-preset','veryfast','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k',
+              '-fps_mode','passthrough','-enc_time_base:v','1/24000',
+              '-video_track_timescale','24000','-movie_timescale','24000',
+              '-movflags','+faststart','-n',str(out)],directory=folder)
+    run(['ffmpeg','-nostdin','-v','error','-threads','1','-i',str(out),'-f','null','-'])
+    cadence = verify_picture_clock(out,total_frames)
     probe = json.loads(subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(out)],capture_output=True,check=True).stdout)
     v = next(x for x in probe['streams'] if x['codec_type']=='video')
-    if (v['width'],v['height']) != (width,height) or abs(float(probe['format']['duration'])-sum(x.duration for x in primary)) > 1/C.FPS:
+    if (v['width'],v['height']) != (width,height) or abs(float(probe['format']['duration'])-duration) > 1/C.FPS:
         raise ValueError('Encoded dimensions or duration do not match the chosen output.')
     meter=subprocess.run(['ffmpeg','-nostdin','-v','info','-i',str(out),'-vn','-af','ebur128=peak=true','-f','null','-'],capture_output=True,check=True)
     peak,silence=measured_true_peak(meter.stderr.decode(errors='replace'))
     if peak is not None and peak>0: raise ValueError(f'The export measures {peak:.1f}dBFS true peak. Lower dialogue or sound-effect gain before accepting it.')
-    (folder/'decode-verification.json').write_text(json.dumps({'full_decode_passed':True,'probe':probe,'audio_true_peak_dbfs':peak,'audio_verified_silence':silence,'audio_peak_gate_passed':True},indent=2))
+    (folder/'decode-verification.json').write_text(json.dumps({'full_decode_passed':True,'picture_cadence':cadence,
+        'probe':probe,'audio_true_peak_dbfs':peak,'audio_verified_silence':silence,'audio_peak_gate_passed':True},indent=2))
     # Intermediate files belong only to this derivative and are recoverable from its recipe.
     for path in [*parts,base,concat]: path.unlink()
     return out
@@ -390,13 +478,23 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
         connected.append(Layer(sound.source.resolve(),at,0,span,'Selected sound effect',C.LANE_FOLEY,'effects.foley',audio_only=True,gain_db=sound.gain_db))
         sound_manifest={'source':str(sound.source.resolve()),'at':at,'gain_db':sound.gain_db,'duration':span}
     sources = sorted({x.source for x in primary+connected})
+    # Bind source identity before inspecting availability; a change between
+    # inspection and rendering must invalidate the same captured source hash.
+    source_hashes = {str(x):sha(x) for x in sources}
+    picture_bounds = {}
     for item in primary+connected:
         info=FX.probe(item.source)
         if item.duration<=0 or item.start<0 or item.start+item.duration>info['duration']+1/C.FPS:
             raise ValueError(f'The selected media range exceeds {item.source.name}; missing footage cannot be held or padded.')
         if (not item.audio_only and not info['has_video']) or (item.audio_only and not info['has_audio']):
             raise ValueError(f'A required media stream is missing from {item.source.name}.')
-    source_hashes = {str(x):sha(x) for x in sources}
+        if not item.audio_only:
+            if item.source not in picture_bounds:
+                picture_bounds[item.source] = picture_duration(item.source)
+            # Saved source starts and durations are frame-aligned rational values.
+            # The tiny allowance is only for the float conversion, never a frame.
+            if item.start+item.duration > float(picture_bounds[item.source])+1e-9:
+                raise ValueError(f'The selected video range exceeds {item.source.name}; a longer audio tail cannot supply missing picture.')
     if graphic_capture and any(source_hashes.get(path,digest)!=digest for path,digest in graphic_capture[0]['source_sha256'].items()):
         raise ValueError('The selected graphic changed before composition.')
     destination.mkdir(parents=True,exist_ok=False)
@@ -436,6 +534,7 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
                 'generated_graphic':graphic_capture[0] if graphic_capture else None,
                 'caption_source':str(captions.resolve()) if captions else None,'caption_sha256':caption_hash,
                 'output_sha256':outputs,'full_decode_passed':True,'schema_checked':FX.dtd_problems(exported) is not None,
+                'picture_timing_revision':'24000-tick-cadence-v1','picture_cadence_verified':True,
                 'upscaled_sources':[str(x.source) for x in primary if FX.probe(x.source).get('width',0)<C.canvas_spec(aspect,resolution)['author'][0] or FX.probe(x.source).get('height',0)<C.canvas_spec(aspect,resolution)['author'][1]],
                 'audio_tail_policy':'Effects keep the selected interval duration; delayed tails outside it are trimmed.'}
         (destination/'derivative.json').write_text(json.dumps(recipe,indent=2)+'\n')
