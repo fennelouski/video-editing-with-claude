@@ -60,6 +60,21 @@ final class VoiceReviewController {
     private(set) var access: VoiceReviewAccess?
     private(set) var drafts: [UUID: VoiceTranscriptDraft] = [:]
     private(set) var level: Float = 0
+    struct LiveWords: Equatable,Sendable {
+        let session: UUID
+        let attempt: UUID
+        let segment: String
+        let text: String
+        let final: Bool
+    }
+    // Display-only recognition arrives before disk acknowledgement. It never
+    // supplies an edit command or replaces a manually edited feedback card.
+    private(set) var liveWords: LiveWords?
+    @ObservationIgnored private var liveStoragePaused = false
+    private struct LiveSegmentState { let order: Int;var final: Bool }
+    @ObservationIgnored private var liveSegments: [String:LiveSegmentState] = [:]
+    @ObservationIgnored private var displayedLiveOrder = -1
+    @ObservationIgnored private var displayedAudioStart: Double?
     private(set) var pendingWrites = 0
     private(set) var unsavedActions = 0
     private(set) var renderingCandidateID: UUID?
@@ -123,7 +138,19 @@ final class VoiceReviewController {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var writes: Task<Bool, Never>?
     @ObservationIgnored private var retryingStorage = false
-    @ObservationIgnored private var failedWrites: [@Sendable (VoiceReviewRepository) async throws -> VoiceReviewDocument] = []
+    private struct RetainedWrite {
+        let order: UInt64
+        let operation: @Sendable (VoiceReviewRepository) async throws -> VoiceReviewDocument
+    }
+    @ObservationIgnored private var nextWriteOrder: UInt64 = 0
+    @ObservationIgnored private var failedWrites: [RetainedWrite] = []
+    private func orderedWrite(_ operation: @escaping @Sendable (VoiceReviewRepository) async throws -> VoiceReviewDocument) -> RetainedWrite {
+        nextWriteOrder += 1
+        return .init(order: nextWriteOrder,operation: operation)
+    }
+    private func retainWrite(_ write: RetainedWrite) {
+        failedWrites.append(write);failedWrites.sort { $0.order < $1.order };unsavedActions = failedWrites.count
+    }
     @ObservationIgnored private var startTask: Task<Void, Never>?
     @ObservationIgnored private var consumer: Task<Void, Never>?
     @ObservationIgnored private var stopTask: Task<Bool, Never>?
@@ -169,6 +196,7 @@ final class VoiceReviewController {
         worker = VoiceCandidateWorker(repository: repository, processor: processor)
     }
     var active: Bool { [.starting,.recording,.finishing].contains(mode) }
+    var showsLiveFeedback: Bool { active || (unsavedActions > 0 && liveWords != nil) }
     var hasPendingWork: Bool { waitingForPreparation || !approvingCandidateIDs.isEmpty || voiceSetupTask != nil || !dirtyTypedVersions.isEmpty || !typedSaveTasks.isEmpty || !typedDraftTasks.isEmpty || !restructuringCards.isEmpty || sessionID != nil || startTask != nil || stopTask != nil || active || pendingWrites > 0 || unsavedActions > 0 || prepareTask != nil || !draftTasks.isEmpty || renderTask != nil }
     private var candidateBindingReady: Bool { candidatePlaybackID == nil || (viewToken == candidatePlaybackID && target?.candidateOrigin != nil) }
     var canStart: Bool { !voiceSetupPhase.working && frameCommentLease == nil && candidateBindingReady && !active && sessionID == nil && startTask == nil && stopTask == nil && unsavedActions == 0 && target != nil && playbackAvailable && access?.canStart == true && devices.contains(where: { $0.id == selectedDeviceUID }) }
@@ -342,14 +370,19 @@ final class VoiceReviewController {
     }
 
     @discardableResult private func enqueue(retainFailure: Bool = true, _ operation: @escaping @Sendable (VoiceReviewRepository) async throws -> VoiceReviewDocument) -> Task<Bool, Never> {
-        let preceding = writes; pendingWrites += 1
+        let preceding = writes, retained = orderedWrite(operation); pendingWrites += 1
         let task = Task {
             _ = await preceding?.value
             defer { pendingWrites -= 1 }
-            do { apply(try await operation(repository)); kickPreparation(); return true }
+            do {
+                // A newer operation cannot pass a failed older ingress while
+                // its explicit retry is pending, even when disk recovers.
+                guard failedWrites.isEmpty else { throw WorkflowFailure.invalid("Save pending feedback first.") }
+                apply(try await operation(repository)); kickPreparation(); return true
+            }
             catch {
                 self.error = error.localizedDescription
-                if retainFailure { failedWrites.append(operation); unsavedActions = failedWrites.count }
+                if retainFailure { retainWrite(retained) }
                 if retainFailure && active { Task { _ = await self.stop(cancel: true) } }
                 return false
             }
@@ -396,7 +429,8 @@ final class VoiceReviewController {
         }
         error = nil; mode = .starting
         let id = UUID(), attempt = UUID(), uid = selectedDeviceUID, language = locale
-        sessionID = id; attemptID = attempt
+        sessionID = id; attemptID = attempt;liveWords = nil;liveStoragePaused = false
+        liveSegments = [:];displayedLiveOrder = -1;displayedAudioStart = nil
         startTask = Task { [self] in
             defer { startTask = nil }
             do {
@@ -433,14 +467,38 @@ final class VoiceReviewController {
         switch event {
         case .level(let value): level = value
         case .clock(let audioStart, let duration, let hostStart):
-            if let sample = clockSampler?() { record(sample, token: viewToken) }
-            _ = await enqueue { try await $0.captured(session: id, attempt: attempt, audioStart: audioStart, duration: duration, hostStart: hostStart) }.value
-        case .speech(let result): _ = await enqueue { try await $0.speech(result, session: id, attempt: attempt) }.value
+            if let sample = clockSampler?(),!liveStoragePaused { record(sample, token: viewToken) }
+            enqueueLive { try await $0.captured(session: id, attempt: attempt, audioStart: audioStart, duration: duration, hostStart: hostStart) }
+        case .speech(let result):
+            preview(result,session: id,attempt: attempt)
+            enqueueLive { try await $0.speech(result, session: id, attempt: attempt) }
         case .failure(let detail):
             error = detail
             if mode != .finishing { _ = await stop(cancel: true) }
         case .ended: break
         }
+    }
+    private func preview(_ result: VoiceSpeechResult,session: UUID,attempt: UUID) {
+        guard !result.segmentID.isEmpty,result.segmentID.count<256,!result.text.isEmpty,result.text.count<=20_000 else { return }
+        // The durable ledger has the same 10,000-note ceiling. Preview state
+        // never grows beyond it and is reset for each new capture attempt.
+        guard liveSegments[result.segmentID] != nil || liveSegments.count<10_000 else { return }
+        var segment = liveSegments[result.segmentID] ?? .init(order: liveSegments.count,final: false)
+        guard !segment.final else { return }
+        segment.final = result.isFinal;liveSegments[result.segmentID] = segment
+        guard segment.order>=displayedLiveOrder else { return }
+        if let start = result.audioStart,let previous = displayedAudioStart,start.isFinite,previous.isFinite,start<previous { return }
+        displayedLiveOrder = segment.order;displayedAudioStart = result.audioStart
+        liveWords = .init(session: session,attempt: attempt,segment: result.segmentID,text: result.text,final: result.isFinal)
+    }
+    private func enqueueLive(_ operation: @escaping @Sendable (VoiceReviewRepository) async throws -> VoiceReviewDocument) {
+        if !liveStoragePaused,pendingWrites<256 { enqueue(operation);return }
+        // Retain each already-received overflow event for the existing explicit
+        // storage retry. Never label the display-only preview as durably saved.
+        liveStoragePaused = true;retainWrite(orderedWrite(operation))
+        error = "Feedback storage is delayed. Listening paused; retry saving pending words."
+        if failedWrites.count>=256 { consumer?.cancel() }
+        if !pendingStopCancelled { pendingStopCancelled = true;Task { _ = await self.stop(cancel: true) } }
     }
 
     func stop(cancel: Bool = false) async -> Bool {
@@ -742,8 +800,8 @@ final class VoiceReviewController {
         guard !retryingStorage else { return }; retryingStorage = true
         defer { retryingStorage = false }
         _ = await writes?.value
-        while let operation = failedWrites.first {
-            do { apply(try await operation(repository)); failedWrites.removeFirst(); unsavedActions = failedWrites.count }
+        while let write = failedWrites.first {
+            do { apply(try await write.operation(repository)); failedWrites.removeAll { $0.order == write.order }; unsavedActions = failedWrites.count }
             catch { self.error = error.localizedDescription; return }
         }
         if sessionID != nil && mode == .failed { _ = await stop(cancel: pendingStopCancelled) }

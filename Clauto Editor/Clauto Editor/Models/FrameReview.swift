@@ -194,7 +194,7 @@ struct SavedFrameComment: Codable, Equatable, Identifiable, Sendable {
     let appliedToVideo: Bool
     func validate() throws {
         try request.frame.validate(duration: request.target.duration)
-        guard schemaVersion == 1, id != supersedesID, (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || annotations.contains { $0.note != nil }), text.utf8.count <= 16_384,
+        guard schemaVersion == 1, id != supersedesID, (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !annotations.isEmpty), text.utf8.count <= 16_384,
               annotations.count <= 32, Set(annotations.map(\.id)).count == annotations.count,
               width > 0, height > 0, width <= 7680, height <= 7680, width*height <= 33_177_600,
               actualFrameTime == ReviewClockTime(value: request.frame.presentationValue,timescale: 24000), TranscriptCatalog.isSHA(framePNG_SHA256), reviewOnly, !productionAuthorized, !appliedToVideo else { throw ProjectFailure.invalidProject }

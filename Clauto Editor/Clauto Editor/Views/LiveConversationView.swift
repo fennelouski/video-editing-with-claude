@@ -120,8 +120,9 @@ struct LiveConversationView: View {
             if let detail = controller.connectionDetail { ClautoActivity(label: detail) }
             if controller.preparingReply { ClautoActivity(label: "Preparing your saved feedback…") }
             if let error = controller.error { Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled) }
-            Text("Only messages you send here are shared with Claude. Footage, transcripts and frame notes stay local. Keep steering; idle feedback is saved together automatically.")
-                .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            ClautoDisclosure("Privacy") {
+                Text("Only messages you send here are shared with Claude. Footage, transcripts and frame notes stay local.").font(ClautoDesign.caption)
+            }
         }.padding(compact ? 18:22).task { await controller.load() }
     }
 }
@@ -132,21 +133,22 @@ private struct ConversationLocalUpdatesView: View {
     @Bindable var controller: ConversationLocalEditController
     var body: some View {
         VStack(alignment: .leading,spacing: 8) {
-            Text("Local cut updates").font(ClautoDesign.caption).accessibilityAddTraits(.isHeader)
-            Text("Send a command such as ‘make it portrait at 720p’, ‘trim from 1:12 to 1:30’, or ‘use the full cut’. After two quiet minutes, supported commands are combined into a new export. Other feedback stays in your conversation.")
-                .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            Text("Updates").font(ClautoDesign.caption).accessibilityAddTraits(.isHeader)
+            ClautoDisclosure("Examples") {
+                Text("Make it portrait at 720p\nTrim from 1:12 to 1:30\nUse the full cut").font(ClautoDesign.caption).textSelection(.enabled)
+            }
             if controller.running {
-                ClautoActivity(label: "Updating your cut locally… You can keep sending feedback.")
+                ClautoActivity(label: "Updating…")
                 Button("Stop This Export") { controller.stopCurrent() }
             } else if controller.nextUpdateAt != nil {
-                Text("Waiting for a quiet moment before the next local update.").font(ClautoDesign.caption)
+                Text("Collecting feedback…").font(ClautoDesign.caption)
             }
             if let latest = controller.ledger?.jobs.last,let state = latest.state {
                 Text("Saved v\(latest.request.target.versionNumber) · \(latest.request.output.aspect == "9:16" ? "Portrait":"Landscape") · \(latest.request.output.resolution.rawValue) · \(state.rawValue.capitalized)")
                     .font(ClautoDesign.caption).textSelection(.enabled)
                 if let detail = latest.events.last?.detail { Text(detail).font(ClautoDesign.caption).textSelection(.enabled) }
                 if state == .succeeded {
-                    Text(controller.latestMatchesFeedback ? "Your new video is in Exports. Its saved parent cut is unchanged.":"An earlier export is saved. Your newer feedback is still being collected.").font(ClautoDesign.caption)
+                    Text(controller.latestMatchesFeedback ? "Ready in Exports":"Collecting newer feedback…").font(ClautoDesign.caption)
                 }
             }
             if controller.canRetryExport { Button("Retry Local Export") { Task { await controller.retryExport() } } }

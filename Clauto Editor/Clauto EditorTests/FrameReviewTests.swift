@@ -152,7 +152,11 @@ struct FrameReviewTests {
         #expect(second.reviewOnly && !second.productionAuthorized && !second.appliedToVideo)
         #expect(try Data(contentsOf: current) == sentinel)
         #expect(try VoiceReviewProvenance.inspect(f.target.preview.relativePath,project: f.project).sha256 == f.target.preview.sha256)
-        await #expect(throws: (any Error).self) { try await repo.save(frame: frozen,text: "",annotations: [shape]) }
+        let drawing = try await repo.save(frame: frozen,text: "",annotations: [shape])
+        #expect(drawing.text.isEmpty && drawing.annotations==[shape])
+        #expect(drawing.reviewOnly && !drawing.productionAuthorized && !drawing.appliedToVideo)
+        #expect(try await repo.read(drawing.id).0.annotations==[shape])
+        await #expect(throws: (any Error).self) { try await repo.save(frame: frozen,text: "",annotations: []) }
     }
     @Test func displayedFramePixelsMatchIndependentDecoderAndDifferFromNeighbors() async throws {
         let f = try await FrameReviewFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }

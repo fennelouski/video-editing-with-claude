@@ -27,7 +27,10 @@ struct ProjectView: View {
                             .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                     }
                     Spacer(minLength: 10)
-                    ClautoAction("Project folder", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
+                    Menu {
+                        Text(project.folder.path).textSelection(.enabled)
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
+                    } label: { ClautoIcon(.settings,size: 18) }.accessibilityLabel("Project details").accessibilityIdentifier("projectDetails")
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
                     ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
@@ -106,7 +109,6 @@ private struct BriefView: View {
                     }.disabled(brief.script.isEmpty || store.runningProjectID != nil || store.working)
                 }
                 ClautoField(label: "Things to avoid", text: $brief.avoid, placeholder: "Anything this cut should leave out")
-                Text("Your brief saves automatically. The video house style stays Sage & Oat, cut cardboard and marker on paper.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             }.padding(28).frame(maxWidth: 820, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -166,7 +168,6 @@ private struct FilesView: View {
                         .disabled(store.working || store.runningProjectID == project.id).accessibilityIdentifier("addFiles")
                 }
                 ClautoToggle(title: "Copy media into this project", isOn: $copyMedia)
-                Text("Media is referenced by default. Scripts and notes are copied so you can edit them; originals stay untouched.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 ClautoDisclosure("Asset library & local models") {
                     HStack {
                         Button("Use Asset Library…") { Task { if let folder = await FileDialogs.folder() { await store.useProjectFolder(folder, key: "assets") } } }
@@ -212,9 +213,7 @@ private struct FilesView: View {
         return HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.name).font(ClautoDesign.type(14, weight: .semibold)).lineLimit(2)
-                Text(exists ? (file.copied ? "Copied into project" : "Referenced in place") : "Missing file — reconnect its drive")
-                    .font(ClautoDesign.caption).foregroundStyle(exists ? ClautoDesign.quiet : ClautoDesign.ember)
-                Text(file.originalPath).font(ClautoDesign.type(11)).foregroundStyle(ClautoDesign.quiet).lineLimit(1).clautoHelp(file.originalPath)
+                if !exists { Text("Missing").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
             }
             Spacer()
             if file.displayedGroup == .scripts {
@@ -230,8 +229,10 @@ private struct FilesView: View {
             if file.group == .audio || file.group == .music {
                 ClautoChoice(title: file.needsRole ? "Choose a role" : "Role", selection: Binding(get: { file.group }, set: { role in Task { await store.assign(role, file: file) } }), options: [(FileGroup.music, "Music"), (.audio, "Recorded audio")]).frame(width: 145).disabled(store.working)
             }
-            ClautoAction("Reveal", icon: .folder, kind: .quiet) { NSWorkspace.shared.activateFileViewerSelecting([file.copied ? url:URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
-                .accessibilityLabel("Reveal \(file.name) in Finder")
+            Menu {
+                Text(file.originalPath)
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file.copied ? url:URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
+            } label: { ClautoIcon(.settings,size: 16) }.accessibilityLabel("Details for \(file.name)")
             ClautoAction("Remove", icon: .close, kind: .quiet) { Task { await store.remove(file) } }.disabled(store.working || store.runningProjectID == project.id)
                 .accessibilityLabel("Remove \(file.name) from project")
         }
@@ -269,7 +270,6 @@ struct CutView: View {
                         versionResults(current, project: project)
                     }
                     Text(store.currentCuts[project.id] == nil ? "Make a first cut" : "Make another version").font(ClautoDesign.heading).accessibilityAddTraits(.isHeader)
-                    Text("The engine transcribes and cuts locally, then pauses for your graphic-plan review. Original media stays untouched.").foregroundStyle(ClautoDesign.quiet)
                     ClautoField(label: "Version name", text: $versionLabel, placeholder: "First cut").accessibilityIdentifier("versionLabel")
                     ClautoChoice(title: "Narration clip", selection: $primaryID, options: [(Optional<UUID>.none, "Choose a clip")] + project.manifest.files.filter { $0.group == .footage }.map { (Optional($0.id), $0.name) }).accessibilityIdentifier("narrationClip")
                     Button("Add Clip to Narration Order") {
@@ -608,7 +608,6 @@ struct VersionReview: View {
                                 .disabled(entry.attachment != .verified)
                         }
                     }
-                    Text("Feedback stays attached to this saved version. The cut is unchanged until a reviewed edit applies it.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
             }
         }

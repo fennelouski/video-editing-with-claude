@@ -35,6 +35,26 @@ struct ThemeRGB: Equatable, Sendable {
     }
 }
 struct ClautoThemePalette: Sendable {
+    enum ShapeStyle: String,Sendable { case square, rounded, cut, capsule, chamfer }
+    enum IconStyle: String,Sendable { case angular, rounded, badge, technical, native }
+    enum TypeStyle: String,Sendable { case humanist, serif, mono, system }
+    enum ControlStyle: String,Sendable { case native, check, slider }
+    var controls: ControlStyle {
+        switch id {
+        case .standard: .native
+        case .cozy,.maximal,.futuristic,.summertimeFine: .slider
+        default: .check
+        }
+    }
+    struct Geometry: Equatable,Sendable {
+        let shape: ShapeStyle
+        let icon: IconStyle
+        let type: TypeStyle
+        let stroke: Double
+        let iconStroke: Double
+        let focusStroke: Double
+        let inset: Double
+    }
     enum Treatment: String, Sendable { case wood, soft, native, plain, layered, glass, neon, diner, paper, summer }
     let id: ClautoThemeID
     let background: ThemeRGB
@@ -52,6 +72,21 @@ struct ClautoThemePalette: Sendable {
     let dark: Bool
     let corner: Double
     let spacing: Double
+    var geometry: Geometry {
+        switch id {
+        case .homey: .init(shape: .cut,icon: .angular,type: .humanist,stroke: 1.2,iconStroke: 1.7,focusStroke: 2.4,inset: 11)
+        case .cozy: .init(shape: .rounded,icon: .rounded,type: .serif,stroke: 1.2,iconStroke: 2,focusStroke: 2.5,inset: 13)
+        case .standard: .init(shape: .rounded,icon: .native,type: .system,stroke: 1,iconStroke: 1.7,focusStroke: 2,inset: 10)
+        case .minimal: .init(shape: .square,icon: .angular,type: .humanist,stroke: 0.75,iconStroke: 1.15,focusStroke: 1.5,inset: 9)
+        case .maximal: .init(shape: .capsule,icon: .badge,type: .serif,stroke: 2.5,iconStroke: 2.7,focusStroke: 3.5,inset: 14)
+        case .futuristic: .init(shape: .chamfer,icon: .technical,type: .humanist,stroke: 1,iconStroke: 1.4,focusStroke: 2.2,inset: 12)
+        case .tron: .init(shape: .chamfer,icon: .technical,type: .mono,stroke: 1.8,iconStroke: 1.9,focusStroke: 3,inset: 10)
+        case .tacoBell: .init(shape: .capsule,icon: .badge,type: .humanist,stroke: 2,iconStroke: 2.2,focusStroke: 3,inset: 13)
+        case .tgif: .init(shape: .cut,icon: .badge,type: .serif,stroke: 2.2,iconStroke: 2.5,focusStroke: 3.2,inset: 12)
+        case .theOffice: .init(shape: .square,icon: .angular,type: .mono,stroke: 1,iconStroke: 1.5,focusStroke: 2,inset: 10)
+        case .summertimeFine: .init(shape: .rounded,icon: .rounded,type: .humanist,stroke: 1.5,iconStroke: 1.8,focusStroke: 2.6,inset: 13)
+        }
+    }
     static func make(_ id: ClautoThemeID) -> Self {
         let colors: (UInt32,UInt32,UInt32,UInt32,UInt32,UInt32,UInt32,UInt32,Treatment,Bool,Double,Double)
         switch id {

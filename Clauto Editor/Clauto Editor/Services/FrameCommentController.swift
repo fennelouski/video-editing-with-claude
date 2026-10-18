@@ -103,7 +103,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     }
     var validationIssue: String? {
         guard let frame else { return "Wait for the captured frame." }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || history.shapes.contains(where: { $0.note != nil }) else { return "Add a frame or region note before saving." }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !history.shapes.isEmpty else { return "Draw or add a note." }
         guard text.utf8.count <= 16_384 else { return "Keep the frame note within 16384 UTF-8 bytes. Your draft remains open." }
         do { for shape in history.shapes { try shape.validate(width: frame.width,height: frame.height) }; return nil }
         catch { return error.localizedDescription }
@@ -325,7 +325,7 @@ struct FrameCommentSaveAttempt: Equatable, Sendable {
     @discardableResult func save() async -> Bool {
         if let saveTask { return await saveTask.value }
         guard !peopleBusy else { error = "Wait for the person update to finish before saving this frame comment."; return false }
-        guard let draft, let frame = draft.frame, draft.canAttemptSave || dictation?.active == true else { error = "Add a frame or region note before saving. A mark alone is not an editing instruction."; return false }
+        guard let draft, let frame = draft.frame, draft.canAttemptSave || dictation?.active == true else { error = "Draw or add a note."; return false }
         saving = true; error = nil
         let task = Task { () -> Bool in
             defer { saving = false; saveTask = nil }

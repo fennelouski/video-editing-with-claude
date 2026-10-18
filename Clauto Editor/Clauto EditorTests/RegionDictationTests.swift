@@ -200,11 +200,26 @@ struct RegionDictationTests {
         let controller = FrameCommentController(project: f.project,capture: FrozenRegionCapture(frame: frame),dictation: dictation)
         try controller.begin(frame.request); try await wait { controller.draft?.frame != nil }
         let draft = try #require(controller.draft); try draft.add(shape().bounds,kind: .highlight)
-        #expect(!controller.canSaveFrameComment)
-        controller.dictateRegion(try #require(draft.selectedShapeID)); try await wait { dictation.mode == .recording }
-        #expect(!draft.canSave && controller.canSaveFrameComment)
+        let regionID = try #require(draft.selectedShapeID)
+        // A drawing is independently saveable; this fixture has no typed or
+        // partial words that could mask a failure to drain final-only speech.
+        #expect(draft.canSave && controller.canSaveFrameComment)
+        #expect(draft.text.isEmpty && draft.history.shapes.first?.note == nil)
+        controller.dictateRegion(regionID); try await wait { dictation.mode == .recording }
+        let dictationID = try #require(dictation.record?.id)
+        #expect(draft.canSave && controller.canSaveFrameComment)
+        #expect(dictation.record?.revisions.isEmpty == true && draft.history.shapes.first?.note == nil)
         #expect(await controller.save())
-        #expect(controller.comments.last?.annotations.first?.note == "Only final words" && controller.draft == nil)
+        let saved = try #require(controller.comments.last)
+        let reopened = try await FrameCommentRepository(project: f.project).read(saved.id)
+        let spoken = try await RegionDictationRepository(project: f.project).read(dictationID)
+        #expect(reopened.0.annotations.first?.note == "Only final words" && reopened.0.text.isEmpty)
+        #expect(reopened.0.request == frame.request && reopened.1.png == frame.png)
+        #expect(reopened.0.annotations.first?.id == regionID && reopened.0.annotations.first?.dictationSessionIDs == [dictationID])
+        #expect(reopened.0.reviewOnly && !reopened.0.productionAuthorized && !reopened.0.appliedToVideo)
+        #expect(spoken.0.transcript == "Only final words" && spoken.0.revisions.count == 1 && spoken.0.revisions.first?.isFinal == true)
+        #expect(spoken.0.state == .finished && spoken.0.region.id == regionID && spoken.0.request == frame.request && spoken.1.png == frame.png)
+        #expect(controller.draft == nil && !dictation.hasPendingWork)
     }
     @MainActor @Test func twoWindowsUseOneSynchronousAdmissionAndReleaseWithoutTaskCycles() async throws {
         let f = try await FrameReviewFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }

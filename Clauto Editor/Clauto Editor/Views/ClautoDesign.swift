@@ -25,11 +25,24 @@ import CoreText
     static var rule: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.separatorColor) }; return ClautoThemeStore.shared.palette.border.color }
     static var ember: Color { if ClautoThemeStore.shared.selected == .standard { return systemColor(.systemRed) }; return ClautoThemeStore.shared.palette.error.color }
     static func type(_ size: CGFloat = 14, weight: Font.Weight = .regular) -> Font {
-        ClautoThemeStore.shared.selected == .standard ? .system(size: size,weight: weight) : .custom("WorkSans-Regular", size: size).weight(weight)
+        switch ClautoThemeStore.shared.palette.geometry.type {
+        case .system: .system(size: size,weight: weight)
+        case .mono: .system(size: size,weight: weight,design: .monospaced)
+        case .serif: .system(size: size,weight: weight,design: .serif)
+        case .humanist: .custom("WorkSans-Regular",size: size).weight(weight)
+        }
     }
     static var body: Font { type() }
     static var caption: Font { type(12) }
     static var heading: Font { type(24, weight: .semibold) }
+    static func nativeFont(_ size: CGFloat) -> NSFont {
+        switch ClautoThemeStore.shared.palette.geometry.type {
+        case .system: .systemFont(ofSize: size)
+        case .mono: .monospacedSystemFont(ofSize: size,weight: .regular)
+        case .serif: NSFont(descriptor: NSFont.systemFont(ofSize: size).fontDescriptor.withDesign(.serif) ?? NSFont.systemFont(ofSize: size).fontDescriptor,size: size) ?? .systemFont(ofSize: size)
+        case .humanist: NSFont(name: "WorkSans-Regular",size: size) ?? .systemFont(ofSize: size)
+        }
+    }
 }
 
 @MainActor enum ClautoFonts {
@@ -57,9 +70,9 @@ struct ClautoButtonStyle: ButtonStyle {
         configuration.label
             .font(ClautoDesign.type(13, weight: .semibold))
             .foregroundStyle(enabled ? (kind == .danger ? ClautoDesign.ember : kind == .primary && enabled && !configuration.isPressed && !hovering ? ClautoDesign.onAccent : ClautoDesign.ink) : ClautoDesign.quiet)
-            .padding(.horizontal, kind == .quiet ? 8 : 14).padding(.vertical, 9)
-            .background(background(pressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: ClautoThemeStore.shared.palette.corner))
-            .overlay(RoundedRectangle(cornerRadius: ClautoThemeStore.shared.palette.corner).stroke(focused ? ClautoDesign.ink : kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
+            .padding(.horizontal, kind == .quiet ? 8 : ClautoThemeStore.shared.palette.geometry.inset+3).padding(.vertical, ClautoThemeStore.shared.palette.spacing*0.6)
+            .background(background(pressed: configuration.isPressed), in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
+            .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(focused ? ClautoDesign.ink : kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: focused ? ClautoThemeStore.shared.palette.geometry.focusStroke : ClautoThemeStore.shared.palette.geometry.stroke))
             .contentShape(Rectangle()).focusEffectDisabled()
             .onHover { hovering = $0 }
     }
@@ -81,7 +94,7 @@ struct ClautoInlineButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(background(pressed: configuration.isPressed))
-            .overlay(Rectangle().stroke(focused ? (onRail ? ClautoDesign.citron : ClautoDesign.ink) : .clear, lineWidth: 2))
+            .overlay(Rectangle().stroke(focused ? (onRail ? ClautoDesign.citron : ClautoDesign.ink) : .clear, lineWidth: ClautoThemeStore.shared.palette.geometry.focusStroke))
             .contentShape(Rectangle()).focusEffectDisabled()
             .opacity(enabled ? 1 : 0.65)
             .onHover { hovering = $0 }
@@ -101,6 +114,29 @@ struct CutCorner: Shape {
             p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX-inset, y: r.minY))
             p.addLine(to: CGPoint(x: r.maxX, y: r.minY+inset)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
             p.addLine(to: CGPoint(x: r.minX, y: r.maxY)); p.closeSubpath()
+        }
+    }
+}
+
+/// Semantic geometry is shared by controls, fields, rails and icon badges.
+struct ClautoThemedShape: Shape {
+    let style: ClautoThemePalette.ShapeStyle
+    let corner: CGFloat
+    init(palette: ClautoThemePalette) { style = palette.geometry.shape;corner = palette.corner }
+    func path(in r: CGRect) -> Path {
+        switch style {
+        case .square: return Rectangle().path(in: r)
+        case .rounded: return RoundedRectangle(cornerRadius: corner).path(in: r)
+        case .capsule: return Capsule().path(in: r)
+        case .cut: return CutCorner(cut: corner).path(in: r)
+        case .chamfer:
+            let c = min(max(3,corner),min(r.width,r.height)/3)
+            return Path { p in
+                p.move(to: .init(x: r.minX+c,y: r.minY));p.addLine(to: .init(x: r.maxX-c,y: r.minY))
+                p.addLine(to: .init(x: r.maxX,y: r.minY+c));p.addLine(to: .init(x: r.maxX,y: r.maxY-c))
+                p.addLine(to: .init(x: r.maxX-c,y: r.maxY));p.addLine(to: .init(x: r.minX+c,y: r.maxY))
+                p.addLine(to: .init(x: r.minX,y: r.maxY-c));p.addLine(to: .init(x: r.minX,y: r.minY+c));p.closeSubpath()
+            }
         }
     }
 }
@@ -127,7 +163,7 @@ struct ClautoAction: View {
 }
 
 struct ClautoRule: View {
-    var body: some View { Rectangle().fill(ClautoDesign.rule).frame(height: 1).accessibilityHidden(true) }
+    var body: some View { Rectangle().fill(ClautoDesign.rule).frame(height: ClautoThemeStore.shared.palette.geometry.stroke).accessibilityHidden(true) }
 }
 
 struct ClautoSection<Content: View>: View {
@@ -138,7 +174,7 @@ struct ClautoSection<Content: View>: View {
         self.title = title; self.detail = detail; self.content = content()
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: ClautoThemeStore.shared.palette.spacing) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(ClautoDesign.type(18, weight: .semibold)).accessibilityAddTraits(.isHeader)
                 if let detail { Text(detail).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).fixedSize(horizontal: false, vertical: true) }
@@ -160,8 +196,8 @@ struct ClautoField: View {
             if !label.isEmpty { Text(label).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet) }
             TextField(label, text: $text, prompt: Text(placeholder).foregroundStyle(ClautoDesign.quiet),axis: axis)
                 .textFieldStyle(.plain).font(ClautoDesign.body).foregroundStyle(enabled ? ClautoDesign.ink : ClautoDesign.quiet)
-                .tint(ClautoDesign.ink).padding(11).background(enabled ? ClautoDesign.sheet : ClautoDesign.soft)
-                .overlay(Rectangle().stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
+                .tint(ClautoDesign.ink).padding(ClautoThemeStore.shared.palette.geometry.inset).background(enabled ? ClautoDesign.sheet : ClautoDesign.soft,in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
+                .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? ClautoThemeStore.shared.palette.geometry.focusStroke : ClautoThemeStore.shared.palette.geometry.stroke))
                 .focused($focused).focusEffectDisabled().accessibilityLabel(label.isEmpty ? placeholder : label)
         }
     }
@@ -176,8 +212,8 @@ struct ClautoNumberField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             TextField(label, value: $value, format: .number).textFieldStyle(.plain).font(ClautoDesign.body.monospacedDigit())
-                .tint(ClautoDesign.ink).padding(11).background(enabled ? ClautoDesign.sheet : ClautoDesign.soft)
-                .overlay(Rectangle().stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
+                .tint(ClautoDesign.ink).padding(ClautoThemeStore.shared.palette.geometry.inset).background(enabled ? ClautoDesign.sheet : ClautoDesign.soft,in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
+                .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? ClautoThemeStore.shared.palette.geometry.focusStroke : ClautoThemeStore.shared.palette.geometry.stroke))
                 .focused($focused).focusEffectDisabled().accessibilityLabel(label)
         }
     }
@@ -190,7 +226,7 @@ struct ClautoTextArea: View {
     @State private var focused = false
     var body: some View {
         ClautoNativeTextArea(text: $text, label: label, focused: $focused)
-            .overlay(Rectangle().stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? 2 : 1))
+            .overlay(Rectangle().stroke(focused ? ClautoDesign.ink : ClautoDesign.rule, lineWidth: focused ? ClautoThemeStore.shared.palette.geometry.focusStroke : ClautoThemeStore.shared.palette.geometry.stroke))
     }
 }
 private struct ClautoNativeTextArea: NSViewRepresentable {
@@ -204,7 +240,7 @@ private struct ClautoNativeTextArea: NSViewRepresentable {
         scroll.scrollerStyle = .overlay; scroll.verticalScroller = ClautoScroller()
         scroll.drawsBackground = true; scroll.backgroundColor = NSColor(ClautoDesign.sheet)
         let view = ClautoNativeTextView(); view.delegate = context.coordinator; view.isRichText = false; view.allowsUndo = true
-        view.font = NSFont(name: "WorkSans-Regular", size: 15)
+        view.font = ClautoDesign.nativeFont(15)
         view.textColor = NSColor(ClautoDesign.ink); view.backgroundColor = NSColor(ClautoDesign.sheet)
         view.insertionPointColor = NSColor(ClautoDesign.ink)
         view.selectedTextAttributes = [.backgroundColor: NSColor(ClautoDesign.citron), .foregroundColor: NSColor(ClautoDesign.ink)]
@@ -225,7 +261,7 @@ private struct ClautoNativeTextArea: NSViewRepresentable {
             scroll.backgroundColor = NSColor(ClautoDesign.sheet)
             view.textColor = NSColor(ClautoDesign.ink); view.backgroundColor = NSColor(ClautoDesign.sheet)
             view.insertionPointColor = NSColor(ClautoDesign.ink)
-            view.font = ClautoThemeStore.shared.selected == .standard ? .systemFont(ofSize: 15) : NSFont(name: "WorkSans-Regular", size: 15)
+            view.font = ClautoDesign.nativeFont(15)
             view.selectedTextAttributes = [.backgroundColor: NSColor(ClautoDesign.citron), .foregroundColor: NSColor(ClautoDesign.onAccent)]
             view.setAccessibilityLabel(label)
             if view.string != text {
@@ -261,15 +297,32 @@ struct ClautoToggle: View {
     var title: String
     @Binding var isOn: Bool
     var body: some View {
-        Button { isOn.toggle() } label: {
-            HStack(spacing: 10) {
-                ZStack { Rectangle().fill(isOn ? ClautoDesign.rail : ClautoDesign.sheet).frame(width: 20, height: 20)
-                    if isOn { ClautoIcon(.check, size: 15).foregroundStyle(ClautoDesign.citron) }
-                }.overlay(Rectangle().stroke(ClautoDesign.quiet, lineWidth: 1))
-                Text(title).font(ClautoDesign.body).fixedSize(horizontal: false, vertical: true)
-            }.padding(.vertical, 4)
-        }.buttonStyle(ClautoInlineButtonStyle()).foregroundStyle(ClautoDesign.ink)
-            .accessibilityRepresentation { Toggle(title, isOn: $isOn) }
+        if ClautoThemeStore.shared.palette.controls == .native {
+            Toggle(title,isOn: $isOn).toggleStyle(.switch)
+        } else {
+            Button { isOn.toggle() } label: {
+                HStack(spacing: ClautoThemeStore.shared.palette.spacing) {
+                    indicator
+                    Text(title).font(ClautoDesign.body).fixedSize(horizontal: false, vertical: true)
+                }.padding(.vertical, 4)
+            }.buttonStyle(ClautoInlineButtonStyle()).foregroundStyle(ClautoDesign.ink)
+                .accessibilityRepresentation { Toggle(title, isOn: $isOn) }
+        }
+    }
+    @ViewBuilder private var indicator: some View {
+        if ClautoThemeStore.shared.palette.controls == .slider {
+            ZStack(alignment: isOn ? .trailing:.leading) {
+                ClautoThemedShape(palette: ClautoThemeStore.shared.palette).fill(isOn ? ClautoDesign.citron:ClautoDesign.soft)
+                Circle().fill(ClautoDesign.ink).padding(4).frame(width: 24,height: 24)
+            }.frame(width: 42,height: 24)
+                .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(ClautoDesign.rule,lineWidth: ClautoThemeStore.shared.palette.geometry.stroke))
+        } else {
+            ZStack {
+                ClautoThemedShape(palette: ClautoThemeStore.shared.palette).fill(isOn ? ClautoDesign.rail:ClautoDesign.sheet)
+                if isOn { ClautoIcon(.check,size: 15).foregroundStyle(ClautoDesign.citron) }
+            }.frame(width: 20,height: 20)
+                .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(ClautoDesign.quiet,lineWidth: ClautoThemeStore.shared.palette.geometry.stroke))
+        }
     }
 }
 
@@ -389,7 +442,7 @@ struct ClautoSlider: View {
                     guard enabled else { return }; focused = true
                     value = range.lowerBound + max(0, min(1, (point.location.x - 7) / width)) * span
                 })
-        }.frame(height: 30).overlay(Rectangle().stroke(focused ? ClautoDesign.ink : .clear, lineWidth: 2))
+        }.frame(height: 30).overlay(Rectangle().stroke(focused ? ClautoDesign.ink : .clear, lineWidth: ClautoThemeStore.shared.palette.geometry.focusStroke))
             .focusable(enabled).focused($focused).focusEffectDisabled()
             .onKeyPress(.leftArrow) { adjust(-1); return .handled }.onKeyPress(.rightArrow) { adjust(1); return .handled }
             .onKeyPress(.downArrow) { adjust(-1); return .handled }.onKeyPress(.upArrow) { adjust(1); return .handled }
@@ -429,7 +482,7 @@ struct ClautoEmpty: View {
         VStack(alignment: .leading, spacing: 16) {
             ClautoEmblem(bracketColor: ClautoDesign.rail, stripColor: ClautoDesign.citron).frame(width: 72, height: 72)
             Text(title).font(ClautoDesign.type(34, weight: .semibold)).accessibilityAddTraits(.isHeader)
-            Text(detail).font(ClautoDesign.type(16)).foregroundStyle(ClautoDesign.quiet).frame(maxWidth: 490, alignment: .leading)
+            if !detail.isEmpty { Text(detail).font(ClautoDesign.type(16)).foregroundStyle(ClautoDesign.quiet).frame(maxWidth: 490, alignment: .leading) }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

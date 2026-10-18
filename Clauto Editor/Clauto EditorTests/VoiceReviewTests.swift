@@ -1411,4 +1411,115 @@ struct VoiceReviewTests {
         }
     }
 
+    @Test @MainActor func liveWordsAppearBeforeStorageAcknowledgementAndNeverReplaceManualDrafts() async throws {
+        let (root,project,_,target) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(),controller = try await controller(project: project,provider: provider,target: target)
+        var fd: Int32 = -1,held = false
+        defer { if held { flock(fd,LOCK_UN) };if fd>=0 { Darwin.close(fd) } }
+        do {
+        controller.start();try await waitFor { controller.mode == .recording && controller.pendingWrites==0 }
+        fd = open(project.folder.appendingPathComponent("notes/voice-review/ledger.lock").path,O_RDWR|O_NOFOLLOW)
+        guard fd>=0,flock(fd,LOCK_EX|LOCK_NB)==0 else { throw WorkflowFailure.invalid("The synthetic lock could not be held") };held = true
+        await provider.emit(.clock(audioStart: 0,duration: 3,hostStart: 100))
+        await provider.emit(.speech(.init(segmentID: "live-case",text: "Keep",isFinal: false,audioStart: 1,audioEnd: 2)))
+        try await waitFor { controller.liveWords?.text=="Keep" }
+        #expect(controller.document.notes.isEmpty && controller.pendingWrites>0)
+        await provider.emit(.speech(.init(segmentID: "live-case",text: "Keep this detail",isFinal: false,audioStart: 1,audioEnd: 2)))
+        try await waitFor { controller.liveWords?.text=="Keep this detail" }
+        await provider.emit(.speech(.init(segmentID: "live-case",text: "Keep this detail visible.",isFinal: true,audioStart: 1,audioEnd: 2)))
+        try await waitFor { controller.liveWords?.final==true }
+        #expect(controller.document.notes.isEmpty)
+        flock(fd,LOCK_UN);held = false
+        try await waitFor { controller.document.notes.first?.isFinal==true && controller.pendingWrites==0 }
+        let note = try #require(controller.document.notes.first)
+        let draft = VoiceTranscriptDraft(noteID: note.id,text: "My manual wording",intent: note.intent,targetID: note.effectiveAnchor?.targetID,start: "",end: "",baseRevision: note.revision,action: note.action)
+        controller.retainDraft(draft)
+        await provider.emit(.speech(.init(segmentID: "live-case",text: "Stale partial",isFinal: false,audioStart: 1,audioEnd: 2)))
+        #expect(await controller.stop())
+        #expect(controller.liveWords?.text=="Keep this detail visible.")
+        #expect(controller.drafts[note.id]?.text=="My manual wording")
+        let mic = await provider.microphoneRequests,speech = await provider.speechRequests,models = await provider.modelPreparations
+        #expect(mic==0 && speech==0 && models==0)
+        #expect(await controller.flushForExit())
+        } catch {
+            if held { flock(fd,LOCK_UN);held = false }
+            _ = await controller.stop(cancel: true);_ = await controller.flushForExit();throw error
+        }
+    }
+
+    @Test @MainActor func overflowAndOlderDiskFailuresRetryInOriginalIngressOrder() async throws {
+        let (root,project,_,target) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(),token = UUID(),suite = "ClautoOverflow-"+UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = try VoiceReviewController(project: project,provider: provider,defaults: defaults,steeringIdleInterval: 0)
+        var sample = VoiceLivePlayhead(host: 100,seconds: 10,rate: 0,available: true)
+        await controller.load();controller.chooseDevice("mock-device");controller.willAttach(token)
+        await controller.attach(target,token: token,sampler: { sample })
+        await provider.configure(holdStop: true)
+        var fd: Int32 = -1,held = false,moved = false
+        let disconnected = project.folder.deletingLastPathComponent().appendingPathComponent("temporary-disconnect")
+        defer { if held { flock(fd,LOCK_UN) };if fd>=0 { Darwin.close(fd) } }
+        do {
+            controller.start();try await waitFor { controller.mode == .recording && controller.pendingWrites==0 }
+            sample = .init(host: 103,seconds: 10,rate: 0,available: true)
+            controller.record(sample,token: token);try await waitFor { controller.pendingWrites==0 }
+            fd = open(project.folder.appendingPathComponent("notes/voice-review/ledger.lock").path,O_RDWR|O_NOFOLLOW)
+            guard fd>=0,flock(fd,LOCK_EX|LOCK_NB)==0 else { throw ProjectFailure.invalidProject };held = true
+            await provider.emit(.clock(audioStart: 0,duration: 3,hostStart: 100))
+            try await waitFor { controller.pendingWrites==2 }
+            for index in 0..<254 {
+                await provider.emit(.speech(.init(segmentID: "ordered-live",text: "Partial \(index)",isFinal: false,audioStart: 1,audioEnd: 2)))
+            }
+            try await waitFor { controller.pendingWrites==256 }
+            await provider.emit(.speech(.init(segmentID: "ordered-live",text: "The exact final words",isFinal: true,audioStart: 1,audioEnd: 2)))
+            try await waitFor { controller.liveWords?.final==true && controller.unsavedActions>0 }
+            // The overflow final is retained before any old queued I/O fails.
+            try FileManager.default.moveItem(at: project.folder,to: disconnected);moved = true
+            flock(fd,LOCK_UN);held = false
+            try await waitFor { controller.pendingWrites==0 }
+            try FileManager.default.moveItem(at: disconnected,to: project.folder);moved = false
+            await provider.releaseStop();try await waitFor { controller.mode == .failed }
+            #expect(controller.unsavedActions==257)
+            #expect(!controller.active && controller.showsLiveFeedback)
+            #expect(controller.liveWords?.text=="The exact final words")
+            await controller.retryStorage()
+            let note = try #require(controller.document.notes.first)
+            #expect(controller.unsavedActions==0 && controller.document.notes.count==1)
+            #expect(!controller.showsLiveFeedback)
+            #expect(note.text=="The exact final words" && note.isFinal && note.onset?.seconds==10)
+            let ingressHistory = note.history.filter { $0.source=="Partial ASR" || $0.source=="Final ASR" }.map(\.text)
+            #expect(ingressHistory == (0..<254).map { "Partial \($0)" }+["The exact final words"])
+            #expect(!note.history.contains { $0.source=="Late ASR ignored" })
+            #expect(controller.document.sessions.last?.state == .cancelled)
+            #expect(await controller.flushForExit())
+        } catch {
+            if held { flock(fd,LOCK_UN);held = false }
+            if moved { try? FileManager.default.moveItem(at: disconnected,to: project.folder) }
+            await provider.releaseStop();_ = await controller.stop(cancel: true);_ = await controller.flushForExit();throw error
+        }
+    }
+
+    @Test @MainActor func livePreviewNeverReturnsToAnOlderRecognitionSegment() async throws {
+        let (root,project,_,target) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let provider = MockVoiceProvider(),controller = try await controller(project: project,provider: provider,target: target)
+        do {
+            controller.start();try await waitFor { controller.mode == .recording }
+            await provider.emit(.speech(.init(segmentID: "A",text: "First finalized words",isFinal: true,audioStart: 0,audioEnd: 1)))
+            try await waitFor { controller.liveWords?.segment=="A" }
+            await provider.emit(.speech(.init(segmentID: "B",text: "Second live idea",isFinal: false,audioStart: 1,audioEnd: 2)))
+            try await waitFor { controller.liveWords?.segment=="B" }
+            await provider.emit(.speech(.init(segmentID: "A",text: "Discard this late partial",isFinal: false,audioStart: 0,audioEnd: 1)))
+            await provider.emit(.level(0.125));try await waitFor { controller.level==0.125 }
+            #expect(controller.liveWords?.segment=="B" && controller.liveWords?.text=="Second live idea" && controller.liveWords?.final==false)
+            await provider.emit(.speech(.init(segmentID: "older-unseen",text: "Older delayed segment",isFinal: true,audioStart: 0.2,audioEnd: 0.8)))
+            await provider.emit(.level(0.25));try await waitFor { controller.level==0.25 }
+            #expect(controller.liveWords?.segment=="B" && controller.liveWords?.text=="Second live idea" && controller.liveWords?.final==false)
+            await provider.emit(.speech(.init(segmentID: "B",text: "Second live idea complete",isFinal: true,audioStart: 1,audioEnd: 2)))
+            #expect(await controller.stop())
+            #expect(controller.liveWords?.segment=="B" && controller.liveWords?.text=="Second live idea complete" && controller.liveWords?.final==true)
+            #expect(controller.document.notes.first { $0.segmentID=="A" }?.text=="First finalized words")
+            #expect(await controller.flushForExit())
+        } catch { _ = await controller.stop(cancel: true);_ = await controller.flushForExit();throw error }
+    }
+
 }

@@ -12,6 +12,7 @@ import Observation
     private(set) var endpoints: [UUID: ReviewPlaybackEndpoint] = [:]
     private(set) var selectedID: UUID?
     var editor: FrameCommentController?
+    var inlineDrawing = false
     var tab = "Brief"
     var paletteVisible = false
     var showTimecode = false
@@ -28,9 +29,9 @@ import Observation
         if selectedID == nil && (intendedVersionID == nil || intendedVersionID == endpoint.target.versionID) { selectedID = endpoint.id }
     }
     func unregister(_ id: UUID) {
-        if let endpoint = endpoints[id], let editor, editor.preparing, editor.draft?.request.target == endpoint.target {
-            _ = editor.cancel(); dismissEditor()
-        }
+        // A pending frame draft belongs to this window, not to the visibility
+        // of one playback endpoint. Its pinned capture and words survive a
+        // project/version departure until explicit Save or Cancel.
         endpoints.removeValue(forKey: id)
         if selectedID == id { selectedID = nil }
     }
@@ -40,7 +41,7 @@ import Observation
     func canPerform(_ command: EditorCommand, fromPalette: Bool = false) -> Bool {
         guard let key = NSApp.keyWindow, PlaybackMenuCoordinator.shared.owns(key,router: self), let store else { return false }
         if key.attachedSheet != nil || window?.attachedSheet != nil || NSApp.modalWindow != nil || editor != nil || paletteVisible || showTimecode { return false }
-        if [.comment,.timecode,.palette,.brief,.files,.transcript,.review].contains(command) && window == nil { return false }
+        if [.comment,.draw,.timecode,.palette,.brief,.files,.transcript,.review].contains(command) && window == nil { return false }
         if command.needsPlayer {
             if !fromPalette && PlaybackMenuCoordinator.isTextEditing(key.firstResponder) { return false }
             return selected?.ready == true
@@ -79,6 +80,15 @@ import Observation
         case .back: selected?.skip(-store.playbackPreferences.skipSeconds)
         case .forward: selected?.skip(store.playbackPreferences.skipSeconds)
         case .comment: if let selected { beginComment(selected) }
+        case .draw:
+            if let selected {
+                if let presentation = store.reviewPlayers[selected.id]?.presentation,presentation.pipActive || presentation.pipStarting {
+                    store.notice = "Return the video from Picture in Picture to draw.";return
+                }
+                inlineDrawing = true;beginComment(selected)
+                if let draft = editor?.draft { draft.tool = .freehand;draft.selecting = false }
+                if editor==nil { inlineDrawing = false }
+            }
         case .stop: selected?.driver.pause()
         case .reverse: (selected?.driver as? ReviewPlaybackControl)?.shuttle(-1)
         case .play: (selected?.driver as? ReviewPlaybackControl)?.shuttle(1)
@@ -125,7 +135,7 @@ import Observation
         if let session = store?.reviewPlayers[id] { intendedVersionID = session.version.id }
         select(id)
     }
-    func dismissEditor() { editor = nil }
+    func dismissEditor() { editor = nil;inlineDrawing = false }
     func edit(_ record: SavedFrameComment, project: Project) {
         guard editor == nil, let store, let voice = store.voiceReview(for: project) else { return }
         let controller = store.frameComment(for: project), lease = UUID()

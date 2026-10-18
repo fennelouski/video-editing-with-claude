@@ -11,21 +11,19 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if playbackRouter.tab == "Cut", store.selected != nil {
-                VStack(spacing: 18) {
-                    ClautoWindowControls().padding(.top,14)
-                    Menu { ForEach(store.projects) { project in Button(project.manifest.name) { store.selectedID = project.id } } } label: { Image(systemName: "folder").font(.system(size: 22)).foregroundStyle(ClautoDesign.railText) }.menuStyle(.borderlessButton).menuIndicator(.hidden).tint(ClautoDesign.railText).frame(width: 44).accessibilityLabel("Projects")
-                    Spacer()
-                    Button { showSetup = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Workspace")
-                }.padding(.bottom,20).frame(width: 88).frame(maxHeight: .infinity).background(ClautoDesign.rail).foregroundStyle(ClautoDesign.railText)
-            } else { projectRail.frame(width: 226) }
+            projectRail.frame(width: 226).accessibilityIdentifier("projectRail")
             VStack(spacing: 0) {
-                ForEach(Array(store.voiceReviews.values.filter(\.active)), id: \.project.id) { controller in
+                ForEach(Array(store.voiceReviews.values.filter(\.showsLiveFeedback)), id: \.project.id) { controller in
                     HStack {
-                        Text("Microphone active · \(controller.project.manifest.name) · \(controller.target?.reviewLabel ?? "Switching video") · \(controller.mode.rawValue)").font(ClautoDesign.caption)
+                        VoiceLiveFeedbackView(controller: controller).accessibilityIdentifier("globalLiveFeedback")
                         Spacer()
-                        Button("Mic Off") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
-                            .accessibilityIdentifier("voiceReviewGlobalStop")
+                        if controller.active {
+                            Button("Mic Off") { Task { _ = await controller.stop() } }.disabled(controller.mode == .finishing)
+                                .accessibilityIdentifier("voiceReviewGlobalStop")
+                        } else {
+                            Button("Retry Save") { Task { await controller.retryStorage() } }.disabled(controller.pendingWrites > 0)
+                                .accessibilityIdentifier("voiceReviewGlobalRetrySave")
+                        }
                     }.padding(12).background(ClautoDesign.soft).accessibilityElement(children: .contain)
                 }
                 if let notice = store.notice {
@@ -43,7 +41,7 @@ struct ContentView: View {
                     ProjectView(store: store, project: project, playbackRouter: playbackRouter, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id)
                 } else {
                     VStack(alignment: .leading, spacing: 28) {
-                        ClautoEmpty(title: "Your next cut starts here.", detail: "Describe the video. Bring your footage. Keep every version while you work toward the right cut.")
+                        ClautoEmpty(title: "New project", detail: "")
                         HStack {
                             ClautoAction("Create a project", icon: .add, kind: .primary) { showNewProject = true }
                             ClautoAction("Check the workspace", icon: .settings) { showSetup = true }
@@ -58,11 +56,13 @@ struct ContentView: View {
             .onChange(of: playbackRouter.tab) { _, value in store.rememberProjectTab(value) }
             .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter).clautoThemeAppearance() }
             .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter).clautoThemeAppearance() }
-            .sheet(item: $playbackRouter.editor) { controller in
+            .sheet(item: Binding(get: { playbackRouter.inlineDrawing ? nil:playbackRouter.editor },set: { value in if !playbackRouter.inlineDrawing { playbackRouter.editor = value } })) { controller in
                 FrameCommentEditor(controller: controller, close: { playbackRouter.dismissEditor() })
                     .interactiveDismissDisabled()
             }
             .navigationTitle(store.selected?.manifest.name ?? "Clauto")
+            .onChange(of: playbackRouter.tab) { _, tab in if tab != "Cut" { playbackRouter.inlineDrawing = false } }
+            .onChange(of: store.selectedID) { playbackRouter.inlineDrawing = false }
             .sheet(isPresented: $showSetup) {
                 VStack(spacing: 0) {
                     SetupView(store: store)
@@ -75,8 +75,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack { ClautoIcon(.project, size: 25); Text("Start a new project").font(ClautoDesign.heading) }
                     ClautoField(label: "Project name", text: $projectName, placeholder: "A name you’ll recognize").accessibilityIdentifier("projectName")
-                    Text("Saved on your project drive. Add footage after creating it.").font(ClautoDesign.body).foregroundStyle(ClautoDesign.quiet)
-                    Text(store.projectRoot.path).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
+                    ClautoDisclosure("Details") { Text(store.projectRoot.path).font(ClautoDesign.caption).textSelection(.enabled) }
                     if store.working { ClautoActivity(label: "Creating your project…") }
                     if let notice = store.notice { Text(notice).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).fixedSize(horizontal: false, vertical: true) }
                     HStack {
@@ -110,8 +109,8 @@ struct ContentView: View {
                                     Text("\(store.currentCuts[project.id].map { "Cut v\($0.number)" } ?? "Draft") · \(project.manifest.files.count) files").font(ClautoDesign.caption)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.padding(13).foregroundStyle(store.selectedID == project.id ? ClautoDesign.onAccent : ClautoDesign.railText)
-                                .background(store.selectedID == project.id ? ClautoDesign.citron : .clear, in: CutCorner(cut: 7))
-                        }.buttonStyle(ClautoInlineButtonStyle(onRail: true)).clipShape(CutCorner(cut: 7))
+                                .background(store.selectedID == project.id ? ClautoDesign.citron : .clear, in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
+                        }.buttonStyle(ClautoInlineButtonStyle(onRail: true)).clipShape(ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
                             .accessibilityLabel(project.manifest.name).accessibilityAddTraits(store.selectedID == project.id ? .isSelected : [])
                     }
                 }.padding(.horizontal, 12)
@@ -122,8 +121,7 @@ struct ContentView: View {
                 railAction("Open project", icon: .open) { Task { if let folder = await FileDialogs.folder(initial: store.projectRoot) { await store.open(folder) } } }.keyboardShortcut("o")
                 railAction("Workspace", icon: .settings) { showSetup = true }
             }.padding(.horizontal, 16).padding(.bottom, 22)
-            HStack(spacing: 7) { Rectangle().fill(ClautoDesign.citron).frame(width: 6, height: 6); Text("Originals stay on your drive").font(ClautoDesign.type(11)) }
-                .foregroundStyle(ClautoDesign.railText).padding(.horizontal, 24).padding(.bottom, 24)
+
         }.foregroundStyle(ClautoDesign.railText).background(ClautoDesign.rail)
     }
     private func railAction(_ title: String, icon: ClautoIconName, action: @escaping () -> Void) -> some View {

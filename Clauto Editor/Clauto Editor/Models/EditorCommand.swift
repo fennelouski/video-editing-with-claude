@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Stable identifiers shared by menu, palette and the focused video surface.
 /// The original four values remain unchanged for saved/native menu dispatch.
@@ -8,6 +9,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
     case previousFrame, nextFrame, timecode, previousVersion, nextVersion
     case assetsPane, feedbackPane, focusAssets, focusVideo, focusFeedback
     case detach, fullScreen, pictureInPicture
+    case draw
     var id: Int { rawValue }
     var title: String {
         switch self {
@@ -36,6 +38,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .detach: "Detach / Re-embed Video"
         case .fullScreen: "Toggle Video Full Screen"
         case .pictureInPicture: "Show Native Picture in Picture Controls"
+        case .draw: "Draw on Video"
         }
     }
     var shortcut: String {
@@ -84,4 +87,21 @@ enum ReviewTimecode {
         return ((h*60+m)*60+s)*24+f
     }
     static func seconds(frame: Int) -> Double { Double(frame)*1001/24000 }
+}
+
+/// Placement is presentation only; it never changes timeline picture framing.
+enum ReviewVideoPlacement: String,CaseIterable,Sendable {
+    case topLeft,topRight,center,bottomLeft,bottomRight
+    var label: String {
+        switch self { case .topLeft:"Top Left";case .topRight:"Top Right";case .center:"Center";case .bottomLeft:"Bottom Left";case .bottomRight:"Bottom Right" }
+    }
+    func frame(size: CGSize,screen: CGRect) -> CGRect {
+        let width = min(size.width,screen.width),height = min(size.height,screen.height)
+        let inset = min(20,max(0,min(screen.width-width,screen.height-height)/2))
+        let left = screen.minX+inset,right = screen.maxX-width-inset
+        let bottom = screen.minY+inset,top = screen.maxY-height-inset
+        let x: CGFloat = self == .center ? screen.midX-width/2 : [.topRight,.bottomRight].contains(self) ? right:left
+        let y: CGFloat = self == .center ? screen.midY-height/2 : [.topLeft,.topRight].contains(self) ? top:bottom
+        return .init(x: x,y: y,width: width,height: height)
+    }
 }

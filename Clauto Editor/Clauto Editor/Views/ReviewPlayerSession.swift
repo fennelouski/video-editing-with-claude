@@ -139,6 +139,42 @@ import Observation
     private var down: NSPoint?
     private var moved = false
     override var acceptsFirstResponder: Bool { true }
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenu() }
+    func contextMenu() -> NSMenu {
+        let menu = NSMenu();menu.autoenablesItems = false
+        func item(_ title: String,_ tag: Int,enabled: Bool = true) {
+            let item = NSMenuItem(title: title,action: #selector(chooseVideoAction(_:)),keyEquivalent: "")
+            item.target = self;item.tag = tag;item.isEnabled = enabled;menu.addItem(item)
+        }
+        let available = presentation?.session?.ready == true && presentation?.session?.router?.editor==nil
+        item("Draw",0,enabled: available)
+        menu.addItem(.separator())
+        item("In Editor",1,enabled: available);item("Pop Out",2,enabled: available)
+        item("Full Screen",3,enabled: available);item("PiP Controls",4,enabled: available)
+        let position = NSMenuItem(title: "Position",action: nil,keyEquivalent: ""),positions = NSMenu()
+        positions.autoenablesItems = false
+        for (index,value) in ReviewVideoPlacement.allCases.enumerated() {
+            let entry = NSMenuItem(title: value.label,action: #selector(chooseVideoAction(_:)),keyEquivalent: "")
+            entry.target = self;entry.tag = 10+index;entry.isEnabled = available;positions.addItem(entry)
+        }
+        position.submenu = positions;menu.addItem(position);return menu
+    }
+    @objc private func chooseVideoAction(_ sender: NSMenuItem) {
+        guard let presentation,let session = presentation.session,session.ready,let router = session.router,router.editor==nil,router.endpoints[session.id] != nil else { return }
+        router.select(session.id)
+        guard router.selectedID==session.id,router.canPerform(.detach,fromPalette: true) else { return }
+        switch sender.tag {
+        case 0:session.invoke(.draw)
+        case 1:presentation.dock()
+        case 2:presentation.detach()
+        case 3:presentation.toggleFullScreen()
+        case 4:presentation.showNativeControls()
+        default:
+            let index = sender.tag-10
+            if ReviewVideoPlacement.allCases.indices.contains(index) { presentation.place(ReviewVideoPlacement.allCases[index]) }
+        }
+    }
+
     override func accessibilityPerformPress() -> Bool {
         guard let session = presentation?.session, session.ready else { return false }; session.invoke(.toggle); return true
     }
@@ -175,6 +211,11 @@ import Observation
     }
 }
 
+@MainActor final class ReviewNativeVideoView: AVPlayerView {
+    weak var presentation: ReviewVideoPresentation?
+    override func menu(for event: NSEvent) -> NSMenu? { presentation?.gestures.contextMenu() ?? super.menu(for: event) }
+}
+
 /// A single AVPlayerView is reparented; no duplicate render layers/audio clocks.
 @MainActor @Observable final class ReviewVideoPresentation: NSObject, NSWindowDelegate, AVPlayerViewPictureInPictureDelegate {
     weak var session: ReviewPlayerSession?
@@ -185,7 +226,7 @@ import Observation
     private enum Transition { case stable, entering, exiting }
     private var transition = Transition.stable
     let surface = NSView()
-    let native = AVPlayerView()
+    let native = ReviewNativeVideoView()
     let gestures = ReviewVideoClickSurface()
     @ObservationIgnored weak var inlineHost: NSView?
     @ObservationIgnored private(set) var videoWindow: NSWindow?
@@ -197,7 +238,7 @@ import Observation
     init(session: ReviewPlayerSession) {
         self.session = session; super.init()
         surface.wantsLayer = true; surface.layer?.backgroundColor = NSColor.black.cgColor
-        native.player = session.player; native.controlsStyle = .none; native.allowsPictureInPicturePlayback = true
+        native.presentation = self;native.player = session.player; native.controlsStyle = .none; native.allowsPictureInPicturePlayback = true
         native.showsFullScreenToggleButton = false; native.pictureInPictureDelegate = self
         gestures.presentation = self; gestures.setAccessibilityElement(true); gestures.setAccessibilityRole(.button)
         gestures.setAccessibilityLabel("Video. Click or Space to play or pause. J K L shuttle; comma and period step frames.")
@@ -222,6 +263,13 @@ import Observation
     }
     private func reparent(to host: NSView) { guard surface.superview !== host else { return }; surface.removeFromSuperview(); surface.frame = host.bounds; surface.autoresizingMask = [.width,.height]; host.addSubview(surface) }
     func toggleDetach() { detached ? dock() : detach() }
+    func place(_ placement: ReviewVideoPlacement) {
+        guard !pipActive,!pipStarting else { return }
+        if !detached { detach() }
+        guard let window = videoWindow,!window.styleMask.contains(.fullScreen),let screen = window.screen ?? NSScreen.screens.first else { return }
+        window.setFrame(placement.frame(size: window.frame.size,screen: screen.visibleFrame),display: true)
+    }
+
     func detach(showWindow: Bool = true) {
         guard !detached, !pipActive, !pipStarting, let session else { return }
         let window = ReviewDetachedWindow(contentRect: NSRect(x: 0,y: 0,width: 960,height: 580),styleMask: [.titled,.closable,.miniaturizable,.resizable],backing: .buffered,defer: false)
@@ -345,11 +393,16 @@ private struct DetachedReviewVideo: View {
     @FocusState private var focused: EditorCommand?
     var body: some View {
         VStack(spacing: 0) {
-            StableReviewVideo(presentation: presentation,detachedHost: true,detachedGeneration: generation).frame(maxWidth: .infinity,maxHeight: .infinity)
+            ZStack {
+                StableReviewVideo(presentation: presentation,detachedHost: true,detachedGeneration: generation)
+                if let router = session.router { ReviewDrawingCanvas(session: session,router: router) }
+            }.frame(maxWidth: .infinity,maxHeight: .infinity)
+            if let router = session.router { ReviewDrawingControls(session: session,router: router) }
             HStack {
                 Button(session.playing ? "Pause" : "Play") { session.invoke(.toggle) }.focused($focused,equals: .toggle)
                 Text(String(format: "%.3fs",session.playhead)).monospacedDigit().textSelection(.enabled)
                 Spacer()
+                Button("Draw") { session.invoke(.draw) }.disabled(session.router?.editor != nil)
                 Button("PiP Controls") { presentation.showNativeControls() }.focused($focused,equals: .pictureInPicture)
                 Button("Full Screen") { presentation.toggleFullScreen() }.focused($focused,equals: .fullScreen)
                 Button("Re-embed") { presentation.dock() }.focused($focused,equals: .detach)

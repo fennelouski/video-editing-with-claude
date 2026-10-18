@@ -8,11 +8,10 @@ struct SetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 HStack(spacing: 12) { ClautoIcon(.settings, size: 27); Text("Your workspace").font(ClautoDesign.heading) }
-                Text("Keep footage and editing files on your project drive. Prepare the selected project folder, then see which local tools are available. Review and drawing work without a conversation account.").foregroundStyle(ClautoDesign.quiet)
                 Picker("Theme",selection: Binding(get: { ClautoThemeStore.shared.selected },set: { ClautoThemeStore.shared.choose($0) })) {
                     ForEach(ClautoThemeID.allCases) { theme in Text(theme.label).tag(theme) }
                 }.accessibilityIdentifier("clautoThemePicker")
-                ClautoSection("Folders") {
+                ClautoDisclosure("Storage & tools") {
                     folderRow("Projects", url: store.projectRoot) { store.setFolders(projects: $0) }
                     ClautoRule()
                     folderRow("Editing engine", url: store.engineRoot) { store.setFolders(engine: $0) }
@@ -54,7 +53,6 @@ struct SetupView: View {
                     }.accessibilityElement(children: .combine)
                     ClautoRule()
                 }
-                Text("Your video house style remains Sage & Oat. All media stays local in this development build.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             }.padding(30)
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)

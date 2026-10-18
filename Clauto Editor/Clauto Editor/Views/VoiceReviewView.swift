@@ -9,19 +9,21 @@ struct VoiceReviewView: View {
     let select: () -> Void
     let seek: (Double) -> Void
     let prepareCandidatePlayback: (UUID) -> Bool
+    let showsLiveFeedback: Bool
     @State private var visibleNotes = 50
     @State private var reloadTypedDraft = false
     @State private var discardTypedDraft = false
     @Bindable private var composer: VoiceTypedComposer
-    init(controller: VoiceReviewController,versionID: UUID,engine: URL,selected: Bool,select: @escaping () -> Void,seek: @escaping (Double) -> Void,prepareCandidatePlayback: @escaping (UUID) -> Bool) {
+    init(controller: VoiceReviewController,versionID: UUID,engine: URL,selected: Bool,select: @escaping () -> Void,seek: @escaping (Double) -> Void,prepareCandidatePlayback: @escaping (UUID) -> Bool,showsLiveFeedback: Bool = true) {
         self.controller = controller; self.versionID = versionID; self.engine = engine; self.selected = selected
-        self.select = select; self.seek = seek; self.prepareCandidatePlayback = prepareCandidatePlayback
+        self.select = select; self.seek = seek; self.prepareCandidatePlayback = prepareCandidatePlayback;self.showsLiveFeedback = showsLiveFeedback
         self.composer = controller.typedComposer(for: versionID)
     }
 
     var body: some View {
         ClautoSection("Feedback") {
             VStack(alignment: .leading, spacing: 12) {
+                if showsLiveFeedback { VoiceLiveFeedbackView(controller: controller) }
                 HStack {
                     if !selected { Button("Use this video", action: select).accessibilityIdentifier("voiceReviewSelectPlayer") }
                 }
@@ -57,10 +59,9 @@ struct VoiceReviewView: View {
                     ProgressView("Microphone level", value: Double(controller.level), total: 1)
                         .accessibilityIdentifier("voiceReviewMicrophoneLevel")
                 }
-                Text("Keep steering. Feedback saves as you speak.")
-                    .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
-                Text("Try ‘cut from 0:12 to 0:15’ or ‘keep the previous five seconds’. You’ll review the proposed cuts before a preview is made.")
-                    .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
+                ClautoDisclosure("Examples") {
+                    Text("Cut from 0:12 to 0:15\nKeep the previous five seconds").font(ClautoDesign.caption).textSelection(.enabled)
+                }
                 if controller.nextPacketAt != nil {
                     Text("Next update after two quiet minutes.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                         .accessibilityIdentifier("voiceSteeringWaiting")
@@ -169,6 +170,29 @@ struct VoiceReviewView: View {
                     controller.setUpVoiceReview(for: versionID)
                 }.accessibilityIdentifier("voiceReviewGetStarted")
             }
+        }
+    }
+}
+
+
+struct VoiceLiveFeedbackView: View {
+    @Bindable var controller: VoiceReviewController
+    var body: some View {
+        if controller.showsLiveFeedback {
+            VStack(alignment: .leading,spacing: 6) {
+                HStack {
+                    Circle().fill(controller.active ? ClautoDesign.ember:ClautoDesign.quiet).frame(width: 6,height: 6).accessibilityHidden(true)
+                    Text((controller.active ? "Live · ":"Unsaved · ")+controller.project.manifest.name).font(ClautoDesign.caption).lineLimit(2).textSelection(.enabled)
+                    Spacer()
+                    if controller.pendingWrites>0 { ProgressView().controlSize(.mini).accessibilityLabel("Saving feedback") }
+                }
+                ScrollView {
+                    Text(controller.liveWords?.text ?? "Listening…").font(ClautoDesign.body).textSelection(.enabled)
+                        .frame(maxWidth: .infinity,alignment: .leading)
+                }.frame(minHeight: 40,maxHeight: 100)
+                    .accessibilityIdentifier("voiceLiveTranscript")
+                    .accessibilityLabel("Live feedback transcript")
+            }.padding(10).background(ClautoDesign.soft,in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
         }
     }
 }

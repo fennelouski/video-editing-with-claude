@@ -88,23 +88,56 @@ enum ClautoIconName: String, CaseIterable, Sendable {
 struct ClautoIcon: View {
     let name: ClautoIconName
     var size: CGFloat
-    var strokeWidth: CGFloat
-
-    init(_ name: ClautoIconName, size: CGFloat = 18, strokeWidth: CGFloat = 1.7) {
-        self.name = name
-        self.size = size
-        self.strokeWidth = strokeWidth
+    var strokeWidth: CGFloat?
+    init(_ name: ClautoIconName, size: CGFloat = 18, strokeWidth: CGFloat? = nil) {
+        self.name = name;self.size = size;self.strokeWidth = strokeWidth
     }
-
     var body: some View {
+        let palette = ClautoThemeStore.shared.palette,style = palette.geometry.icon
+        let weight = (strokeWidth ?? CGFloat(palette.geometry.iconStroke))*size/24
         ZStack {
-            ClautoIconShape(name: name, filled: false)
-                .stroke(style: StrokeStyle(lineWidth: strokeWidth * size / 24,
-                                           lineCap: .square, lineJoin: .miter))
-            ClautoIconShape(name: name, filled: true).fill()
+            if style == .badge {
+                ClautoThemedShape(palette: palette).fill(ClautoDesign.citron.opacity(0.20))
+                ClautoThemedShape(palette: palette).stroke(lineWidth: palette.geometry.stroke*0.6)
+            }
+            if style == .native {
+                Image(systemName: nativeSymbol).font(.system(size: size*0.85,weight: .regular))
+            } else {
+                ZStack {
+                    ClautoIconShape(name: name,filled: false).stroke(style: StrokeStyle(lineWidth: weight,
+                        lineCap: style == .rounded || style == .badge ? .round:.square,
+                        lineJoin: style == .rounded || style == .badge ? .round:.miter))
+                    ClautoIconShape(name: name,filled: true).fill()
+                }.padding(style == .badge ? size*0.18:style == .technical ? size*0.1:0)
+                if style == .technical {
+                    CutCorner(cut: size*0.2).stroke(style: StrokeStyle(lineWidth: weight*0.5,dash: [size*0.15,size*0.12]))
+                }
+            }
+        }.frame(width: size,height: size).accessibilityHidden(true)
+    }
+    private var nativeSymbol: String {
+        switch name {
+        case .project,.folder: "folder"
+        case .brief: "doc.text"
+        case .files: "doc.on.doc"
+        case .cut: "scissors"
+        case .conversation: "text.bubble"
+        case .add: "plus"
+        case .open: "arrow.up.forward.square"
+        case .play: "play.fill"
+        case .pause: "pause.fill"
+        case .seek: "forward.end"
+        case .arrow: "arrow.right"
+        case .science: "flask"
+        case .font: "textformat"
+        case .cutout: "person.crop.rectangle"
+        case .audio: "waveform"
+        case .export: "square.and.arrow.up"
+        case .check: "checkmark"
+        case .close: "xmark"
+        case .settings: "slider.horizontal.3"
+        case .version: "square.stack"
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
     }
 }
 
