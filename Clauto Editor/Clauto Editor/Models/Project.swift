@@ -140,6 +140,54 @@ struct Project: Identifiable, Sendable {
     var id: UUID { manifest.id }
 }
 
+/// Reopens existing projects only. An unavailable folder stays in Recents so
+/// reconnecting its drive does not require finding the project again.
+struct RecentProjectRestoration: Sendable {
+    var projects: [Project] = []
+    var unavailablePaths: [String] = []
+
+    static func load(_ paths: [String],
+                     open: @Sendable (URL) async throws -> Project) async throws -> Self {
+        var result = Self(), seen = Set<String>()
+        for path in paths {
+            try Task.checkCancellation()
+            guard seen.insert(path).inserted else { continue }
+            do {
+                let project = try await open(URL(fileURLWithPath: path, isDirectory: true))
+                try Task.checkCancellation()
+                try ProjectPresentationState.requireUnambiguousOpen(project, among: result.projects)
+                if !result.projects.contains(where: { ProjectPresentationState.sameRoot($0, project) }) {
+                    result.projects.append(project)
+                }
+            } catch is CancellationError { throw CancellationError() }
+            catch { result.unavailablePaths.append(path) }
+        }
+        try Task.checkCancellation()
+        return result
+    }
+
+    func selection(id: String?, path: String?) -> UUID? {
+        if let id = id.flatMap(UUID.init(uuidString:)), let path,
+           let project = projects.first(where: { $0.id == id && $0.folder.path == path }) {
+            return project.id
+        }
+        // Older app preferences have no selection record. Opening the first
+        // available recent project is the backward-compatible first restore.
+        return projects.first?.id
+    }
+
+    static func recentPaths(selected: Project?, projects: [Project], previous: [String]) -> [String] {
+        var seen = Set<String>()
+        return ((selected.map { [$0.folder.path] } ?? []) + projects.map { $0.folder.path } + previous)
+            .filter { seen.insert($0).inserted }
+    }
+
+    static func tab(_ value: String?) -> String {
+        guard let value, ["Brief", "Files", "Transcript", "Cut", "Studio"].contains(value) else { return "Brief" }
+        return value
+    }
+}
+
 /// Keeps local Brief drafts separate from asynchronous disk acknowledgements.
 /// Persisted revisions order manifest responses without relying on wall clocks.
 struct ProjectPresentationState: Sendable {

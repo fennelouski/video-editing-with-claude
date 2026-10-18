@@ -55,6 +55,7 @@ struct ContentView: View {
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden).clautoThemeAppearance()
             .background(PlaybackWindowRegistration(router: playbackRouter).frame(width: 0,height: 0))
             .onAppear { playbackRouter.store = store; playbackRouter.tab = initialProjectTab; if store.needsFirstWorkspaceSetup { showSetup = true } }
+            .onChange(of: playbackRouter.tab) { _, value in store.rememberProjectTab(value) }
             .sheet(isPresented: $playbackRouter.paletteVisible,onDismiss: { playbackRouter.finishPalette() }) { EditorCommandPalette(router: playbackRouter).clautoThemeAppearance() }
             .sheet(isPresented: $playbackRouter.showTimecode) { ReviewTimecodeEntry(router: playbackRouter).clautoThemeAppearance() }
             .sheet(item: $playbackRouter.editor) { controller in

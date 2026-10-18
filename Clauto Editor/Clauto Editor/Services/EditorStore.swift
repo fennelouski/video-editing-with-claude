@@ -6,7 +6,14 @@ import Darwin
 final class EditorStore {
     static let nasRoot = URL(fileURLWithPath: "/Volumes/Videos/Food Videos/Katie YouTube/Projects/Clauto Editor", isDirectory: true)
     var projects: [Project] = []
-    var selectedID: UUID?
+    var selectedID: UUID? {
+        didSet {
+            selectionGeneration &+= 1
+            guard !restoringSelection, let project = selected else { return }
+            defaults.set(project.id.uuidString, forKey: "ClautoSelectedProjectID")
+            defaults.set(project.folder.path, forKey: "ClautoSelectedProjectPath")
+        }
+    }
     var notice: String? { didSet { noticeTitle = "Needs attention" } }
     var noticeTitle = "Needs attention"
     let workspaceSetup = WorkspaceSetupController()
@@ -97,6 +104,9 @@ final class EditorStore {
     @ObservationIgnored private var presentationState = ProjectPresentationState()
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
+    @ObservationIgnored private var selectionGeneration: UInt64 = 0
+    @ObservationIgnored private var restorationID: UUID?
+    @ObservationIgnored private var restoringSelection = false
 
     init(defaults: UserDefaults = .standard) {
         let env = ProcessInfo.processInfo.environment
@@ -194,14 +204,52 @@ final class EditorStore {
         await TranscriptReviewExit.flush(Array(transcriptReviews.values))
     }
 
-    func restore() async {
-        for path in defaults.stringArray(forKey: recentKey) ?? [] {
-            do { let project = try await repository.open(URL(fileURLWithPath: path)); try ProjectPresentationState.requireUnambiguousOpen(project,among: projects); update(project) }
-            catch { notice = "A recent project could not be opened. \(error.localizedDescription)" }
-        }
+    var initialProjectTab: String {
+        RecentProjectRestoration.tab(ProcessInfo.processInfo.environment["CLAUTO_PROJECT_TAB"]
+            ?? defaults.string(forKey: "ClautoSelectedProjectTab"))
+    }
+
+    func rememberProjectTab(_ value: String) {
+        defaults.set(RecentProjectRestoration.tab(value), forKey: "ClautoSelectedProjectTab")
+    }
+
+    func restore(openProject: @Sendable (URL) async throws -> Project = { try await ProjectRepository().open($0) }) async {
+        let operation = UUID(), generation = selectionGeneration
+        restorationID = operation
+        let preferredID = defaults.string(forKey: "ClautoSelectedProjectID")
+        let preferredPath = defaults.string(forKey: "ClautoSelectedProjectPath")
+        do {
+            let restored = try await RecentProjectRestoration.load(defaults.stringArray(forKey: recentKey) ?? [], open: openProject)
+            guard restorationID == operation else { return }
+            try Task.checkCancellation()
+            var unavailable = restored.unavailablePaths
+            var admitted = RecentProjectRestoration()
+            for project in restored.projects {
+                do {
+                    try ProjectPresentationState.requireUnambiguousOpen(project, among: projects)
+                    update(project); admitted.projects.append(project)
+                } catch { unavailable.append(project.folder.path) }
+            }
+            // A user selecting/opening another project during I/O owns that
+            // selection. Neither a slower restore nor a second window steals it.
+            if selectionGeneration == generation {
+                if selected == nil {
+                    // A temporary fallback must not replace the last explicit
+                    // choice; it may become available after reconnecting a drive.
+                    restoringSelection = true
+                    selectedID = admitted.selection(id: preferredID, path: preferredPath)
+                    restoringSelection = false
+                }
+                if !unavailable.isEmpty {
+                    notice = "\(unavailable.count) recent project\(unavailable.count == 1 ? " is" : "s are") unavailable. Reconnect the project drive or choose its folder again. Your projects stay in Recents."
+                }
+            }
+        } catch is CancellationError { }
+        catch { if restorationID == operation && selectionGeneration == generation { notice = error.localizedDescription } }
     }
 
     func create(_ name: String) async -> Bool {
+        selectionGeneration &+= 1
         working = true; defer { working = false }
         do {
             let version = (try? String(contentsOf: engineRoot.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? "development"
@@ -212,6 +260,10 @@ final class EditorStore {
     }
 
     func open(_ folder: URL) async {
+        // Opening is newer user intent even when it fails before selection.
+        // An older restoration must not replace this action's error or choose
+        // a different project behind it.
+        selectionGeneration &+= 1
         do { let project = try await repository.open(folder); try ProjectPresentationState.requireUnambiguousOpen(project,among: projects); update(project); selectedID = project.id; remember() }
         catch { notice = error.localizedDescription }
     }
@@ -513,5 +565,8 @@ final class EditorStore {
         if let index = projects.firstIndex(where: { $0.id == project.id }) { projects[index] = presentationState.present(project,over: projects[index]) }
         else { projects.append(presentationState.present(project,over: nil)) }
     }
-    private func remember() { defaults.set(projects.map { $0.folder.path }, forKey: recentKey) }
+    private func remember() {
+        defaults.set(RecentProjectRestoration.recentPaths(selected: selected, projects: projects,
+            previous: defaults.stringArray(forKey: recentKey) ?? []), forKey: recentKey)
+    }
 }
