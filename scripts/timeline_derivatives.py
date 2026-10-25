@@ -23,6 +23,7 @@ import config as C
 import fcpxml as FX
 from duration_bounds import final_sequence_duration
 from graphic_scene_cue import GraphicCue, strict_json
+from sound_timeline_edit import SoundTimelineEdit
 
 
 def sha(path: Path) -> str:
@@ -133,7 +134,7 @@ def static_transform(element: ET.Element) -> tuple[float, tuple[float, float]]:
     return scale[0], position
 
 
-def read_timeline(path: Path, *, expected_sha: str | None = None) -> tuple[float, list[Layer], list[Layer], list[tuple[float,str]], tuple[int,int]]:
+def read_timeline(path: Path, *, expected_sha: str | None = None, ignore_unused: bool = False) -> tuple[float, list[Layer], list[Layer], list[tuple[float,str]], tuple[int,int]]:
     data = path.read_bytes()
     if expected_sha is not None and hashlib.sha256(data).hexdigest()!=expected_sha:
         raise ValueError('The saved parent changed before parsing; create the export again from a verified version.')
@@ -147,7 +148,12 @@ def read_timeline(path: Path, *, expected_sha: str | None = None) -> tuple[float
         raise ValueError('The saved timeline must use the supported 24000/1001 timebase.')
     dimensions = (int(fmt.get('width')), int(fmt.get('height')))
     sources = {}
+    used_refs={element.get('ref') for element in root.iter() if element.get('ref')}
+    asset_ids=set()
     for asset in root.findall('resources/asset'):
+        if asset.get('id') in asset_ids:raise ValueError('Duplicate asset identity.')
+        asset_ids.add(asset.get('id'))
+        if ignore_unused and asset.get('id') not in used_refs:continue
         reps = asset.findall('media-rep')
         if len(reps) != 1: raise ValueError('Each media asset requires one original-media reference.')
         uri = urlparse(reps[0].get('src', ''))
@@ -440,14 +446,16 @@ def render(primary: list[Layer], connected: list[Layer], folder: Path, aspect: s
 
 def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080p', start=0.0, end=None,
            conform='fit', position=(0.0,0.0), effects: AudioEffects | None = None, captions: Path | None = None,
-           sound: SoundCue | None = None, graphic: GraphicCue | None = None) -> Path:
+           sound: SoundCue | None = None, graphic: GraphicCue | None = None,
+           sound_edit: SoundTimelineEdit | None = None) -> Path:
     if aspect not in C.ASPECTS or conform not in ('fit','fill'): raise ValueError('Unsupported aspect or framing mode.')
     if destination.is_symlink(): raise ValueError('An export folder cannot be a symbolic-link alias.')
     timeline, destination = timeline.resolve(), destination.resolve()
     captions = captions.resolve() if captions else None
     C.canvas_spec(aspect,resolution)
     parent_hash = sha(timeline)
-    duration, primary, connected, chapters, original_dimensions = read_timeline(timeline,expected_sha=parent_hash)
+    sound_edit_capture=sound_edit.inspect(timeline) if sound_edit else None
+    duration, primary, connected, chapters, original_dimensions = read_timeline(timeline,expected_sha=parent_hash,ignore_unused=bool(sound_edit))
     end = duration if end is None else end
     if not all(isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x) for x in (start,end,*position)) or start < 0 or end > duration+1e-9 or end <= start or any(abs(x)>100 for x in position):
         raise ValueError('Select a finite range within this saved version and framing positions within -100…100%.')
@@ -499,6 +507,9 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
         raise ValueError('The selected graphic changed before composition.')
     destination.mkdir(parents=True,exist_ok=False)
     try:
+        if sound_edit_capture:
+            (destination/'sound-edit-receipt.json').write_bytes(sound_edit_capture[1])
+            (destination/'sound-edited-source.fcpxml').write_bytes(sound_edit_capture[2])
         if graphic_capture:
             (destination/'graphic-revision.json').write_bytes(graphic_capture[1])
             (destination/'graphic-scene.json').write_bytes(graphic_capture[2])
@@ -520,6 +531,7 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
         if problems: raise ValueError('Derived timeline validation failed: '+'; '.join(problems))
         caption_out=remap_captions(captions,destination/'captions.itt',start,end,aspect,resolution,expected_sha=caption_hash) if captions else None
         out=render(primary,connected,destination,aspect,resolution,caption_out)
+        if sound_edit and sound_edit.inspect(timeline)!=sound_edit_capture:raise ValueError('Sound edit changed during rendering')
         if graphic:
             _,metadata,raw_revision,raw_scene=graphic.inspect(end-start)
             if (metadata,raw_revision,raw_scene)!=graphic_capture:
@@ -531,6 +543,7 @@ def derive(timeline: Path, destination: Path, *, aspect='9:16', resolution='1080
                 'framing':{'conform':conform,'position_percent_of_height':list(position)},
                 'audio_effects':asdict(effects) if effects else None,'effects_revision':'ffmpeg-local-v1',
                 'sound_effect':sound_manifest,'engine_version':C.ENGINE_VERSION,
+                'sound_timeline_edit':sound_edit_capture[0] if sound_edit_capture else None,
                 'generated_graphic':graphic_capture[0] if graphic_capture else None,
                 'caption_source':str(captions.resolve()) if captions else None,'caption_sha256':caption_hash,
                 'output_sha256':outputs,'full_decode_passed':True,'schema_checked':FX.dtd_problems(exported) is not None,
@@ -558,15 +571,20 @@ def main(argv=None):
     ap.add_argument('--sound-gain-db',type=float,default=-12)
     ap.add_argument('--graphic-revision',type=Path)
     ap.add_argument('--graphic-selection',help='Exact generated-scene revision, timing and framing JSON')
+    ap.add_argument('--sound-edit-receipt',type=Path)
+    ap.add_argument('--sound-edit-parent',type=Path)
+    ap.add_argument('--sound-edit-selection')
     args=ap.parse_args(argv)
     try:
         effects=AudioEffects(**json.loads(args.audio_effects)) if args.audio_effects else None
         if bool(args.graphic_revision)!=bool(args.graphic_selection):
             raise ValueError('A graphic selection needs its exact local revision manifest.')
+        if any((args.sound_edit_receipt,args.sound_edit_parent,args.sound_edit_selection)) and not all((args.sound_edit_receipt,args.sound_edit_parent,args.sound_edit_selection)):raise ValueError('Sound export needs its complete pinned source selection')
         out=derive(args.timeline,args.destination,aspect=args.aspect,resolution=args.resolution,start=args.start,end=args.end,
                    conform=args.framing,position=(args.x,args.y),effects=effects,captions=args.captions,
                    sound=SoundCue(args.sound,args.sound_at,args.sound_gain_db) if args.sound else None,
-                   graphic=GraphicCue(args.graphic_revision,strict_json(args.graphic_selection)) if args.graphic_revision else None)
+                   graphic=GraphicCue(args.graphic_revision,strict_json(args.graphic_selection)) if args.graphic_revision else None,
+                   sound_edit=SoundTimelineEdit(args.sound_edit_receipt,args.sound_edit_parent,strict_json(args.sound_edit_selection)) if args.sound_edit_receipt else None)
         print(json.dumps({'state':'complete','review':str(out),'receipt':str(args.destination/'derivative.json')})); return 0
     except (ValueError,RuntimeError,OSError,TypeError,KeyError,ArithmeticError,expat.ExpatError,ET.ParseError,subprocess.CalledProcessError) as exc:
         print(json.dumps({'state':'failed','detail':str(exc)})); return 1

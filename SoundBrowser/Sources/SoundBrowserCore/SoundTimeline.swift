@@ -51,7 +51,41 @@ public final class SoundTimelineDocument {
                   let media = asset.elements(forName:"media-rep").first else { throw SoundFailure.invalid("The selected sound resource is missing.") }
             media.attribute(forName:"src")?.stringValue = url.absoluteString
         }
+        let used=Set(try xml.nodes(forXPath:"//@ref").compactMap(\.stringValue))
+        for asset in xml.rootElement()?.elements(forName:"resources").first?.elements(forName:"asset") ?? [] {
+            if let id=asset.attribute(forName:"id")?.stringValue,id.hasPrefix("clautoSound"),!used.contains(id) { asset.detach() }
+        }
         return try Self.serialized(xml)
+    }
+    public func verifyReplacement(of original:Data,references:[String:SoundSelectionReference],mediaURLs:[String:URL],catalog:SoundCatalog) throws {
+        let before=try Self.parse(original),after=try Self.parse(data)
+        let oldAssets=before.rootElement()?.elements(forName:"resources").first?.elements(forName:"asset") ?? []
+        let oldIDs=Set(oldAssets.compactMap { $0.attribute(forName:"id")?.stringValue })
+        let assets=after.rootElement()?.elements(forName:"resources").first?.elements(forName:"asset") ?? []
+        guard !references.isEmpty,references.count<=100,Set(assets.compactMap { $0.attribute(forName:"id")?.stringValue }).count==assets.count else { throw SoundFailure.invalid("Invalid replacement resource identity.") }
+        for (id,ref) in references {
+            _ = try ref.validate(catalog:catalog)
+            let old=try Self.node(id,in:before),new=try Self.node(id,in:after)
+            guard let resourceID=new.attribute(forName:"ref")?.stringValue,
+                  let asset=assets.first(where:{ $0.attribute(forName:"id")?.stringValue==resourceID }),
+                  let uri=asset.elements(forName:"media-rep").first?.attribute(forName:"src")?.stringValue,
+                  uri==mediaURLs[id]?.absoluteString else { throw SoundFailure.invalid("Replacement media does not match its verified snapshot.") }
+            for name in ["ref","name"] {
+                new.removeAttribute(forName:name)
+                if let value=old.attribute(forName:name)?.stringValue { new.addAttribute(XMLNode.attribute(withName:name,stringValue:value) as! XMLNode) }
+            }
+        }
+        for asset in assets where !oldIDs.contains(asset.attribute(forName:"id")?.stringValue ?? "") { asset.detach() }
+        guard Self.canonical(before.rootElement()!)==Self.canonical(after.rootElement()!) else { throw SoundFailure.invalid("The sound edit changed unrelated picture, timing, gain, fades or timeline content.") }
+    }
+    private static func canonical(_ node:XMLNode) -> String {
+        if let element=node as? XMLElement {
+            let attributes=(element.attributes ?? []).map { ($0.name ?? "")+"="+($0.stringValue ?? "") }.sorted().joined(separator:"\u{1f}")
+            let namespaces=(element.namespaces ?? []).map { ($0.name ?? "")+"="+($0.stringValue ?? "") }.sorted().joined(separator:"\u{1f}")
+            return "<\(element.name ?? "")|\(attributes)|\(namespaces)>"+(element.children ?? []).map(canonical).joined()+"</>"
+        }
+        let text=node.stringValue ?? ""
+        return text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "":"\(node.kind.rawValue):\(text)"
     }
     public func similarCandidates(cueID:String,catalog:SoundCatalog) -> [SoundAsset] {
         guard let cue = cues.first(where:{ $0.id==cueID }) else { return [] }

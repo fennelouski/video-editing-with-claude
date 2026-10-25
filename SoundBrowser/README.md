@@ -26,11 +26,17 @@ pointer, freezes only selected audio snapshots, and writes FCPXML plus a
 hash-linked reference receipt. Repeated save is idempotent. Parent/current stay
 unchanged.
 
-Current boundary: edited FCPXML is saved and can be revealed from the Sound
-editor. It is not promoted to saved-version history, and the saved movie preview
-is not rerendered. The UI states this explicitly. This is an unmerged local
-integration build, not an installed/released update. Human audition/approval
-remains `NOT_AUDITIONED`.
+**Create local export** passes the saved, pinned replacement through the normal
+`EditorStore → DerivativeService → timeline_derivatives.py` render path. It
+validates the original parent, edited XML, reference receipt and selected WAV
+snapshots before/after rendering; canonical XML comparison refuses unrelated
+picture/timing/gain/fade edits. The verified movie appears in existing derivative
+export history and **Review edited movie** opens it paused. The saved parent
+movie/current pointer remain unchanged; no main cut version is promoted.
+Animated volume envelopes remain preserved in XML but the existing renderer
+explicitly refuses them for local export. This unmerged integration needs its
+matching editor/engine metadata code; it is not an installed release. Human
+audition/approval remains `NOT_AUDITIONED`.
 
 ## Separate linked library
 
@@ -90,11 +96,16 @@ disabled, using workspace-local derived data. Neither build installs/deploys.
 `Tools/verify-local.sh /absolute/package/root`: 10 package tests.
 `Integration/test_sound_timeline_adapter.py`: 6 engine-fixture tests with
 `CLAUTO_SFX_TEST_ROOT` and installed FFmpeg, without audio output.
-Root SwiftPM `SoundTimelineControllerTests`: 2 native controller fixture tests.
+Root SwiftPM `SoundTimelineControllerTests`: 3 native controller fixture tests,
+including an actual normal-service render, derivative-history admission, silent
+PCM comparison to the chosen trim/gain, and animated-envelope export refusal.
 Actual UI checks cover search, keyboard, picker cancel/link, short-candidate
-refusal, explicit replacement, undo/redo and separate save. Audition is blocked.
+refusal, explicit replacement, undo/redo, separate save and normal local export.
+Direct mouse selection and corner zoom/minimize/restore are verified. Audition
+is blocked; no automated playback is started.
 
 See `Evidence/INTEGRATION_REVIEW.md` for current evidence. `Evidence/REVIEW.md`
 and initial captures are historical standalone v2 evidence. Remaining acceptance:
 human audio/output quality, spoken VoiceOver, expanded text sizing, external
-volume remounts, Ogg decode, movie rerender and saved-version promotion.
+volume remounts, Ogg decode, animated-envelope rendering, Final Cut import and
+saved-version promotion.

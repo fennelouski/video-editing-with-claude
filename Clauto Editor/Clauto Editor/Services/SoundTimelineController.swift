@@ -20,6 +20,7 @@ import SoundBrowserCore
     private var snapshots: [String:Data] = [:]
     private var rootIdentity: RenderDirectoryIdentity?
     private var savedDocumentSHA256: String?
+    private var lastSavedSelection: SoundTimelineEditSelection?
     init(project:Project,version:CutVersion) {
         self.project=project;self.version=version
         do {
@@ -34,15 +35,16 @@ import SoundBrowserCore
             #endif
             browser=SoundBrowserStore(catalog:catalog,preferencesURL:prefs,player:silent)
         } catch { issue=error.localizedDescription }
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["CLAUTO_SOUND_SILENT_QA"]=="1" { SoundTimelineQAState.active=self }
-        #endif
     }
     var cues: [SoundTimelineCue] { _=revision;return document?.cues ?? [] }
     var selectedCue: SoundTimelineCue? { cues.first { $0.id==selectedCueID } }
     var dirty: Bool { document?.data != original }
     var unsaved: Bool { dirty && document.map { SoundBrowserCore.digest($0.data) != savedDocumentSHA256 } == true }
+    var exportSelection: SoundTimelineEditSelection? { dirty && !unsaved ? lastSavedSelection:nil }
     func load() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["CLAUTO_SOUND_SILENT_QA"]=="1" { SoundTimelineQAState.active=self }
+        #endif
         do {
             _ = try await WorkflowRepository().derivativeSource(version,project:project)
             let root=try ProjectMutationLease.checkedRoot(project)
@@ -94,8 +96,16 @@ import SoundBrowserCore
             try output.writeNew(xml,name:"timeline.fcpxml")
             let refs=try JSONSerialization.jsonObject(with:JSONEncoder().encode(document.references))
             let receipt: [String:Any] = ["schemaVersion":1,"kind":"editable_sound_replacement","projectID":project.id.uuidString,"parentVersionID":version.id.uuidString,"parentTimelineSHA256":SoundBrowserCore.digest(original),"timelineSHA256":SoundBrowserCore.digest(xml),"references":refs,"previewRendered":false,"admittedToEditorHistory":false,"humanAudition":"NOT_AUDITIONED"]
-            try output.writeNew(JSONSerialization.data(withJSONObject:receipt,options:[.prettyPrinted,.sortedKeys]),name:"sound-timeline-edit.json")
+            let receiptBytes=try JSONSerialization.data(withJSONObject:receipt,options:[.prettyPrinted,.sortedKeys])
+            try output.writeNew(receiptBytes,name:"sound-timeline-edit.json")
             try lease.root.checkPath();try output.checkPath();savedFolder=output.url;savedDocumentSHA256=SoundBrowserCore.digest(document.data);issue=nil
+            lastSavedSelection = .init(schemaVersion:1,projectID:project.id,parentVersionID:version.id,editID:id,parentTimelineSHA256:SoundBrowserCore.digest(original),manifestSHA256:SoundBrowserCore.digest(receiptBytes),timelineSHA256:SoundBrowserCore.digest(xml))
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["CLAUTO_SOUND_SILENT_QA"]=="1" {
+                SoundTimelineQAState.active=self
+                DispatchQueue.main.async { SoundTimelineQAState.capture() }
+            }
+            #endif
         } catch { issue=error.localizedDescription }
     }
     private func updateRecommendations() {
@@ -113,14 +123,17 @@ import SoundBrowserCore
     static weak var active: SoundTimelineController?
     static var playbackStartAttempts=0
     static func capture() {
-        guard let path=ProcessInfo.processInfo.environment["CLAUTO_SOUND_QA_OUTPUT"],let controller=active,let window=NSApp.keyWindow,let view=window.contentView else { return }
+        guard let path=ProcessInfo.processInfo.environment["CLAUTO_SOUND_QA_OUTPUT"],var window=NSApp.keyWindow else { return }
+        while let sheet=window.attachedSheet { window=sheet }
+        guard let view=window.contentView else { return }
         do {
+            let controller=active
             let folder=URL(fileURLWithPath:path,isDirectory:true);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
             if let bitmap=view.bitmapImageRepForCachingDisplay(in:view.bounds) {
                 view.layoutSubtreeIfNeeded();view.cacheDisplay(in:view.bounds,to:bitmap)
-                if let png=bitmap.representation(using:.png,properties:[:]) { try png.write(to:folder.appendingPathComponent("clauto-integrated-sound-editor.png")) }
+                if let png=bitmap.representation(using:.png,properties:[:]) { try png.write(to:folder.appendingPathComponent(controller == nil ? "clauto-editor-window-controls.png":"clauto-integrated-sound-editor.png")) }
             }
-            let report: [String:Any] = ["catalogCount":controller.browser?.catalog.assets.count ?? 0,"catalogVersion":controller.browser?.catalog.version ?? "","availableCount":controller.browser?.availableCount ?? 0,"playbackStartAttempts":playbackStartAttempts,"cues":controller.cues.map { ["id":$0.id,"name":$0.name,"timelineFrame":String($0.timelineStartFrame),"sourceFrame":String($0.sourceStartFrame),"durationFrames":String($0.durationFrames)] },"canUndo":controller.document?.canUndo ?? false,"canRedo":controller.document?.canRedo ?? false,"unsaved":controller.unsaved,"savedFolder":controller.savedFolder?.path ?? "","humanAudition":"NOT_AUDITIONED"]
+            let report: [String:Any] = ["catalogCount":controller?.browser?.catalog.assets.count ?? 0,"catalogVersion":controller?.browser?.catalog.version ?? "","availableCount":controller?.browser?.availableCount ?? 0,"playbackStartAttempts":playbackStartAttempts,"cues":(controller?.cues ?? []).map { ["id":$0.id,"name":$0.name,"timelineFrame":String($0.timelineStartFrame),"sourceFrame":String($0.sourceStartFrame),"durationFrames":String($0.durationFrames)] },"canUndo":controller?.document?.canUndo ?? false,"canRedo":controller?.document?.canRedo ?? false,"unsaved":controller?.unsaved ?? false,"savedFolder":controller?.savedFolder?.path ?? "","humanAudition":"NOT_AUDITIONED","windowWidth":window.frame.width,"windowHeight":window.frame.height,"windowZoomed":window.isZoomed]
             try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:folder.appendingPathComponent("integrated-ui-report.json"))
         } catch { }
     }

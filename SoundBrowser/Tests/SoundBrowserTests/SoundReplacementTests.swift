@@ -30,6 +30,10 @@ final class SoundReplacementTests: XCTestCase {
         doc.redo();XCTAssertEqual(doc.data,changed);XCTAssertEqual(doc.references[before.id],longer)
         let mapped=try doc.rewrittenMediaURLs([before.id:URL(fileURLWithPath:"/fixture/immutable.wav")])
         XCTAssertEqual(try SoundTimelineDocument(data:mapped).cues.first?.sourceURL?.path,"/fixture/immutable.wav")
+        let mapping=[before.id:URL(fileURLWithPath:"/fixture/immutable.wav")]
+        try SoundTimelineDocument(data:mapped).verifyReplacement(of:original,references:doc.references,mediaURLs:mapping,catalog:catalog)
+        let unrelated=Data(String(decoding:mapped,as:UTF8.self).replacingOccurrences(of:"-15dB",with:"-14dB").utf8)
+        XCTAssertThrowsError(try SoundTimelineDocument(data:unrelated).verifyReplacement(of:original,references:doc.references,mediaURLs:mapping,catalog:catalog))
     }
     func testShorterReplacementIsRefusedWithoutRetimingOrMutation() throws {
         let catalog=try SoundCatalog.bundled(),doc=try SoundTimelineDocument(data:fixture()),original=doc.data

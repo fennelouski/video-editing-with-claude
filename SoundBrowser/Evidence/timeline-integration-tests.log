@@ -6,6 +6,6 @@ test_root_replacement_and_lock_conflict_do_not_publish (__main__.TimelineIntegra
 test_stale_parent_current_pointer_hash_and_version_are_refused (__main__.TimelineIntegration.test_stale_parent_current_pointer_hash_and_version_are_refused) ... ok
 
 ----------------------------------------------------------------------
-Ran 6 tests in 3.713s
+Ran 6 tests in 3.676s
 
 OK

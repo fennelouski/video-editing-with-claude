@@ -81,7 +81,7 @@ struct ReviewWorkspace: View {
                     .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper).clautoThemeAppearance()
             }
             .sheet(isPresented:$soundEditing) {
-                if let selected { SoundTimelineEditorView(project:project,version:selected) }
+                if let selected { SoundTimelineEditorView(store:store,project:project,version:selected) }
             }
     }
     private func handle(_ command: EditorCommand) {

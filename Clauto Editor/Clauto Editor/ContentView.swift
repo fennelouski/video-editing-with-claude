@@ -92,7 +92,7 @@ struct ContentView: View {
 
     private var projectRail: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ClautoWindowControls().padding(.horizontal, 24).padding(.top, 14)
+            ClautoWindowControls().padding(.horizontal, 24).padding(.top, 18)
             HStack(spacing: 12) {
                 ClautoEmblem(bracketColor: ClautoDesign.railText, stripColor: ClautoDesign.citron).frame(width: 38, height: 38)
                 Text("Clauto").font(ClautoDesign.type(24, weight: .semibold)).tracking(-0.5)

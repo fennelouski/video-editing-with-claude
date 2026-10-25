@@ -1041,7 +1041,7 @@ actor WorkflowRepository {
         let actualEffects: LocalAudioEffects?
         if effectsObject == nil || effectsObject is NSNull { actualEffects = nil }
         else { actualEffects = try decoder.decode(LocalAudioEffects.self, from: JSONSerialization.data(withJSONObject: effectsObject!)) }
-        guard object?["state"] as? String == "complete", object?["parent_sha256"] as? String == parentHash,
+        guard object?["state"] as? String == "complete", object?["parent_sha256"] as? String == (request.soundTimelineEdit?.timelineSHA256 ?? parentHash),
               target.sha == parentHash, range?.count == 2,
               abs(range![0] - DerivativeRequest.snapped(request.start)) < 1e-9,
               abs(range![1] - DerivativeRequest.snapped(request.end ?? target.duration)) < 1e-9,
@@ -1059,6 +1059,15 @@ actor WorkflowRepository {
                   try Self.derivativeSignature(leaf,in: owned)==before else { throw WorkflowFailure.invalid("An exported file changed. Create a new verified export.") }
             signatures[leaf] = before
         }
+        let soundEdit=object?["sound_timeline_edit"]
+        if let selection=request.soundTimelineEdit {
+            let source=try derivativeSource(target.version,project:project)
+            _ = try selection.inspect(project:project,version:target.version,source:source)
+            guard let metadata=soundEdit as? [String:Any],let selected=metadata["selection"],
+                  try JSONDecoder().decode(SoundTimelineEditSelection.self,from:JSONSerialization.data(withJSONObject:selected))==selection,
+                  hashes["sound-edit-receipt.json"]==selection.manifestSHA256,
+                  hashes["sound-edited-source.fcpxml"]==selection.timelineSHA256 else { throw WorkflowFailure.invalid("The exported sound replacement does not match the selected edit.") }
+        } else if soundEdit != nil && !(soundEdit is NSNull) { throw WorkflowFailure.invalid("The export contains an unexpected sound replacement.") }
         let composed = object?["generated_graphic"]
         if let graphic = request.graphic {
             guard let metadata = composed as? [String:Any],hashes["graphic-revision.json"]==graphic.manifestSHA256,

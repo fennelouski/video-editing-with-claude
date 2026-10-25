@@ -1,18 +1,18 @@
 Building for debugging...
 [Computing dependencies]
-[3 / 8] ClautoCoreTests-product
-[5 / 9] ClautoCoreTests-product
-[7 / 11] ClautoCoreTests-product
-[13 / 15] ClautoCoreTests-product
-[15 / 15] ClautoCoreTests-product
-Build complete! (4.15 sec)
+[1 / 4] VoiceKit
+Build complete! (0.49 sec)
 􀟈  Test run started.
 􀄵  Testing Library Version: 2084
 􀄵  Target Platform: arm64e-apple-macos14.0
 􀟈  Suite SoundTimelineControllerTests started.
+􀟈  Test replacementUsesNormalExportAndRenderedAudioMatchesChosenTrimAndGain() started.
+Silent rendered replacement evidence: {"amplitudeRatio": 0.9991762510695545, "automatedPlaybackStarts": 0, "previousSoundCorrelation": -0.00010699654285965114, "replacementCorrelation": 0.9999727477371559}
+
+􁁛  Test replacementUsesNormalExportAndRenderedAudioMatchesChosenTrimAndGain() passed after 9.802 seconds.
 􀟈  Test actualControllerReplacesUndoesAndPublishesOnlyVerifiedSeparateTimeline() started.
-􁁛  Test actualControllerReplacesUndoesAndPublishesOnlyVerifiedSeparateTimeline() passed after 2.491 seconds.
+􁁛  Test actualControllerReplacesUndoesAndPublishesOnlyVerifiedSeparateTimeline() passed after 2.460 seconds.
 􀟈  Test staleCurrentPointerRefusesSaveAndRetainsDraft() started.
-􁁛  Test staleCurrentPointerRefusesSaveAndRetainsDraft() passed after 2.455 seconds.
-􁁛  Suite SoundTimelineControllerTests passed after 4.946 seconds.
-􁁛  Test run with 2 tests in 1 suite passed after 4.947 seconds.
+􁁛  Test staleCurrentPointerRefusesSaveAndRetainsDraft() passed after 2.440 seconds.
+􁁛  Suite SoundTimelineControllerTests passed after 14.703 seconds.
+􁁛  Test run with 3 tests in 1 suite passed after 14.703 seconds.

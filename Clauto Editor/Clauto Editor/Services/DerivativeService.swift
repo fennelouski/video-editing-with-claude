@@ -35,7 +35,8 @@ struct DerivativeRequest: Codable, Equatable, Sendable {
     var soundFileID: UUID? = nil
     var soundAt = 0.0
     var soundGainDB = -12.0
-    enum CodingKeys: String, CodingKey { case aspect, resolution, start, end, framing, x, y, effects, graphic, soundFileID, soundAt, soundGainDB }
+    var soundTimelineEdit: SoundTimelineEditSelection? = nil
+    enum CodingKeys: String, CodingKey { case aspect, resolution, start, end, framing, x, y, effects, graphic, soundFileID, soundAt, soundGainDB, soundTimelineEdit }
     static func snapped(_ seconds: Double) -> Double {
         // Match config.frames(): multiply by the precomputed floating-point FPS.
         (seconds * (24000.0 / 1001.0)).rounded(.toNearestOrEven) * 1001.0 / 24000.0
@@ -48,6 +49,7 @@ struct DerivativeRequest: Codable, Equatable, Sendable {
             throw WorkflowFailure.invalid("Choose a time range inside this saved cut and framing positions within −100…100 percent.")
         }
         try effects?.validate()
+        try soundTimelineEdit?.validate()
         try graphic?.validate(cutDuration: Self.snapped(end ?? duration)-Self.snapped(start))
         if soundFileID != nil {
             guard soundAt.isFinite, soundAt >= 0, soundAt < (end ?? duration) - start,
@@ -70,6 +72,7 @@ extension DerivativeRequest {
         soundFileID = try values.decodeIfPresent(UUID.self, forKey: .soundFileID)
         soundAt = try values.decodeIfPresent(Double.self, forKey: .soundAt) ?? 0
         soundGainDB = try values.decodeIfPresent(Double.self, forKey: .soundGainDB) ?? -12
+        soundTimelineEdit = try values.decodeIfPresent(SoundTimelineEditSelection.self,forKey:.soundTimelineEdit)
     }
 }
 
@@ -112,10 +115,14 @@ struct DerivativeService: Sendable {
         guard engineVersion == source.engineVersion else { throw WorkflowFailure.invalid("This saved cut requires its original engine version before exporting.") }
         try request.validate(duration: source.duration)
         let id = UUID(), folder = try await disk.derivativeFolder(id, project: project)
-        var arguments = ["timeline_derivatives.py", source.timeline.path, folder.path,
+        let edited = try request.soundTimelineEdit?.inspect(project:project,version:version,source:source)
+        var arguments = ["timeline_derivatives.py", (edited?.timeline ?? source.timeline).path, folder.path,
                          "--aspect", request.aspect, "--resolution", request.resolution.rawValue,
                          "--start", String(request.start), "--framing", request.framing,
                          "--x", String(request.x), "--y", String(request.y)]
+        if let edit=request.soundTimelineEdit,let edited {
+            arguments += ["--sound-edit-receipt",edited.manifest.path,"--sound-edit-parent",source.timeline.path,"--sound-edit-selection",String(decoding:try JSONEncoder().encode(edit),as:UTF8.self)]
+        }
         if let end = request.end { arguments += ["--end", String(end)] }
         if let captions = source.captions { arguments += ["--captions", captions.path] }
         if let effects = request.effects { arguments += ["--audio-effects", String(decoding: try JSONEncoder().encode(effects), as: UTF8.self)] }
@@ -145,6 +152,7 @@ struct DerivativeService: Sendable {
             directory: engine, environment: ["CLAUTO_OFFLINE": "1"], timeout: .seconds(86_400)), onLine: onLine)
         try Task.checkCancellation();try root.checkPath()
         guard result.succeeded else { throw WorkflowFailure.invalid(result.cancelled ? "Export stopped. The saved parent cut is unchanged." : "The local export stopped. " + String(result.output.suffix(1800))) }
+        _ = try request.soundTimelineEdit?.inspect(project:project,version:version,source:source)
         let recipe = try await disk.verifyDerivative(folder: folder, parentVersionID: version.id, parentHash: source.timelineSHA256, request: request, project: project)
         let record = DerivedCut(id: id, projectID: project.id, parentVersionID: version.id, parentTimelineSHA256: source.timelineSHA256,
                                 request: request, recipeSHA256: recipe)

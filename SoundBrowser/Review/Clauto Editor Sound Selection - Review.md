@@ -1,15 +1,39 @@
-# Clauto Editor sound selection — review build
+# Clauto Editor sound selection — local review build
 
-The sound browser is now wired **inside Clauto Editor: Cut → Sounds…** on an isolated integration branch. Select a connected sound, inspect similar or different candidates, audition only when you choose, then explicitly Replace. Browsing alone changes nothing.
+Sound selection is integrated **inside Clauto Editor: Cut → Sounds…**. Browse
+categories, tags and text; inspect real WAV envelopes and source/license details;
+keep favorites/collections; audition only when you choose. Browsing changes nothing.
 
-- Replacement preserves timeline position, source trim, duration, gain and fade XML. Longer sounds use the same range; sounds too short for it are refused. Undo/redo is available.
-- Save creates a separate immutable edited FCPXML and verified selected-audio snapshots. The saved parent and current-version pointer remain unchanged.
-- Catalog 3.0.0 has 1,162 references across 20 categories. All 1,119 earlier IDs/hashes are preserved. Only eight representative WAV files were downloaded for verification; the app does not bundle audio or download the whole library.
-- PCM/float WAV is supported. The 597 Ogg references are searchable but explicitly unavailable for audition/replacement in this implementation.
-- The full editor builds. Ten browser/replacement tests, six real engine-fixture tests and two native editor-controller tests pass. Actual editor UI checks cover keyboard selection, search, folder picker cancel/link, short-candidate refusal, explicit replacement, undo/redo and separate save. No audition control was activated; automated audio output was blocked.
+Explicit replacement preserves timeline position, source trim, duration, gain and
+fade XML. Shorter sounds are refused; longer ones use the existing interval.
+Undo/redo is available. Save freezes only chosen audio beside an immutable edited
+timeline. **Create local export** renders through Clauto’s normal export service
+and history; **Review edited movie** opens paused. Parent/current remain unchanged.
+Animated-volume envelopes stay intact but the existing renderer explicitly refuses
+them for local export; static gain is verified end to end.
 
-**Screenshot note:** the accompanying image is an actual earlier standalone-browser capture from catalog 2.0.0. It demonstrates real measured envelopes, but does not show the current integrated editor window. A fresh integrated capture is paused while Nathan uses the Studio.
+Catalog 3.0.0 indexes **1,162 CC0 references in 20 categories**, preserving earlier
+IDs/hashes. Audio lives in a separately chosen library folder. Only eight WAVs
+were materialized for testing; no whole-library download occurs. The 597 Ogg
+references are searchable and explicitly unavailable in this implementation.
 
-**Exact state:** local, unmerged integration build; no installed/stable app or live user project changed. Saving the edited FCPXML does not rerender the saved movie or promote it into main version history. Human audition/approval remains NOT_AUDITIONED. Output-device quality, spoken VoiceOver, external-drive remounts and movie/history integration remain separate acceptance work.
+The full editor builds. **10 package, 6 insertion and 3 native controller tests
+pass**, including real export, history admission and decoded audio comparison:
+replacement correlation 0.99997, gain ratio 0.99918, unchanged timing and parent.
+Actual UI checks include mouse/keyboard selection, search, picker cancel/link,
+short-sound refusal, undo/redo, save, export and paused review. Automated playback
+attempts are zero. No person’s audition or approval is claimed.
 
-The requested modest corner-control adjustment is pending clarification between the Close/Minimize/Zoom cluster and video/full-screen controls. Visible automation remains paused until the Studio is handed back.
+The Close/Minimize/Zoom cluster now has more space and subtly rounded faces.
+Native zoom/restore, minimize/restore and close behavior were checked. Foreground
+QA ended before the Studio’s 10:45 restoration; no lock settings were changed.
+
+Current screenshots are `Clauto Editor - integrated sound selection.png` and
+`Clauto Editor - corner controls.png`. The earlier standalone image remains
+clearly named historical. All files are local: Library upload approval remains
+pending, so there are no new Library IDs.
+
+**Exact state:** isolated, unmerged Sol integration branch; no installed/stable app,
+live project or paused worktree changed. Remaining acceptance includes human audio
+quality, spoken VoiceOver, external-drive remounts, Ogg decode, animated-envelope
+rendering and Final Cut import. This is not a release approval.

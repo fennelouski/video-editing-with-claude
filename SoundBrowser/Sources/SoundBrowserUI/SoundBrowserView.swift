@@ -25,8 +25,8 @@ public struct SoundBrowserView: View {
                 header
                 Divider()
                 HSplitView {
-                    results.frame(minWidth: 310, idealWidth: 520)
-                    inspector.frame(minWidth: 280, idealWidth: 340, maxWidth: 380)
+                    results.frame(minWidth: 310, idealWidth: 520, maxHeight: .infinity, alignment: .top)
+                    inspector.frame(minWidth: 280, idealWidth: 340, maxWidth: 380, maxHeight: .infinity, alignment: .top)
                 }
                 Divider()
                 HStack {
@@ -128,7 +128,7 @@ public struct SoundBrowserView: View {
                 SoundResultTable(rows:store.visible.map { asset in
                     .init(id:asset.id,title:asset.title+(store.favorites.contains(asset.id) ? "  ★" : ""),
                           subtitle:store.state(asset.id).state.rawValue,duration:String(format:"%.2f s",asset.duration),peaks:store.state(asset.id).envelope)
-                },selection:store.selectedID,select:{ store.select($0) }).accessibilityIdentifier("soundResults")
+                },selection:store.selectedID,select:{ store.select($0) }).frame(maxHeight:.infinity).accessibilityIdentifier("soundResults")
             }
         }
     }
@@ -174,7 +174,7 @@ public struct SoundBrowserView: View {
                         guard store.prepareSelection() != nil else { return }
                         if let onSelection, let ref = try? store.selectionReference() { onSelection(ref) }
                     }.buttonStyle(.borderedProminent).disabled(store.state(asset.id).state != .available || store.busy).accessibilityIdentifier("prepareSelection")
-                    Text(onSelection == nil ? "Drag a sound or prepare its portable reference. Timeline insertion awaits the editor adapter." : "Add this verified reference using the editor adapter.").font(.caption).foregroundStyle(.secondary)
+                    Text(onSelection == nil ? "Drag a sound or prepare its portable reference." : "Apply this sound to the selected timeline cue.").font(.caption).foregroundStyle(.secondary)
                     if store.state(asset.id).state == .available {
                         Label("Drag selected sound",systemImage:"hand.draw")
                             .font(.caption).padding(7)
@@ -211,7 +211,7 @@ public struct SoundBrowserView: View {
                     }
                 }.padding(20)
             }.background(Color(nsColor: .textBackgroundColor))
-        } else { ContentUnavailableView("Choose a sound", systemImage: "waveform", description: Text("Select a row to inspect its envelope, source and availability.")) }
+        } else { ContentUnavailableView("Choose a sound", systemImage: "waveform", description: Text("Select a row to inspect its envelope, source and availability.")).frame(maxWidth:.infinity,maxHeight:.infinity) }
     }
     private var librarySheet: some View {
         VStack(alignment: .leading, spacing: 18) {

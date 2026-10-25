@@ -1,0 +1,56 @@
+{
+  "kind": "actual_editor_ui_normal_export_fixture",
+  "projectID": "A2776C40-E95B-46D8-87BE-1E7224D301DD",
+  "parentVersionID": "9E389775-61C6-46B0-9870-D6155EE5E941",
+  "derivativeID": "E3522DF6-20B7-4D03-BB85-4687D0CAB874",
+  "selection": {
+    "editID": "4353012D-3C2B-41C2-9C5B-2180117313C2",
+    "manifestSHA256": "d96509dc051fe3af63c4d4d90e8abcbd412150ab81548309819f197314e34783",
+    "parentTimelineSHA256": "cc3c05dfc55c5a567ec2362968b33e2499b64c29e018f6be41767a59e98ca24d",
+    "parentVersionID": "9E389775-61C6-46B0-9870-D6155EE5E941",
+    "projectID": "A2776C40-E95B-46D8-87BE-1E7224D301DD",
+    "schemaVersion": 1,
+    "timelineSHA256": "bf1257efdbf7d6ee9b80e050702dd1bad6388ce3a871480634888fb3c1cdb2fb"
+  },
+  "normalDerivativeRecordSHA256": "18ad6fdf8229576797c59f452245b09a690a0ea91bcfa806c37010d5efa98d98",
+  "recipeSHA256": "1621eeaf8fbefbc37527fb9fb9292332a9b9313fdfe29206062a22c63c31ab95",
+  "fullDecodePassed": true,
+  "pictureCadenceVerified": true,
+  "schemaChecked": false,
+  "silentPCM": {
+    "amplitudeRatio": 0.9991762510695545,
+    "automatedPlaybackStarts": 0,
+    "previousSoundCorrelation": -0.00010699654285965114,
+    "replacementCorrelation": 0.9999727477371559
+  },
+  "outputSHA256": {
+    "timeline.fcpxml": "3ecedc1b9851837b63fa4b7f22ecd4e0d681bf2f6015c306e06f119c7647fdf9",
+    "review.mp4": "54df6cb395bcd3158be2823aeb8a21333a5ae084fc661a85a3486ec0146b4356",
+    "sound-edited-source.fcpxml": "bf1257efdbf7d6ee9b80e050702dd1bad6388ce3a871480634888fb3c1cdb2fb",
+    "decode-verification.json": "2222bc47da95eae50b2cd8299d3d9a8e39a539c1a4b147c040d67a035cca9181",
+    "sound-edit-receipt.json": "d96509dc051fe3af63c4d4d90e8abcbd412150ab81548309819f197314e34783"
+  },
+  "parentUnchanged": true,
+  "currentVersionUnchanged": true,
+  "movieReviewObserved": {
+    "initialTime": "00:00",
+    "control": "Play",
+    "automaticPlaybackStarted": false
+  },
+  "cornerControlObservation": {
+    "visibleFace": 22,
+    "hitRegion": 28,
+    "visibleGaps": 12,
+    "clusterWidth": 96,
+    "topPadding": 18,
+    "zoomRestore": true,
+    "minimizeRestore": true,
+    "nativeCloseReturnedVisible": false
+  },
+  "libraryUpload": "DENIED_BEFORE_EXECUTION; explicit approval pending",
+  "foregroundQAExitedUTC": "2026-10-25 10:43 UTC",
+  "screenshots": {
+    "clauto-integrated-sound-editor.png": "8e3679bea6e78a6a386db3d690fad8a05d5a2774fa5c8eb121a2180cee53f405",
+    "clauto-editor-window-controls.png": "cda3f24196f886dbbb7e84b44ada092df2867fec496323832646ba33891a2c74"
+  }
+}

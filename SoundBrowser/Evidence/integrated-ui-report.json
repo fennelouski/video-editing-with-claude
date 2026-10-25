@@ -1,0 +1,23 @@
+{
+  "availableCount" : 8,
+  "canRedo" : false,
+  "canUndo" : true,
+  "catalogCount" : 1162,
+  "catalogVersion" : "3.0.0",
+  "cues" : [
+    {
+      "durationFrames" : "24",
+      "id" : "0:0",
+      "name" : "Boing Cartoon #2",
+      "sourceFrame" : "20",
+      "timelineFrame" : "10"
+    }
+  ],
+  "humanAudition" : "NOT_AUDITIONED",
+  "playbackStartAttempts" : 0,
+  "savedFolder" : "\/Users\/nathanfennel\/Documents\/Codex\/2026-10-25\/task-13\/clauto-sound-browser\/SoundBrowser\/.qa-integrated\/project\/build\/derivatives\/4353012D-3C2B-41C2-9C5B-2180117313C2",
+  "unsaved" : false,
+  "windowHeight" : 783,
+  "windowWidth" : 1100,
+  "windowZoomed" : true
+}

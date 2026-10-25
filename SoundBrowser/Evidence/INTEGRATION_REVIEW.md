@@ -24,10 +24,21 @@ pointer. Selected verified audio snapshots are written with content-hash names
 beside the edited XML; no whole audio library is bundled. Repeated save is
 idempotent. The saved parent/current pointer are preserved.
 
-This is an integrated **editable-timeline** change. It does not rerender the
-saved movie, promote a version, or fabricate a completed DerivedCut/movie proof.
-The in-app UI and receipt explicitly retain that boundary. The branch remains
-unmerged and uninstalled; stable/live projects and paused worktrees are untouched.
+**Create local export** now uses the normal EditorStore/DerivativeService worker
+and existing derivative export history. A typed selection pins the parent, saved
+edit receipt and edited XML; native and Python checks bind selected WAV hashes
+and compare canonical XML to refuse unrelated video/timing/gain/fade changes.
+The renderer snapshots its sound proof, rechecks it after rendering, and normal
+repository verification admits the actual DerivedCut. **Review edited movie**
+opens paused. The original saved movie/current pointer stay unchanged and no
+main cut version is promoted. The branch remains unmerged and uninstalled;
+stable/live projects and paused worktrees are untouched.
+
+Existing renderer limit: animated adjust-volume envelopes are retained by the
+editor but explicitly refused during local export. A real fixture verifies that
+refusal and that no derivative is admitted. Static gain is rendered and checked.
+Optional sound integration is loaded only for sound-edit exports; ordinary
+exports retain their existing dependencies.
 
 ## Catalog update
 
@@ -61,9 +72,13 @@ NOT_AUDITIONED; technical validation never grants human approval.
   plus real selected WAV bytes; exact frame placement/trim/gain round-trip,
   parent/current preservation, idempotence/tamper refusal, stale pins, cancellation,
   root replacement, source confinement and shared-lock contention.
-- Native editor controller: **2 tests pass** through the actual repository/lease
-  implementation. They verify replacement/undo/redo, separate publication,
-  idempotent repeated save, unchanged parent/current and stale-current refusal.
+- Native editor controller: **3 tests pass** through the actual repository/lease
+  implementation. Includes normal-service FFmpeg export and derivative-history
+  admission, silent PCM comparison, tampered-edit refusal, animated-envelope
+  export refusal, replacement/undo/redo, separate publication, idempotence and
+  stale-current refusal. PCM correlation with the replacement is 0.99997275;
+  amplitude ratio is 0.99917625 after the preserved −15dB gain. Correlation with
+  the old sound is −0.000107. No audio playback is used for this measurement.
 
 Actual native UI verification used a uniquely identified QA copy of the built
 Clauto Editor and an isolated synthetic saved cut. Separate preferences and an
@@ -83,6 +98,12 @@ Observed through targeted computer-use actions:
 7. Save the edited timeline. Readback confirms exact output hash, original parent
    hash, unchanged gain −15dB, and one separate immutable output. Similar-candidate
    filtering leaves the edited cue unchanged.
+8. Fresh final build: direct mouse row selection works and the result pane fills
+   the available height. Save → Create local export succeeds; Review edited
+   movie opens at 00:00 with Play available, without autoplay. The latest admitted
+   export, complete decode/picture cadence checks and output hashes are recorded
+   in integrated-export-verification.json. DTD schema checking was unavailable
+   in the installed stdlib-only Python runtime: schemaChecked remains false.
 
 No audition/play control was activated. The former native-table reentrancy
 warning was eliminated by replacing the SwiftUI List with an owned AppKit table
@@ -94,22 +115,39 @@ An initial fixture mismatch came from `/var` versus `/private/var` spelling;
 physical path canonicalization corrected it. The actual stable writer retains
 the continuous cue across the shot boundary in the tested insertion fixture.
 
-## Current holds and remaining acceptance
+## Corner controls and final local evidence
 
-Nathan requested foreground control while signing in. The QA process was closed
-immediately and visible automation is paused pending handback. A fresh integrated
-screenshot was not captured before that hold. Existing v2 standalone screenshots
-are retained and clearly labeled historical; they are not current integration
-captures. Corner-control styling awaits clarification between the Close/Minimize/
-Zoom cluster and the separate video/full-screen controls; neither has been changed.
+Observed main-window Close/Minimize/Zoom controls received the requested bounded
+polish: 22px softly rounded faces in 28px hit regions, 12px visible gaps, 96px
+cluster (formerly 88px), and 18px top padding (formerly 14px). Glyphs are slightly
+smaller and native actions remain unchanged. Zoom/restore and minimize/restore
+were observed. Native Close returned with visible=0; the computer-use observation
+was reopening the last window during earlier inspections, so the final check
+recorded the native result before any subsequent UI observation. No native
+delegate veto was bypassed. The QA app was terminated after verification at
+10:43 UTC, ahead of the 10:45 Studio restoration; no lock/awake settings changed.
 
-Library upload of the named earlier screenshot and concise review was rejected
-before process execution by automatic approval review, which could not verify
-trusted authorization for the payload/destination. Explicit approval is pending;
-no Library file IDs or upload success are claimed.
+Final actual captures:
+- captures/clauto-integrated-sound-editor.png — catalog 3.0.0 inside the editor,
+  explicit replacement, preserved cue frames, real waveform and verified export.
+- captures/clauto-editor-window-controls.png — bounded main corner styling.
+- integrated-ui-report.json — 1,162 indexed, 8 available, zero playback attempts,
+  NOT_AUDITIONED, frame 10/source frame 20/duration 24.
+- integrated-export-verification.json — normal admitted export, decoded PCM
+  comparison, immutable source hashes and parent/current preservation.
 
-Other unobserved acceptance: human audition/output-device quality, spoken
-VoiceOver traversal, expanded text sizing, measured contrast across settings,
-external-drive remounts, Ogg decoding, movie rerender, saved-version promotion
-and Final Cut import. Verdict: verified local editor integration for bounded
-editable sound replacement, with the above holds and limits; not release approval.
+## Remaining approval and acceptance
+
+Library upload of the earlier named screenshot and review was rejected before
+process execution by automatic approval review: it could not establish trusted
+approval for the project-derived payload and external Library destination.
+Explicit approval is pending in the parent conversation. Nothing was uploaded;
+no Library IDs exist. No alternate route or retry was attempted. Fresh captures
+and the revised review are saved locally and have not been uploaded either.
+
+Unobserved acceptance: human audition/output-device quality, spoken VoiceOver,
+expanded text sizing, external-drive remounts, Ogg decoding, animated-envelope
+rendering, main-version promotion and Final Cut import. The external provider
+contract is proposed metadata, not a live download service. Verdict: verified
+local editor integration including normal static-gain sound replacement export;
+not release, installed-app or human approval.
