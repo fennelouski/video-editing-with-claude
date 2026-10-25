@@ -175,7 +175,7 @@ enum TranscriptProductionGate {
     /// whole-clip rendering that would ignore transcript selections.
     static func requireLegacyPipelineAllowed(project: Project) throws {
         let root = project.folder.resolvingSymlinksInPath().standardizedFileURL
-        for relative in [".clauto/transcript-review-required.json", ".clauto/transcript-review.json", "notes/transcript-review"] {
+        for relative in [".clauto/script-workspace-required.json", ".clauto/script-workspace.json", ".clauto/transcript-review-required.json", ".clauto/transcript-review.json", "notes/transcript-review"] {
             if try associationExists(relative, root: root) { try requireCutApplication() }
         }
     }

@@ -33,7 +33,7 @@ struct ProjectView: View {
                     } label: { ClautoIcon(.settings,size: 18) }.accessibilityLabel("Project details").accessibilityIdentifier("projectDetails")
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
-                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
+                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Script", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
                     Spacer()
                 }.padding(.horizontal, 28).padding(.bottom, 20)
                 ClautoRule()
@@ -49,9 +49,10 @@ struct ProjectView: View {
                         else if tab == "Files" { FilesView(store: store, project: project) }
                         else if tab == "Studio" { CreativeStudioView(store: store,project: project) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
+                        else if tab == "Script" { ScriptWorkspaceView(project: project) }
                         else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
                     }.frame(maxHeight: .infinity)
-                    if tab != "Transcript" && tab != "Cut" && tab != "Studio" {
+                    if tab != "Transcript" && tab != "Script" && tab != "Cut" && tab != "Studio" {
                         ClautoRule()
                         conversation(compact: true)
                     }

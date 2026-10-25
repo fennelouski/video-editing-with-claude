@@ -10,6 +10,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
     case assetsPane, feedbackPane, focusAssets, focusVideo, focusFeedback
     case detach, fullScreen, pictureInPicture
     case draw
+    case script
     var id: Int { rawValue }
     var title: String {
         switch self {
@@ -39,6 +40,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .fullScreen: "Toggle Video Full Screen"
         case .pictureInPicture: "Show Native Picture in Picture Controls"
         case .draw: "Draw on Video"
+        case .script: "Show Script Workspace"
         }
     }
     var shortcut: String {
@@ -58,6 +60,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .files: "⌥⌘2"
         case .transcript: "⌥⌘3"
         case .review: "⌥⌘4"
+        case .script: "⌥⌘5"
         case .focusAssets: "⌃⌥⌘1"
         case .focusVideo: "⌃⌥⌘2"
         case .focusFeedback: "⌃⌥⌘3"
@@ -65,7 +68,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         }
     }
     var needsPlayer: Bool {
-        ![.palette,.brief,.files,.transcript,.review,.assetsPane,.feedbackPane,.focusAssets,.focusVideo,.focusFeedback,.previousVersion,.nextVersion].contains(self)
+        ![.palette,.brief,.files,.transcript,.script,.review,.assetsPane,.feedbackPane,.focusAssets,.focusVideo,.focusFeedback,.previousVersion,.nextVersion].contains(self)
     }
     func matches(_ query: String) -> Bool { query.isEmpty || title.localizedCaseInsensitiveContains(query) || shortcut.localizedCaseInsensitiveContains(query) }
 }

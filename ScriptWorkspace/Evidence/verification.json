@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "42b3bdc63de141a6a0733d4cf45cfe0f04641352",
+  "branch": "codex/script-first-review",
+  "newNativeTests": {
+    "run": 9,
+    "passed": 9
+  },
+  "targetedNativeRegression": {
+    "run": 31,
+    "passed": 31
+  },
+  "soundPackage": {
+    "run": 10,
+    "passed": 10,
+    "skipped": 0
+  },
+  "soundPythonUnittest": {
+    "run": 6,
+    "passed": 6
+  },
+  "nativeBuild": "succeeded",
+  "engineScriptContract": true,
+  "fcpxmlStructural": true,
+  "installedFCPXML113DTD": true,
+  "nativeUI": {
+    "fixtureOnly": true,
+    "authorMarkerVisible": false,
+    "modelMarkerVisible": false,
+    "versionTitleVisible": false,
+    "editingDisabledBeforeLock": true,
+    "allScoresManuallyExercised": false,
+    "formalBlindingEstablished": false,
+    "foregroundReleasedUTC": "2026-10-25 20:39"
+  },
+  "inheritedFullSuite": {
+    "run": 504,
+    "issues": 25,
+    "failingTests": 21,
+    "green": false,
+    "limits": [
+      "missing lxml",
+      "missing numpy",
+      "missing Pillow/fontTools"
+    ]
+  },
+  "generatedOpusScript": false,
+  "installed": false,
+  "merged": false,
+  "publiclyReleased": false
+}

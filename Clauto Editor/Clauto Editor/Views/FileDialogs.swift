@@ -12,9 +12,15 @@ import UniformTypeIdentifiers
         }
     }
     static func transcript() async -> URL? {
+        await json(prompt: "Import Transcript")
+    }
+    static func sourceBoundScript() async -> URL? {
+        await json(prompt: "Import Script Version")
+    }
+    private static func json(prompt: String) async -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.json]; panel.prompt = "Import Transcript"
+        panel.allowedContentTypes = [.json]; panel.prompt = prompt
         return await withCheckedContinuation { continuation in
             panel.begin { response in continuation.resume(returning: response == .OK ? panel.url : nil) }
         }

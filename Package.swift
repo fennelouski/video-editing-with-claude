@@ -10,7 +10,7 @@ let package = Package(
     dependencies: [.package(path: "ThirdParty/VoiceKit"), .package(path: "SoundBrowser")],
     targets: [
         .target(name: "ClautoCore", dependencies: [.product(name: "VoiceKit", package: "voicekit"), .product(name: "SoundBrowserCore", package: "soundbrowser")], path: "Clauto Editor/Clauto Editor", exclude: ["Views", "ContentView.swift", "Clauto_EditorApp.swift", "Assets.xcassets", "Services/EditorStore.swift", "Services/Updater.swift"],
-                sources: ["Models/SoundTimelineEditSelection.swift", "Services/SoundTimelineController.swift", "Services/WorkspaceSetupController.swift", "Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
+                sources: ["Models/ScriptWorkspace.swift", "Services/ScriptWorkspaceRepository.swift", "Services/ScriptWorkspaceController.swift", "Services/ScriptInterchange.swift", "Models/SoundTimelineEditSelection.swift", "Services/SoundTimelineController.swift", "Services/WorkspaceSetupController.swift", "Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
                 "Models/ConversationLocalEdit.swift",
                 "Services/ConversationLocalEditRepository.swift",
                 "Services/ConversationLocalEditWorker.swift",

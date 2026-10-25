@@ -41,7 +41,7 @@ import Observation
     func canPerform(_ command: EditorCommand, fromPalette: Bool = false) -> Bool {
         guard let key = NSApp.keyWindow, PlaybackMenuCoordinator.shared.owns(key,router: self), let store else { return false }
         if key.attachedSheet != nil || window?.attachedSheet != nil || NSApp.modalWindow != nil || editor != nil || paletteVisible || showTimecode { return false }
-        if [.comment,.draw,.timecode,.palette,.brief,.files,.transcript,.review].contains(command) && window == nil { return false }
+        if [.comment,.draw,.timecode,.palette,.brief,.files,.transcript,.script,.review].contains(command) && window == nil { return false }
         if command.needsPlayer {
             if !fromPalette && PlaybackMenuCoordinator.isTextEditing(key.firstResponder) { return false }
             return selected?.ready == true
@@ -75,6 +75,7 @@ import Observation
         case .brief: tab = "Brief"
         case .files: tab = "Files"
         case .transcript: tab = "Transcript"
+        case .script: tab = "Script"
         case .review: tab = "Cut"
         case .toggle: selected?.driver.toggle()
         case .back: selected?.skip(-store.playbackPreferences.skipSeconds)
@@ -196,6 +197,7 @@ import Observation
             case .palette: shortcut = ("p",[.command,.shift])
             case .timecode: shortcut = ("t",[.command,.option])
             case .brief,.files,.transcript,.review: shortcut = (String(command.rawValue-Command.brief.rawValue+1),[.command,.option])
+            case .script: shortcut = ("5",[.command,.option])
             case .focusAssets,.focusVideo,.focusFeedback: shortcut = (String(command.rawValue-Command.focusAssets.rawValue+1),[.command,.option,.control])
             default: shortcut = ("",[])
             }

@@ -26,6 +26,13 @@ keeps the previous cut available. The engine's Sage & Oat video style and its ru
 remain governed by `../taste_principles.md` and `../style_guide.md`; the app identity
 is a separate design system.
 
+The isolated Script workspace candidate adds full-source review, independent
+source-bound scripts and explicit unrecorded pickups, author-blind scored
+comparison, revision-bound local approval and a separate editable FCPXML assembly
+package. It leaves the current cut and transcript review intact and does not call
+an AI service. See [SCRIPT_WORKSPACE.md](docs/SCRIPT_WORKSPACE.md) for its boundaries
+and review workflow.
+
 Nathan's app identity requirements are binding: authored geometry and typography,
 no SF Symbols, and no visible default Apple app controls. Native file dialogs,
 menus, text editing behavior, and window semantics remain available. The existing
