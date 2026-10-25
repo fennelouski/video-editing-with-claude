@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "library_id": "clauto-cc0-sfx-20261025-v1",
-  "library_version": "2.0.0",
+  "library_version": "3.0.0",
   "status": "PROPOSED_NOT_IMPLEMENTED",
   "media_embedded": false,
   "private_library_backend": false,
@@ -614,6 +614,264 @@
           "source_page": "https://bigsoundbank.com/idea-2-s1399.html",
           "sha256": "7e800f706a01856ce1209f5be79ed95747f4a23b67dbfd2393a77ec3dae619bb",
           "size_bytes": 538632
+        },
+        {
+          "asset_id": "BSB-3113",
+          "source_page": "https://bigsoundbank.com/thunder-2-s3113.html",
+          "sha256": "88b9cc1944d63662da3989114683ac616b0e93480d8b5fe4547fca7f52de17c2",
+          "size_bytes": 725418
+        },
+        {
+          "asset_id": "BSB-1529",
+          "source_page": "https://bigsoundbank.com/splash-small-1-s1529.html",
+          "sha256": "fd7504403d6c176b598c0023cb7f6e5dcbbf6176b5ad9742fece4ef07237244f",
+          "size_bytes": 378626
+        },
+        {
+          "asset_id": "BSB-1521",
+          "source_page": "https://bigsoundbank.com/splash-big-3-s1521.html",
+          "sha256": "9dcb2e792ce2cebead8202c3b2451f7f054a4ca3e80c944e6d831e79d984f32d",
+          "size_bytes": 590896
+        },
+        {
+          "asset_id": "BSB-1384",
+          "source_page": "https://bigsoundbank.com/drops-of-water-1-s1384.html",
+          "sha256": "9b5da355e01be095a63ba1639bd3d08e2b8b973a8a88f249a721880ec96efef1",
+          "size_bytes": 2908506
+        },
+        {
+          "asset_id": "BSB-0230",
+          "source_page": "https://bigsoundbank.com/sparkling-water-s0230.html",
+          "sha256": "6c00a20794d6a739a06d3bac41e384ed676410f2fc0b5be2dc8f52a7ef10061e",
+          "size_bytes": 1230790
+        },
+        {
+          "asset_id": "BSB-0149",
+          "source_page": "https://bigsoundbank.com/boiling-water-s0149.html",
+          "sha256": "65d72c6fe9be3ce94aed509fd36efbffdf894d17e7babf84ecb105e2d205fb68",
+          "size_bytes": 1177804
+        },
+        {
+          "asset_id": "BSB-0555",
+          "source_page": "https://bigsoundbank.com/forest-at-night-after-rain-s0555.html",
+          "sha256": "98626d0974901aea1859ab9456be5e5c36b424f9d46b0b5d3f0291da82e6a23f",
+          "size_bytes": 5629708
+        },
+        {
+          "asset_id": "BSB-1890",
+          "source_page": "https://bigsoundbank.com/meow-cat-2-s1890.html",
+          "sha256": "fe182a75fa840790197eb6570748c391efec690c335d804aeaa199842bf40f1d",
+          "size_bytes": 425246
+        },
+        {
+          "asset_id": "BSB-0436",
+          "source_page": "https://bigsoundbank.com/cat-purr-s0436.html",
+          "sha256": "d3946a69256661618c33200655e4eb710c5b065d34cbbe91f6a5a2adbc128a6b",
+          "size_bytes": 889118
+        },
+        {
+          "asset_id": "BSB-0682",
+          "source_page": "https://bigsoundbank.com/barking-of-a-spitz-s0682.html",
+          "sha256": "d4ab36479fa6901459dfd738c0f381eeab5002ee92387fb5e6e30f0ee6741103",
+          "size_bytes": 125372
+        },
+        {
+          "asset_id": "BSB-1764",
+          "source_page": "https://bigsoundbank.com/tawny-owl-2-s1764.html",
+          "sha256": "3fec9ca640d658b7016889f6d7964fe3d1623fef97296b30a367bad483b1f6ab",
+          "size_bytes": 1141190
+        },
+        {
+          "asset_id": "BSB-0283",
+          "source_page": "https://bigsoundbank.com/song-of-rooster-s0283.html",
+          "sha256": "7eec012d5a884fc6950ba28b48fdbfba61986e4e18183603b9f45bba9c031d3d",
+          "size_bytes": 403614
+        },
+        {
+          "asset_id": "BSB-0863",
+          "source_page": "https://bigsoundbank.com/horse-neighing-3-s0863.html",
+          "sha256": "f654b4463ad7a70201322708e448a66e38e1d177929c23027ab2ae98257c7b78",
+          "size_bytes": 297622
+        },
+        {
+          "asset_id": "BSB-2343",
+          "source_page": "https://bigsoundbank.com/sheep-1-s2343.html",
+          "sha256": "62fa4ed567a722b20fef0560ef0612936f634e339b37d9d5ac5ef17df3bee697",
+          "size_bytes": 124956
+        },
+        {
+          "asset_id": "BSB-2386",
+          "source_page": "https://bigsoundbank.com/cow-moos-6-s2386.html",
+          "sha256": "17e5d51efb97adc9f284d1d5f5481d150a80c01c4141fe7f28591ba6e590f02c",
+          "size_bytes": 355120
+        },
+        {
+          "asset_id": "BSB-0819",
+          "source_page": "https://bigsoundbank.com/one-frog-s0819.html",
+          "sha256": "8269b3c43af56797903e5aac23b114ceb17e37fd1ba5304145f09e495f3215ca",
+          "size_bytes": 1402016
+        },
+        {
+          "asset_id": "BSB-0424",
+          "source_page": "https://bigsoundbank.com/song-of-nocturnal-insect-1-s0424.html",
+          "sha256": "3c62533743be47d466192e1d53e607d960e77d35071d191a91a2273d797b6652",
+          "size_bytes": 325330
+        },
+        {
+          "asset_id": "BSB-1000",
+          "source_page": "https://bigsoundbank.com/bumblebee-1-s1000.html",
+          "sha256": "628ab088119aa87b5778b1938f287be3c32b79b5e78975b23c9c806e5caf8baa",
+          "size_bytes": 1054098
+        },
+        {
+          "asset_id": "BSB-1762",
+          "source_page": "https://bigsoundbank.com/screaming-piha-s1762.html",
+          "sha256": "285e55143f38a150d16d192cf14e73ce3ca409edba58f9e8a31466e3b6d879f9",
+          "size_bytes": 230364
+        },
+        {
+          "asset_id": "BSB-0841",
+          "source_page": "https://bigsoundbank.com/pigeons-fighting-s0841.html",
+          "sha256": "987b929fc34aa3216ca39fb06c4c6ed066d675eb6865d951fcaee5ebe15d9ceb",
+          "size_bytes": 1739696
+        },
+        {
+          "asset_id": "BSB-2368",
+          "source_page": "https://bigsoundbank.com/screeching-tires-1-s2368.html",
+          "sha256": "25758acdbf01343e6d0cbea4a386e9b85f950fb35d177061c91338d4da45381d",
+          "size_bytes": 313138
+        },
+        {
+          "asset_id": "BSB-0258",
+          "source_page": "https://bigsoundbank.com/recent-car-horn-2-s0258.html",
+          "sha256": "a5875adfc2f935df5f93da49f7c86aa0d2c9980f6e05d76089cd74f6be0dbdd7",
+          "size_bytes": 284546
+        },
+        {
+          "asset_id": "BSB-2996",
+          "source_page": "https://bigsoundbank.com/car-passing-50km-h-12-s2996.html",
+          "sha256": "9148fd7b77765dfd36fdb4f4a3cd413712dfae65389e7818a014f12360da4885",
+          "size_bytes": 4403938
+        },
+        {
+          "asset_id": "BSB-1102",
+          "source_page": "https://bigsoundbank.com/bell-bike-5-s1102.html",
+          "sha256": "1a38cace622737164c45f6a641886e57e8b86fcc138a93fe64ef89b796efbe4f",
+          "size_bytes": 335320
+        },
+        {
+          "asset_id": "BSB-1087",
+          "source_page": "https://bigsoundbank.com/bike-brake-1-s1087.html",
+          "sha256": "75caa875ba929eb69f93030267a96a91ec5e271e5dbec8b79182e0e8e3751dee",
+          "size_bytes": 220874
+        },
+        {
+          "asset_id": "BSB-0277",
+          "source_page": "https://bigsoundbank.com/train-horn-s0277.html",
+          "sha256": "87d1ebd73f147cdffdfdfad37e6d24d3953aae59a93b027c4225c8bc0025d072",
+          "size_bytes": 310490
+        },
+        {
+          "asset_id": "BSB-1703",
+          "source_page": "https://bigsoundbank.com/apartment-door-opening-2-s1703.html",
+          "sha256": "113b4b6b165c82d4d3456e710300810f2c8b5094e8d14cd2398417744c017053",
+          "size_bytes": 1180506
+        },
+        {
+          "asset_id": "BSB-1501",
+          "source_page": "https://bigsoundbank.com/door-slamming-4-s1501.html",
+          "sha256": "1e87670e550da83e644de98b9fa78ccb4cc634fea82beaecc6678bf29aafab0f",
+          "size_bytes": 133584
+        },
+        {
+          "asset_id": "BSB-0303",
+          "source_page": "https://bigsoundbank.com/grinding-metal-gate-1-s0303.html",
+          "sha256": "a693fe3443c73bc019a42d0cba61b049b08de9c8cc2bedd28e1bd5d2f6f8de62",
+          "size_bytes": 214118
+        },
+        {
+          "asset_id": "BSB-2425",
+          "source_page": "https://bigsoundbank.com/keys-and-lock-5-s2425.html",
+          "sha256": "180ece4e0883deabdfb4773aca3a3c3ab5a8b19685d8105d1d7db6174a6d7cb6",
+          "size_bytes": 542418
+        },
+        {
+          "asset_id": "BSB-1499",
+          "source_page": "https://bigsoundbank.com/wooden-drawer-opening-s1499.html",
+          "sha256": "773b4f1bbc16abf5e1cec240ee69ecc87d35ea54e7d17cebc68a33ce2e8a515b",
+          "size_bytes": 163658
+        },
+        {
+          "asset_id": "BSB-0270",
+          "source_page": "https://bigsoundbank.com/zipper-2-s0270.html",
+          "sha256": "9456f682d18e981f05730f7f7750a3b75b2e9b0ce723619200dc206a838ce6fa",
+          "size_bytes": 160864
+        },
+        {
+          "asset_id": "BSB-0514",
+          "source_page": "https://bigsoundbank.com/footsteps-shoe-on-concrete-s0514.html",
+          "sha256": "e424c7d07c7197f0d9aa5e3570de72d2572c1930984a92254013fa5e8fa76397",
+          "size_bytes": 961932
+        },
+        {
+          "asset_id": "BSB-0165",
+          "source_page": "https://bigsoundbank.com/man-footsteps-on-the-wooden-floor-s0165.html",
+          "sha256": "ed4009d9d94b0aa8d87b2ec6209c72edbe8d1ae45b667f2e9a723d3096addad8",
+          "size_bytes": 763722
+        },
+        {
+          "asset_id": "BSB-0166",
+          "source_page": "https://bigsoundbank.com/heels-s0166.html",
+          "sha256": "9293bbe46c267822bf64aea6d9373cfdd1a19b263bd5b2439b28eab0a5b105f4",
+          "size_bytes": 526442
+        },
+        {
+          "asset_id": "BSB-0510",
+          "source_page": "https://bigsoundbank.com/steps-on-gravels-s0510.html",
+          "sha256": "346f52d1529a960a849d480aba5de9fb0819936aeb85238c58cdb90a504bdbb8",
+          "size_bytes": 957522
+        },
+        {
+          "asset_id": "BSB-0495",
+          "source_page": "https://bigsoundbank.com/steps-in-the-mud-s0495.html",
+          "sha256": "1fc9a1686e1441cb17c317943208aba4fa2e084f6281b9759d2da64e6fe6de25",
+          "size_bytes": 918852
+        },
+        {
+          "asset_id": "BSB-1301",
+          "source_page": "https://bigsoundbank.com/steps-on-the-twigs-s1301.html",
+          "sha256": "aaef4d93d72f5a1e54690918b063c660c485c3f26c96256fc21302a5697d764a",
+          "size_bytes": 2245966
+        },
+        {
+          "asset_id": "BSB-1405",
+          "source_page": "https://bigsoundbank.com/sigh-by-the-mouth-s1405.html",
+          "sha256": "9bb7f693dcc39d27a3cc7c7aa4d0e1768879925df74e697451ad5dff4fd1aced",
+          "size_bytes": 783904
+        },
+        {
+          "asset_id": "BSB-1404",
+          "source_page": "https://bigsoundbank.com/sigh-by-the-nose-s1404.html",
+          "sha256": "8d76d7083a2e153e102e65fdb7248d813f0634c7aea22680ab88efae401ec84c",
+          "size_bytes": 940436
+        },
+        {
+          "asset_id": "BSB-1406",
+          "source_page": "https://bigsoundbank.com/yawn-1-s1406.html",
+          "sha256": "764759d2140f1221171781854a82f9b8aaee76ba64a80f96acd13db3700bf176",
+          "size_bytes": 739208
+        },
+        {
+          "asset_id": "BSB-2183",
+          "source_page": "https://bigsoundbank.com/man-cough-5-s2183.html",
+          "sha256": "a3b121bf46300a652468958f2c4df41709b541362b24225c0b65978c68eaa751",
+          "size_bytes": 274440
+        },
+        {
+          "asset_id": "BSB-3439",
+          "source_page": "https://bigsoundbank.com/woman-sneezing-s3439.html",
+          "sha256": "609db83b17e79946dc20f7f52c64c4bb27e4fe620426b714ff4bea1564c9dd58",
+          "size_bytes": 197748
         }
       ]
     }

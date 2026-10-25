@@ -2,3 +2,7 @@
 .swiftpm/
 .qa*/
 *.app/
+__pycache__/
+*.pyc
+
+Evidence/editor-build.log

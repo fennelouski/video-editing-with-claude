@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
         A10000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* Sparkle */; };
         A20000000000000000000001 /* VoiceKit in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000002 /* VoiceKit */; };
+        A30000000000000000000001 = {isa = PBXBuildFile; productRef = A30000000000000000000002; };
+        A30000000000000000000004 = {isa = PBXBuildFile; productRef = A30000000000000000000005; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +61,8 @@
 			files = (
                 A10000000000000000000001 /* Sparkle in Frameworks */,
                 A20000000000000000000001 /* VoiceKit in Frameworks */,
+                A30000000000000000000001,
+                A30000000000000000000004,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +125,8 @@
 			packageProductDependencies = (
                 A10000000000000000000002 /* Sparkle */,
                 A20000000000000000000002 /* VoiceKit */,
+                A30000000000000000000002,
+                A30000000000000000000005,
 			);
 			productName = "Clauto Editor";
 			productReference = D8E50E23307E619200A4B56F /* Clauto Editor.app */;
@@ -205,7 +211,7 @@
 			mainGroup = D8E50E1A307E619200A4B56F;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-            packageReferences = (A10000000000000000000003 /* Sparkle */, A20000000000000000000003 /* Local VoiceKit */);
+            packageReferences = (A10000000000000000000003 /* Sparkle */, A20000000000000000000003 /* Local VoiceKit */, A30000000000000000000003 /* Local SoundBrowser */);
 			productRefGroup = D8E50E24307E619200A4B56F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -287,6 +293,7 @@
 /* End XCRemoteSwiftPackageReference section */
 /* Begin XCLocalSwiftPackageReference section */
         A20000000000000000000003 /* Local VoiceKit */ = {isa = XCLocalSwiftPackageReference; relativePath = ../ThirdParty/VoiceKit; };
+        A30000000000000000000003 = {isa = XCLocalSwiftPackageReference; relativePath = ../SoundBrowser; };
 /* End XCLocalSwiftPackageReference section */
 /* Begin XCSwiftPackageProductDependency section */
         A10000000000000000000002 /* Sparkle */ = {
@@ -295,6 +302,8 @@
             productName = Sparkle;
         };
         A20000000000000000000002 /* VoiceKit */ = {isa = XCSwiftPackageProductDependency; package = A20000000000000000000003; productName = VoiceKit; };
+        A30000000000000000000002 = {isa = XCSwiftPackageProductDependency; package = A30000000000000000000003; productName = SoundBrowserCore; };
+        A30000000000000000000005 = {isa = XCSwiftPackageProductDependency; package = A30000000000000000000003; productName = SoundBrowserUI; };
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */

@@ -39,6 +39,11 @@ struct Clauto_EditorApp: App {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.check() }.disabled(!updater.enabled)
             }
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["CLAUTO_SOUND_SILENT_QA"]=="1" {
+                CommandMenu("Sound QA") { Button("Capture sound checkpoint") { SoundTimelineQAState.capture() }.keyboardShortcut("s",modifiers:[.control,.shift]) }
+            }
+            #endif
         }
         Settings {
             VStack(spacing: 0) {

@@ -7,10 +7,10 @@ let package = Package(
     name: "ClautoCoreVerification",
     platforms: [.macOS("26.0")],
     products: [.library(name: "ClautoCore", targets: ["ClautoCore"])],
-    dependencies: [.package(path: "ThirdParty/VoiceKit")],
+    dependencies: [.package(path: "ThirdParty/VoiceKit"), .package(path: "SoundBrowser")],
     targets: [
-        .target(name: "ClautoCore", dependencies: [.product(name: "VoiceKit", package: "voicekit")], path: "Clauto Editor/Clauto Editor", exclude: ["Views", "ContentView.swift", "Clauto_EditorApp.swift", "Assets.xcassets", "Services/EditorStore.swift", "Services/Updater.swift"],
-                sources: ["Services/WorkspaceSetupController.swift", "Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
+        .target(name: "ClautoCore", dependencies: [.product(name: "VoiceKit", package: "voicekit"), .product(name: "SoundBrowserCore", package: "soundbrowser")], path: "Clauto Editor/Clauto Editor", exclude: ["Views", "ContentView.swift", "Clauto_EditorApp.swift", "Assets.xcassets", "Services/EditorStore.swift", "Services/Updater.swift"],
+                sources: ["Services/SoundTimelineController.swift", "Services/WorkspaceSetupController.swift", "Models/ConversationHistory.swift", "Services/ConversationHistoryStore.swift","Models/GraphicCutSelection.swift",
                 "Models/ConversationLocalEdit.swift",
                 "Services/ConversationLocalEditRepository.swift",
                 "Services/ConversationLocalEditWorker.swift",

@@ -1,0 +1,3 @@
+Clauto Editor scheme; Debug; arm64 macOS; signing disabled; isolated derived data.
+Result: BUILD SUCCEEDED.
+Local SoundBrowserCore and SoundBrowserUI products linked.

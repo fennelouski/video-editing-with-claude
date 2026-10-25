@@ -1,0 +1,221 @@
+{
+  "schema_version": "1.0.0",
+  "library_id": "clauto-cc0-sfx-20261025-v1",
+  "library_version": "3.0.0",
+  "status": "PROPOSED_NOT_IMPLEMENTED",
+  "canonical_reference_manifest_sha256": "4ba9a2884a13501f0fe9205a44752f0235828f79057459edd2369a23a0ccb048",
+  "unique_assets": 1162,
+  "compatible_package_count": 12,
+  "media_embedded": false,
+  "private_library_backend": false,
+  "default_connection": "DISCONNECTED",
+  "automatic_downloads": false,
+  "approval_required_for_each_mount": true,
+  "compatibility_basis": "Actual immutable subset-manifest bytes and exact stable asset ID/original SHA-256 membership in this pinned master; version strings alone are insufficient.",
+  "packages": [
+    {
+      "package_id": "clauto-sfx-kitchen-liquids",
+      "package_revision": "sha256:c5c3ad03810b628cdb62d345f20648727936bce0049cbb908171c4c2a9757c13",
+      "declared_package_library_version": null,
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "c5c3ad03810b628cdb62d345f20648727936bce0049cbb908171c4c2a9757c13",
+      "suggested_relative_package_root": "clauto-sfx-kitchen-liquids",
+      "portable_archive_filename": "clauto-sfx-kitchen-liquids.zip",
+      "portable_archive_sha256": "a6e6457950e9d6a75ff46e0a288d49872c799cb327fe0a6f7c2024af8b8b3ec1",
+      "compressed_bytes": 14461114,
+      "asset_count": 194,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-paper-fabric-camera",
+      "package_revision": "sha256:f12c6a23557311ed3006162348064be14e1e7afac26ac44305894dd0e8f8aee1",
+      "declared_package_library_version": null,
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "f12c6a23557311ed3006162348064be14e1e7afac26ac44305894dd0e8f8aee1",
+      "suggested_relative_package_root": "clauto-sfx-paper-fabric-camera",
+      "portable_archive_filename": "clauto-sfx-paper-fabric-camera.zip",
+      "portable_archive_sha256": "a6114fc9bcd2de434e59883df6175d8643a1841915ef64ed8a5d563e78293f51",
+      "compressed_bytes": 13468237,
+      "asset_count": 117,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-clicks-small-objects",
+      "package_revision": "sha256:a19e1ac1757d9483a24ab2b21182dff42d9a8a95ef8d3ef922856b14aee7792f",
+      "declared_package_library_version": null,
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "a19e1ac1757d9483a24ab2b21182dff42d9a8a95ef8d3ef922856b14aee7792f",
+      "suggested_relative_package_root": "clauto-sfx-clicks-small-objects",
+      "portable_archive_filename": "clauto-sfx-clicks-small-objects.zip",
+      "portable_archive_sha256": "c4e56595e2130c059865652a21ce253ad00ff3056e10c809f81dd6c9b0e078d6",
+      "compressed_bytes": 18371464,
+      "asset_count": 268,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-materials-impacts",
+      "package_revision": "sha256:157d7c89d7d694d7c2e8cd550b9c4e5aca8c73ec1e64499cfdfedfe2b10ae840",
+      "declared_package_library_version": null,
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "157d7c89d7d694d7c2e8cd550b9c4e5aca8c73ec1e64499cfdfedfe2b10ae840",
+      "suggested_relative_package_root": "clauto-sfx-materials-impacts",
+      "portable_archive_filename": "clauto-sfx-materials-impacts.zip",
+      "portable_archive_sha256": "872cec3e2056de19053c90ed26b37c94e65d7617921d257c90f78e490dcd10a1",
+      "compressed_bytes": 10362543,
+      "asset_count": 476,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-motion-risers-pops-v2",
+      "package_revision": "sha256:94a8333fa1841f0d48781a7d2f2be284132523ea7a7ac14cd8e4998ce971c0c8",
+      "declared_package_library_version": "2.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "94a8333fa1841f0d48781a7d2f2be284132523ea7a7ac14cd8e4998ce971c0c8",
+      "suggested_relative_package_root": "clauto-sfx-motion-risers-pops-v2",
+      "portable_archive_filename": "clauto-sfx-motion-risers-pops-v2.zip",
+      "portable_archive_sha256": "7eff115462133ff4f812d0da0eac1955eef335a274ab100c00128d8799e4bcf5",
+      "compressed_bytes": 11485011,
+      "asset_count": 56,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-crowd-cartoon-v2",
+      "package_revision": "sha256:382bb3705bbfbcc1fdece34798758b3d415aa879ae97dab76b45b3a5eaa5c036",
+      "declared_package_library_version": "2.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "382bb3705bbfbcc1fdece34798758b3d415aa879ae97dab76b45b3a5eaa5c036",
+      "suggested_relative_package_root": "clauto-sfx-crowd-cartoon-v2",
+      "portable_archive_filename": "clauto-sfx-crowd-cartoon-v2.zip",
+      "portable_archive_sha256": "e525ed809917d64703e82094154a68cd6c95efa9e5043b96dbdc6093a33f9f28",
+      "compressed_bytes": 20660972,
+      "asset_count": 8,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-weather-water-v3",
+      "package_revision": "sha256:2d70e618cbb23dcb15e765639ba0fc10c4adaf4a77672480eb2dc33ff76619d3",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "2d70e618cbb23dcb15e765639ba0fc10c4adaf4a77672480eb2dc33ff76619d3",
+      "suggested_relative_package_root": "clauto-sfx-weather-water-v3",
+      "portable_archive_filename": "clauto-sfx-weather-water-v3.zip",
+      "portable_archive_sha256": "9af77ab863d6b6090f50178198bf377b7fa85f5798955c1f4383e2c244b68c32",
+      "compressed_bytes": 5841067,
+      "asset_count": 6,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-nature-animals-v3",
+      "package_revision": "sha256:0968cac4c507d9591c58ec12f2fca72017b9ac863368d63ebb2f8b01b38d72aa",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "0968cac4c507d9591c58ec12f2fca72017b9ac863368d63ebb2f8b01b38d72aa",
+      "suggested_relative_package_root": "clauto-sfx-nature-animals-v3",
+      "portable_archive_filename": "clauto-sfx-nature-animals-v3.zip",
+      "portable_archive_sha256": "065ccbabbaadb8ed88f20cb8a6cbbfa07a4878e28e20e2bcd1dccf3cb1e5f1eb",
+      "compressed_bytes": 10924962,
+      "asset_count": 14,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-transport-v3",
+      "package_revision": "sha256:1dc69a320fea7e978e3a45ebbcc029bf4bc7fb2bb4805c666c97698476c7f8cb",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "1dc69a320fea7e978e3a45ebbcc029bf4bc7fb2bb4805c666c97698476c7f8cb",
+      "suggested_relative_package_root": "clauto-sfx-transport-v3",
+      "portable_archive_filename": "clauto-sfx-transport-v3.zip",
+      "portable_archive_sha256": "69c50c28c5ddf4814c801c887a72a3e00097be57c33467eb878710ed96a4fc39",
+      "compressed_bytes": 5175565,
+      "asset_count": 6,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-doors-mechanisms-v3",
+      "package_revision": "sha256:c98a39849ea6d6134ac8420186876091288e5d7726d75ee27b40da3b19b606c7",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "c98a39849ea6d6134ac8420186876091288e5d7726d75ee27b40da3b19b606c7",
+      "suggested_relative_package_root": "clauto-sfx-doors-mechanisms-v3",
+      "portable_archive_filename": "clauto-sfx-doors-mechanisms-v3.zip",
+      "portable_archive_sha256": "e698fc211090f778239d70712d74cc99fa656453875b25ef785a809076243a28",
+      "compressed_bytes": 1535225,
+      "asset_count": 6,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-footsteps-v3",
+      "package_revision": "sha256:37c93aee699a5683811d4ade49d10a1d84c5eae2373295872605479f0924e4b3",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "37c93aee699a5683811d4ade49d10a1d84c5eae2373295872605479f0924e4b3",
+      "suggested_relative_package_root": "clauto-sfx-footsteps-v3",
+      "portable_archive_filename": "clauto-sfx-footsteps-v3.zip",
+      "portable_archive_sha256": "eb8fee327346f6ad510102c3b80734aa16b1b78bf515a23522914d4c0b17d12e",
+      "compressed_bytes": 4225457,
+      "asset_count": 6,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    },
+    {
+      "package_id": "clauto-sfx-human-reactions-v3",
+      "package_revision": "sha256:4a1fea33f93daaca395a9f4639e60dfb4b3a458b873dbde2ae2a679c7c805e54",
+      "declared_package_library_version": "3.0.0",
+      "compatible_master_library_versions": [
+        "3.0.0"
+      ],
+      "package_manifest_filename": "asset-library.json",
+      "package_manifest_sha256": "4a1fea33f93daaca395a9f4639e60dfb4b3a458b873dbde2ae2a679c7c805e54",
+      "suggested_relative_package_root": "clauto-sfx-human-reactions-v3",
+      "portable_archive_filename": "clauto-sfx-human-reactions-v3.zip",
+      "portable_archive_sha256": "c0e8e0a7d84b2f89bc94933217851eedc0fb77bffbd47eb705ee790ffd297a8e",
+      "compressed_bytes": 2586112,
+      "asset_count": 5,
+      "connection": "EXPLICIT_USER_SELECTED_LOCAL_MOUNT_ONLY",
+      "automatic_download": false
+    }
+  ]
+}

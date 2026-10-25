@@ -8,13 +8,15 @@ import SoundBrowserCore
 public struct SoundBrowserView: View {
     @Bindable private var store: SoundBrowserStore
     private let onSelection: ((SoundSelectionReference) -> Void)?
+    private let selectionActionTitle: String?
     @State private var showLibrary = false
     @State private var showCollection = false
     @State private var collectionName = ""
+    @State private var folderPicker = SoundLibraryPicker()
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(store: SoundBrowserStore, onSelection: ((SoundSelectionReference) -> Void)? = nil) {
-        self.store = store; self.onSelection = onSelection
+    public init(store: SoundBrowserStore, selectionActionTitle:String? = nil, onSelection: ((SoundSelectionReference) -> Void)? = nil) {
+        self.store = store; self.onSelection = onSelection;self.selectionActionTitle=selectionActionTitle
     }
     public var body: some View {
         HSplitView {
@@ -123,21 +125,10 @@ public struct SoundBrowserView: View {
                 Button("Clear filters") { resetBrowse(); store.query = "" }.padding()
                 Spacer()
             } else {
-                List(selection: Binding(get: { store.selectedID }, set: { id in
-                    // Native table delegate callbacks must return before the
-                    // inspector and playback state invalidate adjacent views.
-                    DispatchQueue.main.async { store.select(id) }
-                })) {
-                    ForEach(store.visible) { asset in
-                        SoundResultRow(asset: asset, inspection: store.state(asset.id), favorite: store.favorites.contains(asset.id))
-                            .tag(asset.id)
-                            .onDrag { drag(asset) }
-                            .contextMenu {
-                                Button(store.favorites.contains(asset.id) ? "Remove favorite" : "Favorite") { store.toggleFavorite(asset.id) }
-                                Button("Select sound") { store.select(asset.id) }
-                            }
-                    }
-                }.listStyle(.plain).accessibilityIdentifier("soundResults")
+                SoundResultTable(rows:store.visible.map { asset in
+                    .init(id:asset.id,title:asset.title+(store.favorites.contains(asset.id) ? "  ★" : ""),
+                          subtitle:store.state(asset.id).state.rawValue,duration:String(format:"%.2f s",asset.duration),peaks:store.state(asset.id).envelope)
+                },selection:store.selectedID,select:{ store.select($0) }).accessibilityIdentifier("soundResults")
             }
         }
     }
@@ -179,11 +170,18 @@ public struct SoundBrowserView: View {
                     }
                     Text("Not auditioned or approved by a person").font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    Button(onSelection == nil ? "Prepare selection" : "Use selection", systemImage: "arrow.down.to.line") {
+                    Button(selectionActionTitle ?? (onSelection == nil ? "Prepare selection" : "Use selection"), systemImage: "arrow.down.to.line") {
                         guard store.prepareSelection() != nil else { return }
                         if let onSelection, let ref = try? store.selectionReference() { onSelection(ref) }
                     }.buttonStyle(.borderedProminent).disabled(store.state(asset.id).state != .available || store.busy).accessibilityIdentifier("prepareSelection")
                     Text(onSelection == nil ? "Drag a sound or prepare its portable reference. Timeline insertion awaits the editor adapter." : "Add this verified reference using the editor adapter.").font(.caption).foregroundStyle(.secondary)
+                    if store.state(asset.id).state == .available {
+                        Label("Drag selected sound",systemImage:"hand.draw")
+                            .font(.caption).padding(7)
+                            .background(Color(nsColor:.controlBackgroundColor),in:.rect(cornerRadius:5))
+                            .onDrag { drag(asset) }
+                            .help("Drag this verified sound reference to a compatible timeline")
+                    }
                     if let json = store.exportedReference {
                         DisclosureGroup("Selection reference ready") {
                             Text(json).font(.system(size: 10,design: .monospaced)).textSelection(.enabled)
@@ -219,7 +217,7 @@ public struct SoundBrowserView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack { Text("Separate sound library").font(.title2.weight(.semibold)); Spacer(); Button("Done") { showLibrary = false } }
             Text("Link a package root containing its audio folder. Clauto reads and verifies known files; originals stay in your chosen folder.").foregroundStyle(.secondary)
-            Button("Link library folder…", systemImage: "folder.badge.plus") { chooseFolder() }.accessibilityIdentifier("linkLibraryFolder")
+            Button("Link library folder…", systemImage: "folder.badge.plus") { chooseFolder() }.disabled(folderPicker.isPresented).accessibilityIdentifier("linkLibraryFolder")
             if store.mounts.isEmpty { Text("No folders linked. All \(store.catalog.assets.count.formatted()) references remain searchable.").font(.callout) }
             ForEach(store.mounts) { mount in
                 HStack { Image(systemName: "externaldrive"); Text(mount.name).lineLimit(2); Spacer(); Button("Disconnect") { store.unlink(mount.id) } }
@@ -235,13 +233,7 @@ public struct SoundBrowserView: View {
         }.padding(26).frame(width: 560).fixedSize(horizontal: false, vertical: true)
     }
     private func chooseFolder() {
-        store.stop()
-        let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
-        panel.prompt = "Link folder"; panel.message = "Choose one sound package root containing audio/."
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { await store.link(url) }
-        }
+        Task { await folderPicker.choose(store:store) }
     }
     private var collectionSheet: some View {
         VStack(alignment: .leading, spacing: 18) {

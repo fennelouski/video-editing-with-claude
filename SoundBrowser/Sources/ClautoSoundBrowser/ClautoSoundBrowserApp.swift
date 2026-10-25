@@ -43,7 +43,7 @@ import SoundBrowserUI
           if let store {
             SoundBrowserView(store: store)
                 .task {
-                    if let qaOutput { await captureQA(store:store,output: qaOutput) }
+                    if let qaOutput, !ProcessInfo.processInfo.arguments.contains("--qa-interactive") { await captureQA(store:store,output: qaOutput) }
                     else if !store.mounts.isEmpty { await store.recheck() }
                 }
           } else {
@@ -52,32 +52,44 @@ import SoundBrowserUI
         }.defaultSize(width: 1220,height: 790)
             .commands {
                 CommandGroup(after: .newItem) { Button("Stop audition") { store?.stop() }.keyboardShortcut(".",modifiers: .command) }
+                if let qaOutput {
+                    CommandMenu("QA") {
+                        Button("Save QA checkpoint") { saveInteractiveQA(output:qaOutput) }.keyboardShortcut("s",modifiers:[.control,.shift])
+                        Button("Finish silent QA") { saveInteractiveQA(output:qaOutput);NSApp.terminate(nil) }
+                    }
+                }
             }
     }
     private func captureQA(store: SoundBrowserStore, output: URL) async {
         do {
             try FileManager.default.createDirectory(at: output,withIntermediateDirectories: true)
             await settle()
+            phase("disconnected capture")
             try snapshot("01-disconnected",output: output)
             if let qaRoot { await store.link(qaRoot) }
+            phase("linked")
             store.availableOnly = true; await settle(); store.select("BSB-1399")
             await settle(); try snapshot("02-real-envelope",output: output)
+            phase("real envelope captured")
             store.select("BSB-1399"); store.select("BSB-1399")
             store.toggleFavorite("BSB-1399"); store.toggleFavorite("BSB-1399"); store.toggleFavorite("BSB-1399")
             if let id = store.createCollection("Scene accents") { store.toggleMembership(assetID:"BSB-1399",collectionID:id) }
             _ = store.prepareSelection()
             await settle(); try snapshot("03-selection-contract",output: output)
+            phase("selection captured")
             store.query = "boing"; await settle(); store.select("BSB-2278")
             await settle(); try snapshot("04-search",output: output)
+            phase("search captured")
             store.query = "no-sound-matches-this-query"
             await settle(); try snapshot("05-empty",output: output)
+            phase("empty captured")
             store.query = ""; store.availableOnly = false; store.category = "Paper and stationery"; await settle(); store.select("BSB-0785")
             NSApp.windows.first(where: { $0.isVisible })?.setContentSize(NSSize(width: 860,height: 640))
             await settle(); try snapshot("06-missing-compact",output: output)
             NSApp.windows.first(where: { $0.isVisible })?.appearance = NSAppearance(named: .darkAqua)
             await settle(); try snapshot("07-dark",output: output)
             store.cancelCheck(); store.stop(); store.stop()
-            let report: [String:Any] = ["catalogCount":store.catalog.assets.count,"availableCount":store.availableCount,"playerStarts":qaPlayer?.starts ?? -1,"auditionStatus":"NOT_AUDITIONED","capture":"Native running NSWindow contentView cacheDisplay; no screen recording or input synthesis","flows":["selection","repeated selection","favorite toggles","collection membership","reference preparation","text search","empty search","missing asset","resize","dark appearance","cancel check","repeated stop"]]
+            let report: [String:Any] = ["catalogCount":store.catalog.assets.count,"availableCount":store.availableCount,"playerStarts":qaPlayer?.starts ?? -1,"auditionStatus":"NOT_AUDITIONED","capture":"Native running NSWindow contentView cacheDisplay; targeted native controls only, no global input or screen recording","flows":["selection","repeated selection","favorite toggles","collection membership","reference preparation","text search","empty search","missing asset","resize","dark appearance","cancel check","repeated stop"]]
             try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("runtime-report.json"))
         } catch {
             try? Data(error.localizedDescription.utf8).write(to: output.appendingPathComponent("qa-error.txt"))
@@ -85,6 +97,16 @@ import SoundBrowserUI
         NSApp.terminate(nil)
     }
     private func settle() async { try? await Task.sleep(for: .milliseconds(300)) }
+    private func phase(_ name: String) { FileHandle.standardError.write(Data("QA phase: \(name)\n".utf8)) }
+    private func saveInteractiveQA(output:URL) {
+        guard let store else { return }
+        do {
+            try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+            try snapshot("interactive-checkpoint",output:output)
+            let value: [String:Any] = ["catalogCount":store.catalog.assets.count,"version":store.catalog.version,"availableCount":store.availableCount,"playerStarts":qaPlayer?.starts ?? -1,"query":store.query,"selectedID":store.selectedID ?? "","mountCount":store.mounts.count,"favorites":Array(store.favorites).sorted(),"collections":store.collections.map(\.name),"selectionPrepared":store.exportedReference != nil,"humanAudition":"NOT_AUDITIONED"]
+            try JSONSerialization.data(withJSONObject:value,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("interactive-report.json"))
+        } catch { try? Data(error.localizedDescription.utf8).write(to:output.appendingPathComponent("qa-error.txt")) }
+    }
     private func snapshot(_ name: String, output: URL) throws {
         guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
               let bitmap = view.bitmapImageRepForCachingDisplay(in:view.bounds) else { throw SoundFailure.invalid("Native window capture unavailable.") }

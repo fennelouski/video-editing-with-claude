@@ -14,7 +14,8 @@ final class SoundBrowserTests: XCTestCase {
     }
     func testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords() throws {
         let c = try SoundCatalog.bundled()
-        XCTAssertEqual(c.assets.count,1119); XCTAssertEqual(c.categories.count,14)
+        XCTAssertEqual(c.assets.count,1162); XCTAssertEqual(c.categories.count,20)
+        XCTAssertEqual(c.version,"3.0.0")
         XCTAssertEqual(c.asset("BSB-1399")?.auditionStatus,"NOT_AUDITIONED")
         XCTAssertEqual(c.search(text:"bSb-1399").map(\.id),["BSB-1399"])
         XCTAssertTrue(c.search(text:"BOING cartoon").contains { $0.id == "BSB-2278" })
@@ -107,6 +108,7 @@ final class SoundBrowserTests: XCTestCase {
         let (c,temp) = try fixture();defer { try? FileManager.default.removeItem(at:temp) }
         let root = temp.appendingPathComponent("library"), a = c.asset("BSB-1399")!, path = root.appendingPathComponent(a.relativePath)
         try FileManager.default.createDirectory(at:path.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try FileManager.default.copyItem(at:representativeRoot().appendingPathComponent("asset-library.json"),to:root.appendingPathComponent("asset-library.json"))
         let data = try LibraryFiles.verifiedData(asset:a,root:representativeRoot());try data.write(to:path)
         let spy = SpyPlayer(), store = SoundBrowserStore(catalog:c,preferencesURL:temp.appendingPathComponent("prefs"),player:spy)
         await store.link(root);store.select(a.id);XCTAssertEqual(store.availableCount,1)

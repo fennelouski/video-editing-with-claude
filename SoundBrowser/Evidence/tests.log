@@ -1,30 +1,48 @@
 Building for debugging...
 [Using on-disk description]
-[3 / 4] SoundBrowserTests-product
-Build complete! (0.78 sec)
-Test Suite 'All tests' started at 2026-10-25 09:35:19.436.
-Test Suite 'SoundBrowserTests.xctest' started at 2026-10-25 09:35:19.437.
-Test Suite 'SoundBrowserTests' started at 2026-10-25 09:35:19.437.
+[2 / 17] SoundBrowserCore
+[4 / 19] SoundBrowserCore
+[11 / 26] SoundBrowserCore
+[13 / 25] SoundBrowserUI
+[17 / 28] SoundBrowserTests-product
+[22 / 32] SoundBrowserUI
+[26 / 33] SoundBrowserTests-product
+[28 / 32] ClautoSoundBrowser-product
+[31 / 33] ClautoSoundBrowser-product
+[32 / 33] ClautoSoundBrowser-product
+Build complete! (2.86 sec)
+Test Suite 'All tests' started at 2026-10-25 10:18:59.186.
+Test Suite 'SoundBrowserTests.xctest' started at 2026-10-25 10:18:59.187.
+Test Suite 'SoundBrowserTests' started at 2026-10-25 10:18:59.187.
 Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' passed (0.050 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' passed (0.053 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' passed (0.286 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' passed (0.195 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' started.
 Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' passed (0.000 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' passed (4.674 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' passed (4.688 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' passed (0.025 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' passed (0.027 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' passed (0.027 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' passed (0.028 seconds).
 Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' started.
-Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' passed (4.788 seconds).
-Test Suite 'SoundBrowserTests' passed at 2026-10-25 09:35:29.288.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.851) seconds
-Test Suite 'SoundBrowserTests.xctest' passed at 2026-10-25 09:35:29.288.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.851) seconds
-Test Suite 'All tests' passed at 2026-10-25 09:35:29.288.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.852) seconds
+Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' passed (4.760 seconds).
+Test Suite 'SoundBrowserTests' passed at 2026-10-25 10:19:08.938.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 9.751 (9.752) seconds
+Test Suite 'SoundReplacementTests' started at 2026-10-25 10:19:08.938.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testExternalEntitiesAndWrongTimeGridAreRefused]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testExternalEntitiesAndWrongTimeGridAreRefused]' passed (0.003 seconds).
+Test Case '-[SoundBrowserTests.SoundReplacementTests testReplacementPreservesTimingTrimGainFadesAndUndoRedo]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testReplacementPreservesTimingTrimGainFadesAndUndoRedo]' passed (0.031 seconds).
+Test Case '-[SoundBrowserTests.SoundReplacementTests testShorterReplacementIsRefusedWithoutRetimingOrMutation]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testShorterReplacementIsRefusedWithoutRetimingOrMutation]' passed (0.026 seconds).
+Test Suite 'SoundReplacementTests' passed at 2026-10-25 10:19:08.998.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.059 (0.060) seconds
+Test Suite 'SoundBrowserTests.xctest' passed at 2026-10-25 10:19:08.998.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 9.810 (9.812) seconds
+Test Suite 'All tests' passed at 2026-10-25 10:19:08.998.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 9.810 (9.812) seconds
 􀟈  Test run started.
 􀄵  Testing Library Version: 2084
 􀄵  Target Platform: arm64e-apple-macos14.0

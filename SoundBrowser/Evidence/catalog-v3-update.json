@@ -1,0 +1,23 @@
+{
+  "manifestLibraryVersion": 2,
+  "routingLibraryVersion": 3,
+  "setupLibraryVersion": 1,
+  "catalogVersion": "3.0.0",
+  "records": 1162,
+  "preservedIDs": 1119,
+  "newAudioDownloaded": 0,
+  "files": {
+    "clauto-sfx-reference-setup-v3.zip": {
+      "bytes": 1124608,
+      "sha256": "48357e13d0119a696ec14001ab47a02a2f8008f28fa293c36dbc10da68a30bf7"
+    },
+    "clauto-sfx-library-manifest.json": {
+      "bytes": 2800466,
+      "sha256": "4ba9a2884a13501f0fe9205a44752f0235828f79057459edd2369a23a0ccb048"
+    },
+    "clauto-sfx-category-delivery-index.json": {
+      "bytes": 414987,
+      "sha256": "fb6cfbd730a21c9ce9da87826f1b020a5d66f50e39f5b230ce6ae4f5ad1d2fbb"
+    }
+  }
+}

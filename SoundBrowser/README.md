@@ -1,110 +1,100 @@
-# Clauto sound browser — isolated Sol implementation
+# Clauto sound selection and timeline replacement
 
-New owner: this task, `codex/sound-browser-sol`. Source pin: `a0260bd`.
-All feature files live under `SoundBrowser/`. Existing editor, pipeline, design
-review, 3D Studio and handwriting files have no changes. This is an independent
-local clone/checkout; it does not share mutable Git metadata with paused worktrees.
+Implementation owner: this new Sol task. Stable source base `a0260bd`.
+Initial browser commit: `987865b`, branch `codex/sound-browser-sol`.
+Integrated work: `codex/sound-browser-integration-sol`, isolated local checkout.
+No paused worktree or installed/stable app is changed.
 
-## Current product
+## In Clauto Editor
 
-Native macOS SwiftUI browser with 1,119 version-pinned metadata records, 14
-categories, all-word title/tag/creator/ID search, tag filtering, keyboard-native
-row selection, measured peak envelopes, duration/format/license/source details,
-explicit audition/restart/stop/volume controls, persistent favorites and named
-collections, and hash-checked JSON selection/drag handoff.
+Open a saved cut, choose **Sounds…**, and select a connected audio cue. The
+embedded browser provides category/tag/text search, actual WAV peak envelopes,
+duration/format/license/source details, persistent favorites/collections and
+explicit Audition/Stop/Volume controls. Browsing never changes the timeline.
+**Replace selected sound** is the explicit edit.
 
-The first frame is disconnected. Setup links an explicitly chosen **package
-root containing `audio/`**. Multiple packages can be linked independently. Folder
-bookmarks preserve the selection; an unavailable/stale bookmark needs relinking.
-Only known catalog-relative paths are checked, and linked folders are read-only.
-No audio is copied into the editor bundle. No network code runs at launch,
-selection, missing-file recovery, recheck, or any other runtime path.
+Replacement preserves timeline position, source trim, duration, gain/fade XML
+and connected-audio role. Longer candidates use the same range. Candidates
+without enough actual decoded samples are refused; no stretch, loop, padding
+or retiming is introduced. Undo/redo restores XML and its portable references.
+Similarity ranks category, tags and required duration; no acoustic-model claim.
 
-Available means original bytes match the pinned hash, supported WAV samples
-decode, duration/rate/channels match the catalog, and the catalog's CC0 rights
-record is supported by hash-checked bundled license evidence. It does not mean
-a person listened or approved the sound. `NOT_AUDITIONED` is preserved even after
-an audition request; the browser does not infer human listening or approval.
+**Save edited timeline** publishes an immutable child under
+`build/derivatives/<UUID>/` through Clauto's common project mutation lease. It
+rechecks physical root identity, exact saved timeline/version bytes and current
+pointer, freezes only selected audio snapshots, and writes FCPXML plus a
+hash-linked reference receipt. Repeated save is idempotent. Parent/current stay
+unchanged.
 
-PCM/float WAV envelopes come from every original sample frame (peak across
-channels), with 128 linear-amplitude bins. Missing files show a placeholder,
-never invented waveforms. Ogg and other codecs are explicitly unsupported in
-this initial local decoder; no codecs or proxies are installed automatically.
-The representative eight-sound crowd/cartoon package is all supported WAV.
+Current boundary: edited FCPXML is saved and can be revealed from the Sound
+editor. It is not promoted to saved-version history, and the saved movie preview
+is not rerendered. The UI states this explicitly. This is an unmerged local
+integration build, not an installed/released update. Human audition/approval
+remains `NOT_AUDITIONED`.
 
-## Build and open
+## Separate linked library
 
-Run `Tools/build-local.sh` from this directory. It builds without external
-dependencies and creates `.build/Clauto Sound Browser.app`. This is a local
-unsigned prototype, not an installed editor integration or distribution build.
-The app's normal browser preferences live in a separate `Clauto Sound Browser`
-Application Support directory. No existing Clauto preferences/projects are used.
+Shipped metadata: **1,162 references**, release **3.0.0**, 20 categories. All
+1,119 previous IDs/hashes are preserved. Only the eight-sound crowd/cartoon
+package was materialized; no audio was downloaded for the 43 new references.
 
-For sound previews, use Library setup → Link library folder and choose an
-extracted sound package root. Cancel leaves current links intact. Check again
-refreshes availability. Disconnect preserves references/favorites/collections
-and never deletes originals. Actual playback requires pressing Audition.
-The volume slider affects audition only; it never changes timeline gain.
+Setup starts disconnected. Link a package root containing `audio/` and
+`asset-library.json`. Public compatibility metadata pins all 12 subset manifests
+by actual byte hash, allowing compatible older packages under master v3. Folder
+bookmarks preserve selection; missing/stale roots need relinking. Only known
+package-relative paths are read. No home scan, automatic download, codec install
+or original-library write occurs.
 
-## Editor integration boundary
+Availability requires a pinned package manifest, exact ID/hash/path membership,
+original-byte SHA-256, supported WAV decoding and matching duration/rate/channels.
+CC0 rights have hash-checked bundled license evidence. Playback/replacement
+recheck immutable bytes. Originals are never moved or normalized. Explicitly
+selected project snapshots are separate from app bundling.
 
-Add this local package's `SoundBrowserCore` and `SoundBrowserUI` products when
-the editor owner is ready. A project-owned `SoundBrowserStore` can be passed to
-`SoundBrowserView(store:onSelection:)`. Without that callback the host says
-**Prepare selection**, exposes its JSON and supports copy/save/drag. It never
-claims a timeline insertion occurred. Drag representations are
-`com.clauto.sound-reference` and `public.json`.
+PCM/float WAV is supported. The catalog has 565 WAV and 597 Ogg references. Ogg
+stays searchable and explicitly unavailable for audition/selection. Envelopes
+use every real WAV frame, peak across channels, 128 linear-amplitude bins.
+Missing/unsupported media has a placeholder, never an invented waveform.
 
-`SoundSelectionReference` carries library ID/version, case-sensitive asset ID,
-`sfx://asset/ID`, expected original SHA-256, duration, license and audition state.
-It contains no machine path or private Library ID. `validate(catalog:)` rejects
-identity/version/hash/URI/rights drift. The editor adapter must re-resolve the
-same pinned release, recheck local bytes, bind the saved-cut/timeline identity,
-and publish through Clauto's existing project mutation/derived-cut path.
-The browser does not hold that lease or mutate a saved cut.
+`Resources/providers.json` is a separate proposed public acquisition contract,
+not a downloader. Private Nathan Library IDs delivered inputs only and are
+absent from shipped catalog/provider/compatibility/reference data.
 
-`SoundInsertionRequest` provides validated integer timeline/source/duration
-frames at **1001/24000 seconds per frame**, with explicit independent gain.
-Decoded requests validate timebase, finite gain and source bounds; the receiving
-adapter must also call `validate(catalog:)`. Keep the cue as a connected editable
-audio layer using existing engine FCPXML machinery. Source-time placement must
-pass through the engine's timeline map before constructing the request.
+## Package and integration
 
-## Versioned catalog and provider contract
+Local products: `SoundBrowserCore`, `SoundBrowserUI`, plus a standalone dev host.
+The editor Xcode project links those products. `ReviewWorkspace` opens
+`SoundTimelineEditorView`; `SoundTimelineController` owns the verified draft.
 
-Bundled metadata is derived from the canonical Library manifest version 1,
-content release 2.0.0. The compact catalog digest is pinned in code; license
-evidence files are individually hashed. An updated catalog is a new reviewed
-metadata release, not an opportunistic replacement on launch. Preferences retain
-IDs missing from a future release so user collections are not silently erased.
-Portable cues continue to require their exact library version and media hash.
+Portable references contain library ID/version, case-sensitive asset ID,
+`sfx://asset/ID`, original hash, duration, license and audition state, without
+machine paths/private delivery IDs. Insertion requests use integer frames at
+1001/24000 seconds, explicit gain and strict bounds/release validation.
 
-`Resources/providers.json` preserves the separate **proposed public provider
-reference contract**: original source pages, explicit optional acquisition modes,
-immutable archive/file hashes and budgets where supplied. It is reference data,
-not a downloader. Private Nathan Library IDs only delivered inputs into this
-workspace and are absent from shipped metadata/provider/cue data.
+`Integration/sound_timeline_adapter.py` exercises the stable engine FCPXML
+reader/writer for explicit insertion. It verifies placement/trim/gain and parent
+preservation using the common lock and descriptor-relative writes. It does not
+fabricate movie/full-decode or editor-history admission receipts. The actual
+editor replacement implementation is native Swift.
 
-A future acquisition adapter must show selected collections and destinations,
-bind consent to release/URLs/hashes/byte limits, validate safe extraction and
-license evidence, then atomically publish availability. Nothing in this module
-uses private Library delivery as a public distribution backend or silently
-downloads all assets. Original-provider manual acquisition is the current setup
-route for optional collections.
+`Tools/update-catalog.py` derives future metadata from an explicitly pinned
+local release and refuses silent changes to existing IDs/hashes. Updates are
+reviewed releases, not automatic load/reconnect actions.
 
-## Verification and limits
+## Verification
 
-`Tools/verify-local.sh /absolute/path/to/eight-sound-package` runs deterministic
-tests with a fake audio player; it never sends audio to an output device.
-`Tools/capture-local.sh /absolute/path/to/eight-sound-package` captures actual
-running native window content at large/compact sizes and light/dark appearance,
-using a QA-only player that blocks output. It drives state through the same
-controller methods as the UI, without synthesizing clicks or stealing focus.
-Captures are implementation evidence, not design or human approval.
+`Tools/build-local.sh` builds the standalone dev host. Build the editor from
+`Clauto Editor/Clauto Editor.xcodeproj`, scheme `Clauto Editor`, Debug, signing
+disabled, using workspace-local derived data. Neither build installs/deploys.
 
-Remaining acceptance: human audition/output-device behavior, VoiceOver spoken
-traversal, physical keyboard/drag target interaction, native picker cancellation,
-disconnected/remounted external volumes, expanded text sizing, public acquisition
-adapter and editor timeline integration. These must not be reported as verified
-from a screenshot or compile result. No deployment, notarization, store upload,
-account creation, paid service or live project change is part of this task.
+`Tools/verify-local.sh /absolute/package/root`: 10 package tests.
+`Integration/test_sound_timeline_adapter.py`: 6 engine-fixture tests with
+`CLAUTO_SFX_TEST_ROOT` and installed FFmpeg, without audio output.
+Root SwiftPM `SoundTimelineControllerTests`: 2 native controller fixture tests.
+Actual UI checks cover search, keyboard, picker cancel/link, short-candidate
+refusal, explicit replacement, undo/redo and separate save. Audition is blocked.
+
+See `Evidence/INTEGRATION_REVIEW.md` for current evidence. `Evidence/REVIEW.md`
+and initial captures are historical standalone v2 evidence. Remaining acceptance:
+human audio/output quality, spoken VoiceOver, expanded text sizing, external
+volume remounts, Ogg decode, movie rerender and saved-version promotion.

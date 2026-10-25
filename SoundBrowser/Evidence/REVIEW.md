@@ -1,3 +1,5 @@
+> Historical initial standalone v2 review. Current integration evidence: INTEGRATION_REVIEW.md.
+
 # Sound browser implementation review
 
 Date: 2026-10-25. Owner: new Sol sound-browser task. Base: `a0260bd`.

@@ -27,6 +27,7 @@ private struct BrowserPreferences: Codable {
     public var favoritesOnly = false
     public var collectionID: UUID?
     public var availableOnly = false
+    public var recommendedIDs: Set<String>?
     public private(set) var selectedID: String?
     public private(set) var favorites: Set<String> = []
     public private(set) var collections: [SoundCollection] = []
@@ -70,6 +71,7 @@ private struct BrowserPreferences: Codable {
         else { ids = favoritesOnly ? favorites : nil }
         return catalog.search(text: query, category: category, tag: tag, ids: ids)
             .filter { !availableOnly || state($0.id).state == .available }
+            .filter { recommendedIDs == nil || recommendedIDs!.contains($0.id) }
     }
     public func state(_ id: String) -> AssetInspection {
         inspections[id] ?? .init(mounts.isEmpty ? .notLinked : .missing)
@@ -109,6 +111,7 @@ private struct BrowserPreferences: Codable {
         let canonical = url.standardizedFileURL
         if roots.values.contains(where: { $0.standardizedFileURL == canonical }) { await recheck(); return }
         do {
+            _ = try catalog.verifyPackage(root:canonical)
             let bookmark = try canonical.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
             let mount = LibraryMount(id: UUID(), name: url.lastPathComponent, bookmark: bookmark)
             _ = canonical.startAccessingSecurityScopedResource(); roots[mount.id] = canonical
@@ -130,27 +133,33 @@ private struct BrowserPreferences: Codable {
     public func recheck() async {
         stop(); cancelCheck()
         let token = UUID(); generation = token; busy = true; status = "Checking local hashes and WAV previews…"
-        let assets = catalog.assets, mounts = self.mounts, roots = self.roots
-        let task = Task.detached(priority: .utility) { () -> ([String:AssetInspection],[String:UUID]) in
+        let catalog = self.catalog, assets = catalog.assets, mounts = self.mounts, roots = self.roots
+        let task = Task.detached(priority: .utility) { () -> ([String:AssetInspection],[String:UUID],String?) in
             var found: [String:AssetInspection] = [:], owners: [String:UUID] = [:]
+            var members: [UUID:Set<String>] = [:], unavailable = false
+            for mount in mounts {
+                guard let root = roots[mount.id], let ids = try? catalog.verifyPackage(root:root) else { unavailable = true;continue }
+                members[mount.id] = ids
+            }
             for asset in assets {
                 if Task.isCancelled { break }
-                var best = AssetInspection(mounts.isEmpty ? .notLinked : .missing)
+                var best = AssetInspection(.notLinked)
                 for mount in mounts {
-                    guard let root = roots[mount.id] else { continue }
+                    guard let root = roots[mount.id], members[mount.id]?.contains(asset.id) == true else { continue }
                     let result = LibraryFiles.inspect(asset: asset, root: root)
                     if result.state == .available { best = result; owners[asset.id] = mount.id; break }
-                    if result.state != .missing { best = result }
+                    if best.state == .notLinked || result.state != .missing { best = result }
                 }
                 found[asset.id] = best
             }
-            return (found,owners)
+            return (found,owners,unavailable ? "A linked folder is unavailable or its package manifest changed. Relink the original package." : nil)
         }
         work = Task { [weak self] in
             let result = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
             guard let self, self.generation == token, !Task.isCancelled else { return }
             self.inspections = result.0; self.assetMount = result.1; self.busy = false
             self.status = "\(self.availableCount) available offline · \(self.catalog.assets.count) indexed · no downloads"
+            if let warning = result.2 { self.status += " · " + warning }
         }
         await work?.value
     }
@@ -171,6 +180,11 @@ private struct BrowserPreferences: Codable {
         guard let asset = selected else { throw SoundFailure.invalid("Select a sound first.") }
         _ = try checkedData(asset)
         return .init(catalog: catalog, asset: asset)
+    }
+    public func verifiedSelectionSnapshot(_ reference: SoundSelectionReference) throws -> (data:Data,url:URL) {
+        let asset = try reference.validate(catalog:catalog)
+        guard let mountID=assetMount[asset.id],let root=roots[mountID] else { throw SoundFailure.invalid("Relink the selected sound's library package.") }
+        return (try checkedData(asset),root.appendingPathComponent(asset.relativePath))
     }
     @discardableResult public func prepareSelection() -> String? {
         do { let value = try selectionReference().json(); exportedReference = value; return value }

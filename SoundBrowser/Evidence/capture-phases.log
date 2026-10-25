@@ -1,0 +1,7 @@
+2026-10-25 09:41:13.011 ClautoSoundBrowser[53360:178073002] WARNING: Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future.
+QA phase: disconnected capture
+QA phase: linked
+QA phase: real envelope captured
+QA phase: selection captured
+QA phase: search captured
+QA phase: empty captured

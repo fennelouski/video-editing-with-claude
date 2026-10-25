@@ -9,6 +9,7 @@ struct ReviewWorkspace: View {
     @State private var assets = true
     @State private var feedback = true
     @State private var building = false
+    @State private var soundEditing = false
     @State private var focusGeneration = UUID()
     @State private var workspaceWidth: CGFloat = 0
     @FocusState private var pane: Pane?
@@ -27,6 +28,10 @@ struct ReviewWorkspace: View {
                     Spacer()
                     Button("Commands…") { router.perform(.palette,explicitControl: true) }
                     Button("Build…") { building = true }
+                    Button("Sounds…") {
+                        for session in store.reviewPlayers.values where session.ownerID==router.id && session.project.id==project.id { session.control.pause() }
+                        soundEditing = true
+                    }.disabled(selected == nil).accessibilityIdentifier("editTimelineSounds")
                     Button { feedback.toggle() } label: { ClautoIcon(.conversation) }.accessibilityLabel("Toggle feedback").clautoHelp("Feedback")
                 }.padding(10)
                 ClautoRule()
@@ -74,6 +79,9 @@ struct ReviewWorkspace: View {
             .sheet(isPresented: $building) {
                 VStack { HStack { Text("Build and export").font(.title2); Spacer(); Button("Done") { building = false }.keyboardShortcut(.cancelAction) }.padding(); CutView(store: store,playbackRouter: router,showPlayers: false) }
                     .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper).clautoThemeAppearance()
+            }
+            .sheet(isPresented:$soundEditing) {
+                if let selected { SoundTimelineEditorView(project:project,version:selected) }
             }
     }
     private func handle(_ command: EditorCommand) {

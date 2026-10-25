@@ -1,0 +1,11 @@
+test_cancel_or_changed_current_during_work_cannot_publish (__main__.TimelineIntegration.test_cancel_or_changed_current_during_work_cannot_publish) ... ok
+test_invalid_placements_and_gain_never_publish (__main__.TimelineIntegration.test_invalid_placements_and_gain_never_publish) ... ok
+test_missing_tampered_and_symlink_libraries_are_refused (__main__.TimelineIntegration.test_missing_tampered_and_symlink_libraries_are_refused) ... ok
+test_real_sound_insertion_crosses_shot_boundary_and_preserves_parent (__main__.TimelineIntegration.test_real_sound_insertion_crosses_shot_boundary_and_preserves_parent) ... ok
+test_root_replacement_and_lock_conflict_do_not_publish (__main__.TimelineIntegration.test_root_replacement_and_lock_conflict_do_not_publish) ... ok
+test_stale_parent_current_pointer_hash_and_version_are_refused (__main__.TimelineIntegration.test_stale_parent_current_pointer_hash_and_version_are_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.713s
+
+OK

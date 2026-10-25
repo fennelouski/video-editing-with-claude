@@ -24,10 +24,33 @@ public struct SoundCatalog: Codable, Sendable {
     public var categories: [String] { Array(Set(assets.map(\.category))).sorted() }
     public func asset(_ id: String?) -> SoundAsset? { assets.first { $0.id == id } }
 
+    public func verifyPackage(root: URL) throws -> Set<String> {
+        let resource = Bundle.module.resourceURL!.appendingPathComponent("Resources/package-compatibility.json")
+        let compatibility = try Data(contentsOf:resource)
+        guard digest(compatibility) == "48c5baeacfe4dd0ba14c04cd5c4369b5028a4f00c32d99d200307e6eb3ab1fed",
+              let record = try JSONSerialization.jsonObject(with:compatibility) as? [String:Any],
+              record["canonical_reference_manifest_sha256"] as? String == sourceManifestSHA256,
+              record["library_version"] as? String == version,
+              let packages = record["packages"] as? [[String:Any]] else { throw SoundFailure.invalid("Restore this catalog's pinned package compatibility records.") }
+        let bytes = try LibraryFiles.read(root:root,path:"asset-library.json",limit:8*1024*1024)
+        guard let package = packages.first(where:{ $0["package_manifest_sha256"] as? String == digest(bytes) }),
+              let object = try JSONSerialization.jsonObject(with:bytes) as? [String:Any],
+              let assets = object["assets"] as? [[String:Any]], assets.count == package["asset_count"] as? Int else {
+            throw SoundFailure.invalid("This folder has no compatible pinned package manifest. Choose the original package root containing audio/ and asset-library.json.")
+        }
+        var ids = Set<String>()
+        for entry in assets {
+            guard let id = entry["asset_id"] as? String, let asset = self.asset(id),
+                  entry["sha256"] as? String == asset.sha256, entry["file_path"] as? String == asset.relativePath,
+                  ids.insert(id).inserted else { throw SoundFailure.invalid("The selected package does not match this catalog's stable asset IDs and hashes.") }
+        }
+        return ids
+    }
+
     public static func bundled() throws -> SoundCatalog {
         let root = Bundle.module.resourceURL!.appendingPathComponent("Resources")
         let data = try Data(contentsOf: root.appendingPathComponent("catalog.json"))
-        guard digest(data) == "bac71f92609b2cd23a7ef9aafe7a895d5907eb96fb56ee938d7d4797038bdc67" else {
+        guard digest(data) == "169d8a73d8464f3435806436e8707126120f08590b0182692ce82c80f8c18e00" else {
             throw SoundFailure.invalid("The bundled catalog changed. Restore its pinned release.")
         }
         let catalog = try decode(data)
