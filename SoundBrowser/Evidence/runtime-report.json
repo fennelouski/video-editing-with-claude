@@ -1,0 +1,21 @@
+{
+  "auditionStatus" : "NOT_AUDITIONED",
+  "availableCount" : 8,
+  "capture" : "Native running NSWindow contentView cacheDisplay; no screen recording or input synthesis",
+  "catalogCount" : 1119,
+  "flows" : [
+    "selection",
+    "repeated selection",
+    "favorite toggles",
+    "collection membership",
+    "reference preparation",
+    "text search",
+    "empty search",
+    "missing asset",
+    "resize",
+    "dark appearance",
+    "cancel check",
+    "repeated stop"
+  ],
+  "playerStarts" : 0
+}

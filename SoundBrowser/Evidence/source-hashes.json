@@ -1,0 +1,22 @@
+{
+  "sourceBase": "a0260bd",
+  "files": {
+    "SoundBrowser/Package.swift": "7bb1b928ee493b9a072aa0767bf247b6ac22e4d1cbbb4dbb252b43542d9eadef",
+    "SoundBrowser/Sources/ClautoSoundBrowser/ClautoSoundBrowserApp.swift": "4efa2ab83e5a0ffdf9ca894fb45b61869175978021df2335bb9f83e927078eb8",
+    "SoundBrowser/Sources/SoundBrowserCore/BrowserStore.swift": "0272a417fa28931ddf3679cae440946489f826d9a7f44d4232ea3cb1ab993810",
+    "SoundBrowser/Sources/SoundBrowserCore/Catalog.swift": "e9bd20ae04f14c8b6e2dae3dca19a6d0cb9658ddefd96c25c86ea8ffcde106d2",
+    "SoundBrowser/Sources/SoundBrowserCore/LibraryFiles.swift": "6d6cc1a48b3a2b6ba733a34c02b64de5760639b434b32b8831842b0434860733",
+    "SoundBrowser/Sources/SoundBrowserCore/Playback.swift": "7e4fd2c1799280f614e86ecfcaf52ca7c0b9bd7761d24e66d095fa66bce84e00",
+    "SoundBrowser/Sources/SoundBrowserCore/Resources/catalog.json": "bac71f92609b2cd23a7ef9aafe7a895d5907eb96fb56ee938d7d4797038bdc67",
+    "SoundBrowser/Sources/SoundBrowserCore/Resources/licenses/BigSoundBank-license-2026-10-25.txt": "8b60bf7bf90510fd567df6bc1589157bbd8b4804ef5b1438a1031b89fbcb2263",
+    "SoundBrowser/Sources/SoundBrowserCore/Resources/licenses/CC0-1.0-legalcode-2026-10-25.txt": "2398a010252ba6c96ab1eb4992213e2dd59803e1fc29150bad74967d1a2ee8ab",
+    "SoundBrowser/Sources/SoundBrowserCore/Resources/licenses/Wyzowl-CC0-LICENSE.txt": "7179683e8000e6bdc9bbc60d85edf0a4ac8e76f951857f54fcb775d5886f1309",
+    "SoundBrowser/Sources/SoundBrowserCore/Resources/providers.json": "54eb4ee94e5239de0c1d9694f1859b55253e4a05ccfa8c5e5aff2e300e3f8af2",
+    "SoundBrowser/Sources/SoundBrowserCore/Selection.swift": "5bd241c9bd2ed355c5c0a8dc814887b1792185f1f22457d96b64491d0a28196e",
+    "SoundBrowser/Sources/SoundBrowserUI/SoundBrowserView.swift": "0adc2feefd82758568635fafbcf7dbcf9729dd2ad44635cf972216c4b79c9209",
+    "SoundBrowser/Tests/SoundBrowserTests/SoundBrowserTests.swift": "3bae06321907335f42b9c6a860f9ce945065c9b5bcc8380a67e86c7da7e904b5",
+    "SoundBrowser/Tools/build-local.sh": "b6d56d4aa35b208d40c7d9ef4220996c2e89d0f3378d3a0cb890b81a2dc4a8e2",
+    "SoundBrowser/Tools/capture-local.sh": "d5078046b8ed7057e92138860206efb43e66d2e158a7b76dc059755613f5b6e1",
+    "SoundBrowser/Tools/verify-local.sh": "4c5b038bf61baa276e93f4852e00b43f2086b638eb497fe9214405232d689070"
+  }
+}

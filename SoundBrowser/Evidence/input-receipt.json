@@ -1,0 +1,28 @@
+{
+  "inputs": [
+    {
+      "file": "clauto-sfx-crowd-cartoon-v2.zip",
+      "bytes": 20660972,
+      "sha256": "e525ed809917d64703e82094154a68cd6c95efa9e5043b96dbdc6093a33f9f28"
+    },
+    {
+      "file": "clauto-sfx-reference-setup-v2.zip",
+      "bytes": 894373,
+      "sha256": "4b032ce51b4d488d51d653cb6a53322cf970379cb090bafde963e2c91028f924"
+    },
+    {
+      "file": "clauto-sfx-library-manifest.json",
+      "bytes": 2689703,
+      "sha256": "106498a2b3d450342bc14800ff2ae3e6ec2b344783e09ab30602fbf5d39bff8c"
+    },
+    {
+      "file": "clauto-sfx-category-delivery-index.json",
+      "bytes": 397956,
+      "sha256": "e1a78c423c4824c17d9c5072be3a4d6753d0c1e323cdc7e791f8e313ff93c9ed"
+    }
+  ],
+  "catalogSHA256": "bac71f92609b2cd23a7ef9aafe7a895d5907eb96fb56ee938d7d4797038bdc67",
+  "assetCount": 1119,
+  "materializedAudioCount": 8,
+  "auditionStatus": "NOT_AUDITIONED"
+}

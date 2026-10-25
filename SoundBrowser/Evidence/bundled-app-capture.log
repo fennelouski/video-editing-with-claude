@@ -1,0 +1,1 @@
+2026-10-25 09:37:15.168 ClautoSoundBrowser[52498:178066344] WARNING: Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future.

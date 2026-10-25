@@ -1,0 +1,621 @@
+{
+  "schema_version": "1.0.0",
+  "library_id": "clauto-cc0-sfx-20261025-v1",
+  "library_version": "2.0.0",
+  "status": "PROPOSED_NOT_IMPLEMENTED",
+  "media_embedded": false,
+  "private_library_backend": false,
+  "network_default": "DISABLED",
+  "download_selection_default": [],
+  "explicit_user_approval_required": true,
+  "providers": [
+    {
+      "provider_ref": "OGA-OW-MORE202",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/202-more-sound-effects",
+      "public_download_url": "https://opengameart.org/sites/default/files/MoreSounds.zip",
+      "archive_sha256": "9428c1437137d9ea06ba94e13da12488d4c57990a1c32d83db9e7707e69fb3af",
+      "compressed_bytes": 14937403,
+      "expanded_bytes": 24630100,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-OW-CLICK87",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/87-clickety-clips",
+      "public_download_url": "https://opengameart.org/sites/default/files/Click_Clips.zip",
+      "archive_sha256": "48a6d38931a5a388961b52aebedc9724193dd5aca1b3f13a7d63f66a24cd9884",
+      "compressed_bytes": 3791043,
+      "expanded_bytes": 5568528,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-RD-SFX100",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/100-cc0-sfx",
+      "public_download_url": "https://opengameart.org/sites/default/files/100-CC0-SFX_0.zip",
+      "archive_sha256": "a5c135878c132f1c59cca54e60061c296cd0ac27ad031ca2c41b8cd5cab3c706",
+      "compressed_bytes": 2921904,
+      "expanded_bytes": 3197536,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-RD-SFX100V2",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/100-cc0-sfx-2",
+      "public_download_url": "https://opengameart.org/sites/default/files/sfx_100_v2.zip",
+      "archive_sha256": "0fc61b4494e2e893c0c015ced4877b3f689c7d84a48cb61daecd7ddb52db797b",
+      "compressed_bytes": 2367871,
+      "expanded_bytes": 2575860,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-RD-WOODMETAL100",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "public_download_url": "https://opengameart.org/sites/default/files/100-CC0-wood-metal-SFX.zip",
+      "archive_sha256": "be6eba63b03409ac0c77787a956b1503a7c186403d04aef9725c52644a4b7878",
+      "compressed_bytes": 1990361,
+      "expanded_bytes": 2192988,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-RD-WATER40",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/40-cc0-water-splash-slime-sfx",
+      "public_download_url": "https://opengameart.org/sites/default/files/water-splash-slime-sfx.zip",
+      "archive_sha256": "7cd39abb49d4362a37ba18dc0e454c7dc1d08029d4e5b683149046bc237b2eba",
+      "compressed_bytes": 2259262,
+      "expanded_bytes": 2445424,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-RD-BREAK75",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx",
+      "public_download_url": "https://opengameart.org/sites/default/files/sfx_breaking_and_falling.zip",
+      "archive_sha256": "e6ee04d91c5f4d30cfda1260d2c9d1faf96fda36319287215fbd07bcb1a80451",
+      "compressed_bytes": 1624406,
+      "expanded_bytes": 1788461,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "KEN-IMPACT",
+      "license": "CC0-1.0",
+      "source_page": "https://kenney.nl/assets/impact-sounds",
+      "public_download_url": "https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip",
+      "archive_sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8",
+      "compressed_bytes": 800850,
+      "expanded_bytes": 1035004,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "KEN-CASINO",
+      "license": "CC0-1.0",
+      "source_page": "https://kenney.nl/assets/casino-audio",
+      "public_download_url": "https://kenney.nl/media/pages/assets/casino-audio/2472606a04-1721639069/kenney_casino-audio.zip",
+      "archive_sha256": "f36250766ac5bc378c13708ddf12a23a8e54a3251f8d482c7536e51b5dbafa18",
+      "compressed_bytes": 876839,
+      "expanded_bytes": 955950,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "OGA-VEH-ACCESSORY155",
+      "license": "CC0-1.0",
+      "source_page": "https://opengameart.org/content/fantasy-accessory-sfx-library",
+      "public_download_url": "https://opengameart.org/sites/default/files/accessory.zip",
+      "archive_sha256": "1d1166b2469be771d8894cd77ffcd6d500bcb676e2b6cb1c9cecacf97e957217",
+      "compressed_bytes": 14561483,
+      "expanded_bytes": 30023410,
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_ARCHIVE_ONLY",
+      "execute_contents": false,
+      "requires_account": false
+    },
+    {
+      "provider_ref": "WYZ-SFXKIT",
+      "license": "CC0-1.0",
+      "source_page": "https://github.com/wyzowl/sfx-kit",
+      "pinned_commit": "92780e7ab0cdfb557497a988089c47f46e8c7412",
+      "download_strategy": "EXPLICIT_CATEGORY_OPT_IN_INDIVIDUAL_WAVS_ONLY",
+      "requires_account": false,
+      "files": [
+        {
+          "asset_id": "WYZ-whoosh-fast-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-fast-hard.wav",
+          "sha256": "c215bf14e1a09401f07869ed20f38f272681fbfbf176f1eaeba5a039d25006cd",
+          "size_bytes": 72630
+        },
+        {
+          "asset_id": "WYZ-whoosh-fast-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-fast-medium.wav",
+          "sha256": "b3cf3c589e738a62c1cc9bd3f620b69c831b64616427fdce57ba073d2a357a0d",
+          "size_bytes": 72632
+        },
+        {
+          "asset_id": "WYZ-whoosh-fast-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-fast-soft.wav",
+          "sha256": "ecc83a9cab2342eba9fa71dc321776156ffefbdcda2c672298fda385a4e0a103",
+          "size_bytes": 72198
+        },
+        {
+          "asset_id": "WYZ-whoosh-medium-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-medium-hard.wav",
+          "sha256": "0f59bd63013b353514af902aefc78b5c973a8e92833934e726b68cd2e84e6b34",
+          "size_bytes": 158600
+        },
+        {
+          "asset_id": "WYZ-whoosh-medium-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-medium-medium.wav",
+          "sha256": "f044a68bb41007a7c926b4d09c8755700c4770ac737a62a88f87af896c69a534",
+          "size_bytes": 148954
+        },
+        {
+          "asset_id": "WYZ-whoosh-medium-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-medium-soft.wav",
+          "sha256": "a114611a09e02ab26cfbd8d796279eac358b6df4c3923db3f269ac34c340eeac",
+          "size_bytes": 156440
+        },
+        {
+          "asset_id": "WYZ-whoosh-slow-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-slow-hard.wav",
+          "sha256": "0d3cebb7be782173af0f48f5a7222e6aadcab25cfd22133edd043febbb4bb4eb",
+          "size_bytes": 292806
+        },
+        {
+          "asset_id": "WYZ-whoosh-slow-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-slow-medium.wav",
+          "sha256": "abf3f8250bee145041d0d6786f34a5cbbfe14d4e9526e3395fc5a162a39808a9",
+          "size_bytes": 288776
+        },
+        {
+          "asset_id": "WYZ-whoosh-slow-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/whooshes/whoosh-slow-soft.wav",
+          "sha256": "9eadf61f7476f2ca0a6d6acd95a7be26a2ac57ed6c0ea7e76473051a926a2baa",
+          "size_bytes": 302166
+        },
+        {
+          "asset_id": "WYZ-swish-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/swish-hard.wav",
+          "sha256": "9001fbba7c50c7a3a60841fc35936f59b53d42257cb505cf1f16d40963bb5a9f",
+          "size_bytes": 50448
+        },
+        {
+          "asset_id": "WYZ-swish-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/swish-medium.wav",
+          "sha256": "41a97a849f311cdb0da2de185386fc88e74db2df54d214bc8d9ff931b5e83c9c",
+          "size_bytes": 57938
+        },
+        {
+          "asset_id": "WYZ-swish-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/swish-soft.wav",
+          "sha256": "c18c581c43ac848b10c946e2a3c402b79370d99b057c2399b832d39f9d9236ab",
+          "size_bytes": 64416
+        },
+        {
+          "asset_id": "WYZ-zip-in-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-in-hard.wav",
+          "sha256": "cc7ac891e6c5859ded16b886445e2891aad0067a8fce5c53e1153c661eccd219",
+          "size_bytes": 81840
+        },
+        {
+          "asset_id": "WYZ-zip-in-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-in-medium.wav",
+          "sha256": "9df62ced1c90dc50943829c8fdd8e804a7add2d6e92b4b219a586f066dedf559",
+          "size_bytes": 100706
+        },
+        {
+          "asset_id": "WYZ-zip-in-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-in-soft.wav",
+          "sha256": "6717856c6d9b034cdb741b606060c3ba73b7d029b532fc1b5319870e73507d57",
+          "size_bytes": 119424
+        },
+        {
+          "asset_id": "WYZ-zip-out-hard",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-out-hard.wav",
+          "sha256": "b6371cca73f522ad52eb70b50e2189b2ef972043cf1617db4355b41f9684439c",
+          "size_bytes": 57506
+        },
+        {
+          "asset_id": "WYZ-zip-out-medium",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-out-medium.wav",
+          "sha256": "1fdcc8b61338f5523ac7142b0c967b2ec3cd31896812f5b790bd3ecb9306019e",
+          "size_bytes": 73780
+        },
+        {
+          "asset_id": "WYZ-zip-out-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swishes-and-zips/zip-out-soft.wav",
+          "sha256": "74afbc5315e43b0e5cb50dc7b3153decf5eca2cf94eddaf0d8138dffde9c917e",
+          "size_bytes": 88610
+        },
+        {
+          "asset_id": "WYZ-swipe-fast-firm",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-fast-firm.wav",
+          "sha256": "0a3583738e28e72309aa25902d6ad57fc891f71ec94ee3a56cc26b514a1a6554",
+          "size_bytes": 28778
+        },
+        {
+          "asset_id": "WYZ-swipe-fast-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-fast-soft.wav",
+          "sha256": "aeafbf705dd62cd55d55b3a99e14bf508d09cbd244b004da0c40d3f9bf8377a8",
+          "size_bytes": 29858
+        },
+        {
+          "asset_id": "WYZ-swipe-medium-firm",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-medium-firm.wav",
+          "sha256": "e446cca2958bba55429d66dbfb7397bd1b448a16fa313ecc1a546f45a6385518",
+          "size_bytes": 40300
+        },
+        {
+          "asset_id": "WYZ-swipe-medium-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-medium-soft.wav",
+          "sha256": "283b80027d256476b872fe711d116c5c7ac0f2c1095953bc6d0458c85276e5eb",
+          "size_bytes": 42388
+        },
+        {
+          "asset_id": "WYZ-swipe-slow-firm",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-slow-firm.wav",
+          "sha256": "7a19e26b05011ec34825a917bcbd213fa2f7dba117350c44587cade2b060409c",
+          "size_bytes": 59810
+        },
+        {
+          "asset_id": "WYZ-swipe-slow-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/swipes/swipe-slow-soft.wav",
+          "sha256": "037b1cde932e2c2d390143822b5d86cbeb0377924868ccec53a22aaad03f9894",
+          "size_bytes": 62186
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-long-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-long-soft.wav",
+          "sha256": "f619338ddc12bf552a14a443e47bff0b9a374bfef35c631df405c4665b5bc088",
+          "size_bytes": 389734
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-long-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-long-strong.wav",
+          "sha256": "72b515a9753c1d13e7d4ebb2f8d841c2bc4c2f5b16152f8d6e469351b5d7b332",
+          "size_bytes": 391176
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-medium-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-medium-soft.wav",
+          "sha256": "200b74d413d51459fa3274b82616f70dc8ba6dc93430912a18d611e03dd5ae6d",
+          "size_bytes": 248184
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-medium-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-medium-strong.wav",
+          "sha256": "334a35c64b5943029ab7bca0047e9f3a87d54a2fae961512ff24ccea86203d6e",
+          "size_bytes": 240986
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-short-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-short-soft.wav",
+          "sha256": "2fc7f9064b174d7d3be16797536f4bda51e4b3f497fe4558db190da2c555cb1d",
+          "size_bytes": 146806
+        },
+        {
+          "asset_id": "WYZ-reverse-whoosh-short-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/reverse-whooshes/reverse-whoosh-short-strong.wav",
+          "sha256": "975b6bd10bfa463165804760eb25e635096d7d46ef8ab1869afd33d5286974ad",
+          "size_bytes": 143784
+        },
+        {
+          "asset_id": "WYZ-faller-1s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-1s-soft.wav",
+          "sha256": "137045628ec4b9c5f06ab48c074328555edd09a7a4711e278d83fddfad1b17b8",
+          "size_bytes": 248314
+        },
+        {
+          "asset_id": "WYZ-faller-1s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-1s-strong.wav",
+          "sha256": "6c65505178a0c63805907004bbcea8411433a72f3e5d2a79ad2b0250a3ad9825",
+          "size_bytes": 253644
+        },
+        {
+          "asset_id": "WYZ-faller-2s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-2s-soft.wav",
+          "sha256": "8481bca1d437647b2e48998195e23e4fdeb98e5d8de76096420d1b2a9882ecb3",
+          "size_bytes": 527386
+        },
+        {
+          "asset_id": "WYZ-faller-2s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-2s-strong.wav",
+          "sha256": "c9287f9d15e56da733311ad6ade01905b2eb49bd4cd611ed018db11a51ba88ff",
+          "size_bytes": 542076
+        },
+        {
+          "asset_id": "WYZ-faller-4s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-4s-soft.wav",
+          "sha256": "de25b8511170cb9b34bcbfb1a9ab6855954b2281e419c00e1f0b4c3604fc977d",
+          "size_bytes": 1111450
+        },
+        {
+          "asset_id": "WYZ-faller-4s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/faller-4s-strong.wav",
+          "sha256": "a6692671598ffd5f4fed0f2a53e7a7407f7d10bc51f26639b91a0f31087a5556",
+          "size_bytes": 1114764
+        },
+        {
+          "asset_id": "WYZ-riser-1s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-1s-soft.wav",
+          "sha256": "fca1d503b69d4ac32cd7f307cf497fa36c2db8589b878b075c8d372ac3f4fe61",
+          "size_bytes": 342920
+        },
+        {
+          "asset_id": "WYZ-riser-1s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-1s-strong.wav",
+          "sha256": "fc8bcec731b4f0bc0bfa7f7d82c96efdaf3d1f807dbd02bb2b87ef27a8adebc3",
+          "size_bytes": 350266
+        },
+        {
+          "asset_id": "WYZ-riser-2s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-2s-soft.wav",
+          "sha256": "ffe1d0975ce052a9eb3247e2b0bb492413d6e04cbb81f749cf3b074e2a5f4467",
+          "size_bytes": 630488
+        },
+        {
+          "asset_id": "WYZ-riser-2s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-2s-strong.wav",
+          "sha256": "26263a64a7b141a14f8bc6ab96db9c22926265b429a799d5f77db33c1a85d43f",
+          "size_bytes": 632218
+        },
+        {
+          "asset_id": "WYZ-riser-4s-soft",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-4s-soft.wav",
+          "sha256": "05222fe093f2c9dcaf6c58dd456d2c6d48949a2c204e69a480fc24aa1886193f",
+          "size_bytes": 1205048
+        },
+        {
+          "asset_id": "WYZ-riser-4s-strong",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/risers-and-fallers/riser-4s-strong.wav",
+          "sha256": "1b67475467df1818b0c175d1581db90e74951cf615c514269cdf29a527a5a63d",
+          "size_bytes": 1207210
+        },
+        {
+          "asset_id": "WYZ-move-bounce",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/bounce-spin-zoom/move-bounce.wav",
+          "sha256": "980a5bcacc925ccde8ca1471bdd716eb0d54549c651583963dcdfcd3b6c14a50",
+          "size_bytes": 266734
+        },
+        {
+          "asset_id": "WYZ-move-spin",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/bounce-spin-zoom/move-spin.wav",
+          "sha256": "c90e45abcbd143b0742d03b45bce9f47f4e14a40928a108c69a3896d8ba1e2f2",
+          "size_bytes": 327932
+        },
+        {
+          "asset_id": "WYZ-move-spring",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/bounce-spin-zoom/move-spring.wav",
+          "sha256": "c850f6e89bebd99ed63f632190ef3ec7d06650263d7cd6aaa61d98c4e2e12076",
+          "size_bytes": 258958
+        },
+        {
+          "asset_id": "WYZ-move-zoom-in",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/bounce-spin-zoom/move-zoom-in.wav",
+          "sha256": "3e32c4e2d4c3fe42e777693aebc96ec59d81015e9ef9a95487a6ac396bd52a8e",
+          "size_bytes": 163056
+        },
+        {
+          "asset_id": "WYZ-move-zoom-out",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/bounce-spin-zoom/move-zoom-out.wav",
+          "sha256": "6a3174fce27282cf1a08abe1f77860f04a6e78cc574364b3d7c6b7004f2566ac",
+          "size_bytes": 157728
+        },
+        {
+          "asset_id": "WYZ-pop-large-bubble",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-large-bubble.wav",
+          "sha256": "56f506f676c31359741540589958aab20151f947f5be1e76fe054e28d5bff38e",
+          "size_bytes": 30146
+        },
+        {
+          "asset_id": "WYZ-pop-large-in",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-large-in.wav",
+          "sha256": "6f92a0b5d0cce03a0768e5795b06fd7018fe52dfc753e40ed2580cc1bb953c2e",
+          "size_bytes": 16246
+        },
+        {
+          "asset_id": "WYZ-pop-large-out",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-large-out.wav",
+          "sha256": "55c5a4884e6831807b7f2d513c4b796ab726cdb70b6fad61efe8c249781fa0b4",
+          "size_bytes": 15958
+        },
+        {
+          "asset_id": "WYZ-pop-medium-bubble",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-medium-bubble.wav",
+          "sha256": "1e9da202369ae1c9d54eb1156e0217b9c1cc4a20aceba2c698d877539b104033",
+          "size_bytes": 18338
+        },
+        {
+          "asset_id": "WYZ-pop-medium-in",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-medium-in.wav",
+          "sha256": "0c92cb9be01b1b5a3b51d4a6bfe427947b228ea71bb95d5a0b6c8641b7eab511",
+          "size_bytes": 8830
+        },
+        {
+          "asset_id": "WYZ-pop-medium-out",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-medium-out.wav",
+          "sha256": "67633f10af09e05f1be98c7f2be86bda5f8fbde93dce6b562fbc4284109e6dfe",
+          "size_bytes": 10056
+        },
+        {
+          "asset_id": "WYZ-pop-small-bubble",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-small-bubble.wav",
+          "sha256": "73691f1ecec5b2f8d1dc231244281558479a42e347f738c16aa6551be21e6124",
+          "size_bytes": 11786
+        },
+        {
+          "asset_id": "WYZ-pop-small-in",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-small-in.wav",
+          "sha256": "917759c812aff57bca97627a3c89c7aa5f1b4be7c9494a352cd6ba1dc0984769",
+          "size_bytes": 5878
+        },
+        {
+          "asset_id": "WYZ-pop-small-out",
+          "public_download_url": "https://raw.githubusercontent.com/wyzowl/sfx-kit/92780e7ab0cdfb557497a988089c47f46e8c7412/sounds/pops/pop-small-out.wav",
+          "sha256": "2f5dfa14cca1e64b1a4007a7f16a9fb648edb24cde4c499c312f4cb2a5d7ec66",
+          "size_bytes": 7462
+        }
+      ]
+    },
+    {
+      "provider_ref": "BIGSOUNDBANK",
+      "license": "CC0-1.0",
+      "source_page": "https://bigsoundbank.com/",
+      "download_strategy": "LINK_EXISTING_OR_USER_OPENED_ORIGINAL_PAGE",
+      "automatic_download_supported": false,
+      "requires_account": false,
+      "files": [
+        {
+          "asset_id": "BSB-0785",
+          "source_page": "https://bigsoundbank.com/paper-s0785.html",
+          "sha256": "d39ec62e16243b1b9ccb1f0f7f1176449900061cb0a0b48de4957d063cac7599",
+          "size_bytes": 2874298
+        },
+        {
+          "asset_id": "BSB-1223",
+          "source_page": "https://bigsoundbank.com/ball-paper-4-s1223.html",
+          "sha256": "e2ef1f9c7cfa8f558e0e9e7afed11ecf3224254099ae59e7818be40387f9c506",
+          "size_bytes": 366306
+        },
+        {
+          "asset_id": "BSB-2805",
+          "source_page": "https://bigsoundbank.com/road-map-10-s2805.html",
+          "sha256": "0d71007affb8cba0f7f2a358b2decbd20c834b4dbd0aec57c725cfdb3e62776a",
+          "size_bytes": 277386
+        },
+        {
+          "asset_id": "BSB-2212",
+          "source_page": "https://bigsoundbank.com/pages-that-turn-5-s2212.html",
+          "sha256": "24defd28f3166c0188708dfab4fcb0df01e8ef9e0c69ed02fed73b389223b049",
+          "size_bytes": 256008
+        },
+        {
+          "asset_id": "BSB-3235",
+          "source_page": "https://bigsoundbank.com/pencil-4-s3235.html",
+          "sha256": "e3925987946d56486fe6b0c4868bdf2a4bc3831f1283bc8c062c4b1ab16748ff",
+          "size_bytes": 1498042
+        },
+        {
+          "asset_id": "BSB-3237",
+          "source_page": "https://bigsoundbank.com/pencil-signature-2-s3237.html",
+          "sha256": "bb61bc0e771faf7e599d7f6bc3b29e623370556a1657182b8043a6c5ccc243d0",
+          "size_bytes": 254940
+        },
+        {
+          "asset_id": "BSB-1426",
+          "source_page": "https://bigsoundbank.com/felt-coloring-s1426.html",
+          "sha256": "eb7c556d24a45a143674d2eca7985b24ff508b14643c03f8fb4011455a08f68a",
+          "size_bytes": 4227262
+        },
+        {
+          "asset_id": "BSB-1196",
+          "source_page": "https://bigsoundbank.com/teaspoon-handled-on-a-plate-s1196.html",
+          "sha256": "615f625a3199dd36d3824e8edb5b6eeba95006660aa7747ce61660da3cce3713",
+          "size_bytes": 2038724
+        },
+        {
+          "asset_id": "BSB-1195",
+          "source_page": "https://bigsoundbank.com/teaspoon-placed-on-a-table-s1195.html",
+          "sha256": "cad4b77a4cfb357199a8f46f2b0dbf37952ad4551cb52e57d8c36f86c7bc7ca5",
+          "size_bytes": 2768864
+        },
+        {
+          "asset_id": "BSB-0382",
+          "source_page": "https://bigsoundbank.com/fond-poele-en-aluminium-26cm-sample-s0382.html",
+          "sha256": "8f5622a3b2daefbf33b9ae5d0e29e6a620418200ceaf636943a6e0f9ff551d3d",
+          "size_bytes": 96936
+        },
+        {
+          "asset_id": "BSB-0145",
+          "source_page": "https://bigsoundbank.com/frying-pan-3-s0145.html",
+          "sha256": "dc75e12866b39c45bf1c87daa5ad92b54d2b136233b7f0120ca34d199f738101",
+          "size_bytes": 490298
+        },
+        {
+          "asset_id": "BSB-1796",
+          "source_page": "https://bigsoundbank.com/whoosh-4-s1796.html",
+          "sha256": "e0f841b5f734daccbab4def7103872399c9ab59e21efda705e5465047229e6b5",
+          "size_bytes": 299762
+        },
+        {
+          "asset_id": "BSB-1799",
+          "source_page": "https://bigsoundbank.com/whoosh-6-s1799.html",
+          "sha256": "0ccc87ea2ee12102e1c8fae9e9282433030c4b15a81e97241cd112203d99ea93",
+          "size_bytes": 150164
+        },
+        {
+          "asset_id": "BSB-1798",
+          "source_page": "https://bigsoundbank.com/whoosh-10-s1798.html",
+          "sha256": "4fe8240ba612cd613f04a646169198bb3c1458238237d4f4398a47e97c3c9bcb",
+          "size_bytes": 133974
+        },
+        {
+          "asset_id": "BSB-2363",
+          "source_page": "https://bigsoundbank.com/applause-1-s2363.html",
+          "sha256": "4463eecdc564dbf3bcab063d069e30aae9c115d3d7943d1b6b5ffa1e05699cea",
+          "size_bytes": 1039668
+        },
+        {
+          "asset_id": "BSB-0812",
+          "source_page": "https://bigsoundbank.com/applaudissements-25-50-pers-1-s0812.html",
+          "sha256": "eabd1f4c67fe05a7ee6e5db16e366e457f60add6d71879d476c8cdd5b61be4fe",
+          "size_bytes": 1728858
+        },
+        {
+          "asset_id": "BSB-3094",
+          "source_page": "https://bigsoundbank.com/discussions-exterieures-4-s3094.html",
+          "sha256": "fd66bcbea22ce0ee7dae683958d1d3425a499cefa41fc390aa63062eb5ec4940",
+          "size_bytes": 16509490
+        },
+        {
+          "asset_id": "BSB-0237",
+          "source_page": "https://bigsoundbank.com/shouts-and-applauses-of-teens-2-s0237.html",
+          "sha256": "7eb9866268b69348a96435ed33d0e922e790971f86c03abe789f39a46d3e0617",
+          "size_bytes": 968040
+        },
+        {
+          "asset_id": "BSB-2284",
+          "source_page": "https://bigsoundbank.com/boing-cartoon-8-s2284.html",
+          "sha256": "563d1cb0dd3f519f4c6a7dd75003e7478fc0de118bb538c18c7cdc40b3492c2f",
+          "size_bytes": 173740
+        },
+        {
+          "asset_id": "BSB-2278",
+          "source_page": "https://bigsoundbank.com/boing-cartoon-2-s2278.html",
+          "sha256": "26b158b767b4a2a1ff73871920370f33b574740e2f3d6d0d86f1103f08bfd57b",
+          "size_bytes": 294090
+        },
+        {
+          "asset_id": "BSB-2054",
+          "source_page": "https://bigsoundbank.com/ghost-on-the-flute-1-s2054.html",
+          "sha256": "4e52c944ea6ba26c3268a9e5cd8d31f2446d023a72273b80bb37be1f7deb4b65",
+          "size_bytes": 900256
+        },
+        {
+          "asset_id": "BSB-1399",
+          "source_page": "https://bigsoundbank.com/idea-2-s1399.html",
+          "sha256": "7e800f706a01856ce1209f5be79ed95747f4a23b67dbfd2393a77ec3dae619bb",
+          "size_bytes": 538632
+        }
+      ]
+    }
+  ]
+}

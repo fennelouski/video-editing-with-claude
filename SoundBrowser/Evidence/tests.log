@@ -1,0 +1,31 @@
+Building for debugging...
+[Using on-disk description]
+[3 / 4] SoundBrowserTests-product
+Build complete! (0.78 sec)
+Test Suite 'All tests' started at 2026-10-25 09:35:19.436.
+Test Suite 'SoundBrowserTests.xctest' started at 2026-10-25 09:35:19.437.
+Test Suite 'SoundBrowserTests' started at 2026-10-25 09:35:19.437.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' passed (0.050 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' passed (0.286 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' passed (0.000 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' passed (4.674 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' passed (0.025 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' passed (0.027 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' passed (4.788 seconds).
+Test Suite 'SoundBrowserTests' passed at 2026-10-25 09:35:29.288.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.851) seconds
+Test Suite 'SoundBrowserTests.xctest' passed at 2026-10-25 09:35:29.288.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.851) seconds
+Test Suite 'All tests' passed at 2026-10-25 09:35:29.288.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 9.850 (9.852) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
