@@ -1,5 +1,11 @@
 # Script workspace candidate review
 
+**Integration update:** [SINGLE_APP_INTEGRATION.md](SINGLE_APP_INTEGRATION.md)
+supersedes the earlier development QA packaging and Finder-only handoff described
+below. Script and Cut now share the existing EditorStore and project history. The
+builder keeps the existing Clauto app identity; the separate QA copy was removed.
+The original test-environment limit was resolved in the task's TEST-TRIAGE.md.
+
 Base: `42b3bdc63de141a6a0733d4cf45cfe0f04641352`.
 Branch: `codex/script-first-review` in the isolated `task-19/clauto-script-first`
 worktree. The sound owner confirmed this base and remained inactive. No paused

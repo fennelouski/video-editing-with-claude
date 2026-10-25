@@ -252,4 +252,87 @@ struct ScriptWorkspaceTests {
         #expect(xml.contains("width=\"320\" height=\"180\"")); #expect(xml.contains("frameDuration=\"1001/24000s\""))
         #expect(xml.contains("audioChannels=\"1\"")); #expect(xml.contains("hasVideo=\"1\" format=\"sourceFormat1\""))
     }
+
+    @Test func assemblyHistorySharesProjectWithExternalLibrary3DAndHandwritingTools() async throws {
+        let f = try await fixture(); defer { f.cleanup() }
+        let library = f.root.appendingPathComponent("external-library"), font = library.appendingPathComponent("fonts/external.ttf")
+        try FileManager.default.createDirectory(at: font.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let assetBytes = Data("external asset reference fixture; never rendered".utf8); try assetBytes.write(to: font)
+        let project = try await ProjectRepository().useFolder(library, key: "assets", project: f.project)
+        let graphics = GraphicStudioRepository(), fonts = FontStudioRepository(), sceneID = UUID(), fontID = UUID()
+        let scene = try await graphics.create(project, id: sceneID, label: "Existing 3D scene", scene: .preset(.object))
+        let handwriting = try await fonts.create(project, id: fontID, label: "Existing handwriting workspace")
+        let manifestBefore = try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json"))
+        let pathsBefore = try Data(contentsOf: project.folder.appendingPathComponent("paths.json"))
+        let currentBefore = Data("existing cut stays current".utf8); try currentBefore.write(to: project.folder.appendingPathComponent("cuts/current.json"))
+        let repository = ScriptWorkspaceRepository(); var session = try #require(try await repository.load(project: project))
+        session = try await reviewAll(repository, session)
+        session = try await repository.update(project: project, expectedRevision: session.state.revisionID, action: .create("Integrated assembly", author))
+        let versionID = session.state.versions[0].id
+        session = try await repository.update(project: project, expectedRevision: session.state.revisionID, action: .addPassage(versionID, f.catalog.rows[0].id))
+        session = try await repository.update(project: project, expectedRevision: session.state.revisionID, action: .approve(versionID, true))
+        let output = try await repository.assemble(project: project, expectedRevision: session.state.revisionID, versionID: versionID)
+        let history = try await ScriptWorkspaceRepository().assemblies(project: project), entry = try #require(history.first)
+        #expect(history.count == 1 && entry.record.projectID == project.id && entry.readyForReview)
+        #expect(entry.record.versionID == versionID && project.folder.appendingPathComponent(entry.record.relativeFolder) == output)
+        #expect(try await graphics.load(project, id: sceneID) == scene)
+        #expect(try await fonts.load(project, id: fontID) == handwriting)
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("clauto-project.json")) == manifestBefore)
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("paths.json")) == pathsBefore)
+        #expect(try Data(contentsOf: project.folder.appendingPathComponent("cuts/current.json")) == currentBefore)
+        let reference = try #require(project.manifest.files.first { $0.name == font.lastPathComponent })
+        #expect(!reference.copied)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: project.folder.appendingPathComponent(reference.relativePath).path) == font.path)
+        #expect(try Data(contentsOf: font) == assetBytes)
+    }
+
+    @Test func assemblyHistoryRetainsEarlierRevisionAndRefusesTamperedTimeline() async throws {
+        let f = try await fixture(); defer { f.cleanup() }
+        let repository = ScriptWorkspaceRepository(); var session = try #require(try await repository.load(project: f.project))
+        session = try await reviewAll(repository, session)
+        session = try await repository.update(project: f.project, expectedRevision: session.state.revisionID, action: .create("First assembly", author))
+        let id = session.state.versions[0].id
+        session = try await repository.update(project: f.project, expectedRevision: session.state.revisionID, action: .addPassage(id, f.catalog.rows[0].id))
+        session = try await repository.update(project: f.project, expectedRevision: session.state.revisionID, action: .approve(id, true))
+        let first = try await repository.assemble(project: f.project, expectedRevision: session.state.revisionID, versionID: id)
+        let xml = try Data(contentsOf: first.appendingPathComponent("assembly.fcpxml"))
+        session = try await repository.update(project: f.project, expectedRevision: session.state.revisionID, action: .rename(id, "Revised assembly"))
+        let historical = try await repository.assemblies(project: f.project)
+        #expect(historical.count == 1 && !historical[0].scriptApprovalCurrent)
+        session = try await repository.update(project: f.project, expectedRevision: session.state.revisionID, action: .approve(id, true))
+        _ = try await repository.assemble(project: f.project, expectedRevision: session.state.revisionID, versionID: id)
+        let history = try await repository.assemblies(project: f.project)
+        #expect(history.count == 2 && !history[0].readyForReview && history[1].readyForReview)
+        #expect(try Data(contentsOf: first.appendingPathComponent("assembly.fcpxml")) == xml)
+        try (xml + Data("\n".utf8)).write(to: first.appendingPathComponent("assembly.fcpxml"))
+        await #expect(throws: WorkflowFailure.self) { try await repository.assemblies(project: f.project) }
+    }
+
+    @Test @MainActor func scriptAndCutShareOneProjectControllerWithoutCrossRootRetargeting() async throws {
+        let f = try await fixture(); defer { f.cleanup() }
+        let registry = ScriptWorkspaceRegistry(), script = registry.controller(for: f.project)
+        let reopened = try await ProjectRepository().open(f.project.folder)
+        let cut = registry.controller(for: reopened)
+        #expect(script === cut)
+        await script.load()
+        #expect(cut.session?.state.id == script.session?.state.id)
+        var copy = f.project; copy.folder = f.root.appendingPathComponent("another-project-copy")
+        #expect(registry.controller(for: copy) !== script)
+    }
+
+    @Test @MainActor func damagedHistoryDoesNotReportASavedScriptActionAsFailed() async throws {
+        let f = try await fixture(); defer { f.cleanup() }
+        let repository = ScriptWorkspaceRepository(), initial = try #require(try await repository.load(project: f.project))
+        _ = try await reviewAll(repository, initial)
+        let index = f.project.folder.appendingPathComponent(".clauto/script-assembly-history.json")
+        let damaged = Data("damaged local history index".utf8); try damaged.write(to: index)
+        let controller = ScriptWorkspaceController(project: f.project, repository: repository)
+        await controller.load()
+        #expect(controller.failure == nil && controller.assemblyFailure != nil)
+        #expect(await controller.perform(.create("Saved exactly once", author)))
+        #expect(controller.failure == nil && controller.assemblyFailure != nil)
+        let saved = try #require(try await repository.load(project: f.project))
+        #expect(saved.state.versions.count == 1 && saved.state.versions[0].title == "Saved exactly once")
+        #expect(try Data(contentsOf: index) == damaged)
+    }
 }

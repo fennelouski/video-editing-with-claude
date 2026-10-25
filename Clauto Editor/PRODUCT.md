@@ -28,8 +28,10 @@ is a separate design system.
 
 The isolated Script workspace candidate adds full-source review, independent
 source-bound scripts and explicit unrecorded pickups, author-blind scored
-comparison, revision-bound local approval and a separate editable FCPXML assembly
-package. It leaves the current cut and transcript review intact and does not call
+comparison, revision-bound local approval and editable FCPXML candidates registered
+in this same project's Cut workspace. Script and Cut share the existing EditorStore;
+Studio's graphics/3D and handwriting tools and the sound library remain in this one
+app. It leaves the current cut and transcript review intact and does not call
 an AI service. See [SCRIPT_WORKSPACE.md](docs/SCRIPT_WORKSPACE.md) for its boundaries
 and review workflow.
 

@@ -149,10 +149,10 @@ actor ScriptWorkspaceRepository {
         let xml = try await ScriptAssemblyXML.make(handoff, title: version.title, project: initial.project)
         return try await exportFiles(["script-handoff.json": CreativeAssetFiles.encoder().encode(handoff),
             "source-map.json": map.encoded(), "engine-script.json": engineScript, "engine-sources.json": ScriptInterchange.exportSources(initial.catalog),
-            "assembly.fcpxml": Data(xml.utf8)], session: initial, media: verified)
+            "assembly.fcpxml": Data(xml.utf8)], session: initial, media: verified, assembly: version)
     }
 
-    private func exportFiles(_ files: [String: Data], session: ScriptWorkspaceSession, media: [VerifiedSourceMedia] = []) async throws -> URL {
+    private func exportFiles(_ files: [String: Data], session: ScriptWorkspaceSession, media: [VerifiedSourceMedia] = [], assembly: ScriptVersion? = nil) async throws -> URL {
         let fresh = try await projectRepository.open(session.project.folder); try requireSame(session.project, fresh)
         guard let transcript = try await transcriptRepository.load(project: fresh) else { throw ProjectFailure.invalidProject }
         let lease = try ProjectMutationLease.acquire(fresh); defer { withExtendedLifetime(lease) {} }
@@ -163,7 +163,70 @@ actor ScriptWorkspaceRepository {
         }
         for value in media { try SourceMediaVerifier.checkCurrent(value) }
         let parent = try lease.root.child("script", create: true).child("workspace-exports", create: true)
-        return try CreativeAssetFiles.publish(files, to: UUID(), in: parent).url
+        let id = UUID(), folder = try CreativeAssetFiles.publish(files, to: id, in: parent)
+        if let assembly {
+            let metadata = try lease.root.child(".clauto")
+            var history = try history(in: metadata, project: fresh)
+            guard history.candidates.count < 10_000 else { throw WorkflowFailure.invalid("This project has 10,000 retained script assemblies. Its previous candidates remain available.") }
+            history.candidates.append(.init(id: id, projectID: fresh.id, workspaceID: session.state.id,
+                versionID: assembly.id, revisionID: assembly.revisionID, title: assembly.title,
+                handoffSHA256: TranscriptSourceMap.sha(files["script-handoff.json"]!),
+                mapSHA256: TranscriptSourceMap.sha(files["source-map.json"]!), timelineSHA256: TranscriptSourceMap.sha(files["assembly.fcpxml"]!),
+                engineScriptSHA256: TranscriptSourceMap.sha(files["engine-script.json"]!), created: Date()))
+            try history.validate(project: fresh); try lease.root.checkPath(); try folder.checkPath()
+            try metadata.replacePointer(CreativeAssetFiles.encoder().encode(history), name: "script-assembly-history.json")
+        }
+        return folder.url
+    }
+
+    private func history(in metadata: SourceRenderDirectory, project: Project) throws -> ScriptAssemblyHistory {
+        guard try CreativeAssetFiles.exists("script-assembly-history.json", in: metadata) else { return .init(projectID: project.id) }
+        let value = try CreativeAssetFiles.decode(metadata.read("script-assembly-history.json"), as: ScriptAssemblyHistory.self)
+        try value.validate(project: project); return value
+    }
+
+    /// Cut reads the same project-owned script state and immutable packages.
+    /// Historical assemblies survive later edits, but cannot retain approval.
+    func assemblies(project: Project) async throws -> [ScriptAssemblyReview] {
+        let fresh = try await projectRepository.open(project.folder); try requireSame(project, fresh)
+        let root = try ProjectMutationLease.checkedRoot(fresh)
+        guard try CreativeAssetFiles.exists(".clauto", in: root) else { return [] }
+        let metadata = try root.child(".clauto")
+        guard try CreativeAssetFiles.exists("script-assembly-history.json", in: metadata) else { return [] }
+        guard let transcript = try await transcriptRepository.load(project: fresh) else { throw ProjectFailure.invalidProject }
+        let lease = try ProjectMutationLease.acquire(fresh); defer { withExtendedLifetime(lease) {} }
+        let state = try read(project: fresh, transcript: transcript, root: lease.root).state
+        let records = try history(in: lease.root.child(".clauto"), project: fresh)
+        return try records.candidates.map { record in
+            let folder = try lease.root.child("script").child("workspace-exports").child(record.id.uuidString)
+            let handoffBytes = try folder.read("script-handoff.json"), mapBytes = try folder.read("source-map.json")
+            guard TranscriptSourceMap.sha(handoffBytes) == record.handoffSHA256,
+                  TranscriptSourceMap.sha(mapBytes) == record.mapSHA256,
+                  TranscriptSourceMap.sha(try folder.read("assembly.fcpxml")) == record.timelineSHA256,
+                  TranscriptSourceMap.sha(try folder.read("engine-script.json")) == record.engineScriptSHA256 else {
+                throw WorkflowFailure.invalid("A saved script assembly changed. Its original source files and current cut remain preserved; restore the candidate package before reviewing it.")
+            }
+            let handoff = try CreativeAssetFiles.decode(handoffBytes, as: ScriptTimelineHandoff.self)
+            let map = try CreativeAssetFiles.decode(mapBytes, as: TranscriptSourceMap.self)
+            guard handoff.schemaVersion == 1, handoff.projectID == fresh.id, handoff.workspaceID == record.workspaceID,
+                  handoff.versionID == record.versionID, handoff.revisionID == record.revisionID,
+                  handoff.frameDurationNumerator == 1001, handoff.frameDurationDenominator == 24000,
+                  handoff.reviewOnly, !handoff.appliedToCut, !handoff.productionAuthorized,
+                  map.projectID == fresh.id, map.reviewID == record.workspaceID, map.revisionID == record.revisionID,
+                  map.revisionSHA256 == handoff.scriptSHA256, map.catalogSHA256 == handoff.catalogSHA256,
+                  map.spans == handoff.sources, handoff.spans == (try SourceSpanFrameGrid.compile(map, media: handoff.media)) else { throw ProjectFailure.invalidProject }
+            let coverage = try state.coverageSHA256()
+            let current = state.id == record.workspaceID && state.catalogSHA256 == handoff.catalogSHA256 &&
+                coverage == handoff.coverageSHA256 && state.versions.contains {
+                    $0.id == record.versionID && $0.revisionID == record.revisionID && state.approvalCurrent($0) &&
+                    (try? $0.contentSHA256()) == handoff.scriptSHA256 && $0.approval == handoff.approval
+                }
+            let mediaCurrent = handoff.media.allSatisfy { receipt in
+                do { try SourceMediaVerifier.checkCurrent(receipt); return true } catch { return false }
+            }
+            try folder.checkPath(); try lease.root.checkPath()
+            return .init(record: record, handoff: handoff, scriptApprovalCurrent: current, mediaSignaturesCurrent: mediaCurrent)
+        }
     }
 
     private func requireSame(_ expected: Project, _ current: Project) throws {

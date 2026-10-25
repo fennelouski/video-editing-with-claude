@@ -1,5 +1,43 @@
 import Foundation
 
+/// Project-local assembly history is shared by Script and Cut. It is not a new
+/// project format or a rendered CutVersion, and never changes cuts/current.json.
+struct ScriptAssemblyRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    let projectID: UUID
+    let workspaceID: UUID
+    let versionID: UUID
+    let revisionID: UUID
+    let title: String
+    let handoffSHA256: String
+    let mapSHA256: String
+    let timelineSHA256: String
+    let engineScriptSHA256: String
+    let created: Date
+    var relativeFolder: String { "script/workspace-exports/" + id.uuidString }
+}
+
+struct ScriptAssemblyHistory: Codable, Sendable {
+    var schemaVersion = 1
+    let projectID: UUID
+    var candidates: [ScriptAssemblyRecord] = []
+    func validate(project: Project) throws {
+        guard schemaVersion == 1, projectID == project.id, candidates.count <= 10_000,
+              Set(candidates.map(\.id)).count == candidates.count,
+              candidates.allSatisfy({ $0.projectID == project.id && !$0.title.isEmpty &&
+                  [$0.handoffSHA256, $0.mapSHA256, $0.timelineSHA256, $0.engineScriptSHA256].allSatisfy(TranscriptCatalog.isSHA) }) else { throw ProjectFailure.invalidProject }
+    }
+}
+
+struct ScriptAssemblyReview: Identifiable, Sendable {
+    let record: ScriptAssemblyRecord
+    let handoff: ScriptTimelineHandoff
+    let scriptApprovalCurrent: Bool
+    let mediaSignaturesCurrent: Bool
+    var id: UUID { record.id }
+    var readyForReview: Bool { scriptApprovalCurrent && mediaSignaturesCurrent }
+}
+
 /// Recorded wording belongs to the immutable transcript catalog. Only pickups
 /// contain editable speech; neither a draft nor its score is a production permit.
 struct ScriptBeat: Codable, Equatable, Identifiable, Sendable {

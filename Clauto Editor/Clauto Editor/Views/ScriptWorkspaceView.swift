@@ -2,18 +2,21 @@ import SwiftUI
 import AppKit
 
 struct ScriptWorkspaceView: View {
+    @Bindable var store: EditorStore
     let project: Project
-    // ProjectView is keyed by project identity; this controller captures that
-    // handle and persists every explicit action before it updates the screen.
-    @State private var controller: ScriptWorkspaceController
-    init(project: Project) { self.project = project; _controller = State(initialValue: ScriptWorkspaceController(project: project)) }
+    let router: ReviewWindowRouter
     var body: some View {
-        ScriptWorkspaceContent(controller: controller).task { await controller.load() }
+        let controller = store.scriptWorkspace(for: project)
+        ScriptWorkspaceContent(controller: controller, openTranscript: { router.tab = "Transcript" }, openCut: {
+            controller.requestedAssemblyID = controller.assemblies.last?.id; router.tab = "Cut"
+        }).task { await controller.load() }
     }
 }
 
 private struct ScriptWorkspaceContent: View {
     @Bindable var controller: ScriptWorkspaceController
+    let openTranscript: () -> Void
+    let openCut: () -> Void
     @State private var page = "Sources"
     @State private var selectedVersion: UUID?
     @State private var query = ""
@@ -37,10 +40,14 @@ private struct ScriptWorkspaceContent: View {
                     Spacer(); Button("Reload saved workspace") { Task { await controller.load() } }
                 }.font(ClautoDesign.caption).padding(.horizontal, 22).padding(.bottom, 12).accessibilityIdentifier("scriptFailure")
             }
+            if let error = controller.assemblyFailure {
+                Text(error).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).padding(.horizontal, 22).padding(.bottom, 12)
+            }
             if controller.busy { ClautoActivity(label: "Checking and saving script work…").padding(.horizontal, 22).padding(.bottom, 12) }
             if let url = controller.exportedURL {
                 HStack {
-                    Text("Separate package saved").font(ClautoDesign.caption)
+                    Text("Project package saved").font(ClautoDesign.caption)
+                    if !controller.assemblies.isEmpty { Button("Review assembly in Cut") { openCut() }.accessibilityIdentifier("reviewScriptAssemblyInCut") }
                     Button("Show package in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 }.padding(.horizontal, 22).padding(.bottom, 12).accessibilityIdentifier("scriptPackageSaved")
             }
@@ -54,7 +61,10 @@ private struct ScriptWorkspaceContent: View {
                     }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
                 }.scrollIndicators(.visible)
             } else if !controller.busy {
-                ClautoEmpty(title: "Read the sources first", detail: "Import a complete transcript catalog in Transcript, then return here to review all passages before drafting independent script versions.").padding(28)
+                VStack(alignment: .leading, spacing: 14) {
+                    ClautoEmpty(title: "Read the sources first", detail: "Import a complete transcript catalog in Transcript, then return here to review all passages before drafting independent script versions.")
+                    Button("Open this project's Transcript workspace") { openTranscript() }.accessibilityIdentifier("scriptOpenTranscript")
+                }.padding(28)
             }
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
             .buttonStyle(ClautoButtonStyle())
@@ -62,6 +72,9 @@ private struct ScriptWorkspaceContent: View {
             .onChange(of: session?.state.revisionID) {
                 factsReviewed = false
                 if selectedVersion == nil { selectedVersion = session?.state.versions.first?.id }
+            }
+            .onAppear {
+                if let id = controller.requestedVersionID { selectedVersion = id; page = "Write"; controller.requestedVersionID = nil }
             }
             .sheet(isPresented: $newVersion) {
                 ScriptNewVersionSheet(failure: controller.failure) { title, provenance, data in
@@ -105,6 +118,7 @@ private struct ScriptWorkspaceContent: View {
                     .disabled(mustCompare).accessibilityIdentifier("scriptWorkspacePages")
                 Spacer()
                 if !mustCompare {
+                    if !controller.assemblies.isEmpty { Button("Assemblies in Cut") { openCut() } }
                     Button("New / import version") { newVersion = true }.disabled(session?.coverageComplete != true).accessibilityIdentifier("newScriptVersion")
                 }
             }
@@ -181,10 +195,10 @@ private struct ScriptWorkspaceContent: View {
                 ClautoToggle(title: "I reviewed this script's factual claims, numbers, wording and source choices", isOn: $factsReviewed)
                 HStack {
                     Button("Approve this script") { Task { await controller.perform(.approve(version.id, factsReviewed)) } }.disabled(!factsReviewed || !session.coverageComplete).accessibilityIdentifier("approveScriptVersion")
-                    Button("Prepare separate timeline candidate") { Task { await controller.assemble(version.id) } }
+                    Button("Prepare timeline candidate") { Task { await controller.assemble(version.id) } }
                         .disabled(!session.state.approvalCurrent(version) || version.beats.contains(where: { $0.kind == .pickup })).accessibilityIdentifier("assembleScriptCandidate")
                 }
-                Text(version.beats.contains(where: { $0.kind == .pickup }) ? "Unrecorded pickups block assembly. Record/transcribe them or remove them, then approve the changed script." : "Assembly verifies source bytes and writes a new FCPXML plus source map. Approval applies to this revision; edits require review again. Import and production approval remain separate.").font(ClautoDesign.caption)
+                Text(version.beats.contains(where: { $0.kind == .pickup }) ? "Unrecorded pickups block assembly. Record/transcribe them or remove them, then approve the changed script." : "Assembly verifies source bytes and adds a source-linked candidate to this project's Cut workspace. Edits require review again. The current cut stays unchanged; preview rendering and production approval remain separate.").font(ClautoDesign.caption)
             }
         }
     }

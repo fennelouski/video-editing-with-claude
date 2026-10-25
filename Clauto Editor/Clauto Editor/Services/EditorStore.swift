@@ -44,6 +44,8 @@ final class EditorStore {
     var runningProjectID: UUID?
     var exportingPDF = false
     var transcriptReviews: [UUID: TranscriptReviewController] = [:]
+    @ObservationIgnored private let scriptWorkspaces = ScriptWorkspaceRegistry()
+    func scriptWorkspace(for project: Project) -> ScriptWorkspaceController { scriptWorkspaces.controller(for: project) }
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
     var graphicStudios: [UUID: GraphicStudioController] = [:]

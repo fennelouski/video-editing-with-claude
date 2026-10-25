@@ -7,6 +7,11 @@ absent from that catalog stays visible as a coverage gap. Add its speech transcr
 before drafting, or explicitly record a reviewed B-roll/no-relevant-speech
 disposition. A missing transcript is never inferred to mean silence.
 
+Script is a workspace inside the existing **Clauto Editor** Xcode app target and
+bundle identity `com.nathanfennel.Clauto-Editor`. The existing `EditorStore` owns
+one project-scoped controller shared by Script and Cut. No companion app, separate
+project document or script-only executable is delivered.
+
 After full-source review, create independent empty versions or import a real writer
 response. A recorded beat references a whole immutable catalog row; its source ID,
 word indexes, source timecodes, source media hash and transcript snapshot hash stay
@@ -64,6 +69,21 @@ unapplied and production-unauthorized. It is not automatically opened in Final C
 The legacy whole-clip pipeline remains blocked for associated transcript/script
 workspaces rather than ignoring their source selections.
 
+Each new assembly is registered in this project's
+`.clauto/script-assembly-history.json` and appears in the existing Cut sidebar.
+Cut verifies package hashes and displays the ordered source timeline, original
+media paths and word/frame trace. Return-to-script selects its source version;
+the Studio action opens the existing project's graphics/3D and handwriting/font
+workspaces. Earlier candidates survive edits and show their stale approval state.
+Damaged assembly history is reported separately from successfully saved script
+edits, so a saved version is not accidentally submitted twice.
+
+These source-only candidates have no rendered preview and do not impersonate a
+saved `CutVersion`. Existing sound editing continues on rendered saved cuts.
+Preview generation, production approval and actual Final Cut import remain outside
+this review-candidate increment. No source/asset library is copied into the app;
+existing external references and project-owned Studio revisions remain intact.
+
 ## Writers and local storage
 
 Export local writer packet after source review to obtain the full native catalog,
@@ -89,11 +109,11 @@ text selection, keyboard focus, visible focus treatment and accessible grouping.
 Source review and comparison scroll vertically; scoring controls reflow at narrow
 widths. Recorded speech has no editable text field.
 
-Use `script/build_script_candidate.sh --build-only` to build and stage the unique
-`com.clauto.editor.scriptqa` bundle inside `.artifacts`. It never installs or kills
-another app. `--launch-fixture PATH` only accepts the generated Synthetic Script QA
-project under this worktree's `.artifacts`, uses a separate defaults suite and never
-restores production recents. Obtain the film owner's foreground interval first.
+Use `script/build_script_candidate.sh --build-only` to build the existing Clauto
+Editor target in local derived data. It keeps the existing app name and bundle ID,
+does not stage/re-identify a second bundle, and does not install or launch anything.
+The earlier separately identified development QA copy was retired and removed.
+Any later app launch still requires coordination with the film foreground owner.
 
 Run native tests with `swift test --disable-sandbox --scratch-path .build/script-core
 --filter ScriptWorkspaceTests` and validate a saved package with

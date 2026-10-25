@@ -6,6 +6,7 @@ struct ReviewWorkspace: View {
     let project: Project
     let router: ReviewWindowRouter
     @State private var versionID: UUID?
+    @State private var assemblyID: UUID?
     @State private var assets = true
     @State private var feedback = true
     @State private var building = false
@@ -16,6 +17,12 @@ struct ReviewWorkspace: View {
     private enum Pane: Hashable { case assets, video, feedback }
     private var versions: [CutVersion] { store.cutVersions[project.id] ?? [] }
     private var selected: CutVersion? { versions.first { $0.id == versionID } ?? store.currentCuts[project.id] ?? versions.last }
+    private var scripts: ScriptWorkspaceController { store.scriptWorkspace(for: project) }
+    private var selectedAssembly: ScriptAssemblyReview? {
+        guard !scripts.busy, scripts.session?.state.reviewInProgress != true, scripts.failure == nil, scripts.assemblyFailure == nil else { return nil }
+        if let assemblyID { return scripts.assemblies.first { $0.id == assemblyID } }
+        return selected == nil ? scripts.assemblies.last : nil
+    }
     var body: some View {
         GeometryReader { geometry in
             let showAssets = assets && (geometry.size.width>=760 || !feedback)
@@ -24,14 +31,15 @@ struct ReviewWorkspace: View {
                     Button {
                         if geometry.size.width<760,!showAssets { assets = true;feedback = false } else { assets.toggle() }
                     } label: { ClautoIcon(.files) }.accessibilityLabel("Toggle assets and versions").clautoHelp("Assets and versions")
-                    Text(selected.map { "v\($0.number) · \($0.label)" } ?? "Review").lineLimit(1).textSelection(.enabled)
+                    Text(selectedAssembly.map { "Script assembly · \($0.record.title)" } ?? selected.map { "v\($0.number) · \($0.label)" } ?? "Review").lineLimit(1).textSelection(.enabled)
                     Spacer()
                     Button("Commands…") { router.perform(.palette,explicitControl: true) }
                     Button("Build…") { building = true }
+                    Button("Script") { router.tab = "Script" }.accessibilityIdentifier("cutOpenScript")
                     Button("Sounds…") {
                         for session in store.reviewPlayers.values where session.ownerID==router.id && session.project.id==project.id { session.control.pause() }
                         soundEditing = true
-                    }.disabled(selected == nil).accessibilityIdentifier("editTimelineSounds")
+                    }.disabled(selected == nil || selectedAssembly != nil).accessibilityIdentifier("editTimelineSounds")
                     Button { feedback.toggle() } label: { ClautoIcon(.conversation) }.accessibilityLabel("Toggle feedback").clautoHelp("Feedback")
                 }.padding(10)
                 ClautoRule()
@@ -41,11 +49,31 @@ struct ReviewWorkspace: View {
                             VStack(alignment: .leading,spacing: 14) {
                                 Text("Versions").font(.headline)
                                 ForEach(versions) { version in
-                                    Button { versionID = version.id } label: {
+                                    Button { assemblyID = nil; versionID = version.id } label: {
                                         HStack { ClautoIcon(version.id == selected?.id ? .play:.version); Text("v\(version.number) · \(version.label)").frame(maxWidth: .infinity,alignment: .leading) }
-                                    }.buttonStyle(ClautoInlineButtonStyle(selected: version.id == selected?.id))
+                                    }.buttonStyle(ClautoInlineButtonStyle(selected: selectedAssembly == nil && version.id == selected?.id))
                                         .disabled(router.editor != nil)
                                         .accessibilityAddTraits(version.id == selected?.id ? .isSelected : [])
+                                }
+                                if scripts.busy {
+                                    Text("Checking script assemblies…").font(ClautoDesign.caption)
+                                } else if scripts.session?.state.reviewInProgress == true {
+                                    Text("Finish the blind Script comparison to review assembly history.").font(ClautoDesign.caption)
+                                } else if let failure = scripts.failure ?? scripts.assemblyFailure {
+                                    Text(failure).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember)
+                                    Button("Reload script assemblies") { Task { await scripts.load() } }
+                                } else if !scripts.assemblies.isEmpty {
+                                    ClautoRule()
+                                    Text("Script assemblies").font(.headline).accessibilityAddTraits(.isHeader)
+                                    ForEach(scripts.assemblies.reversed()) { assembly in
+                                        Button {
+                                            for session in store.reviewPlayers.values where session.ownerID == router.id && session.project.id == project.id { session.control.pause() }
+                                            assemblyID = assembly.id
+                                        } label: {
+                                            Text(assembly.record.title).frame(maxWidth: .infinity, alignment: .leading)
+                                        }.buttonStyle(ClautoInlineButtonStyle(selected: selectedAssembly?.id == assembly.id))
+                                            .disabled(router.editor != nil).accessibilityIdentifier("scriptAssemblyHistoryItem")
+                                    }
                                 }
                                 ClautoRule(); Text("Assets").font(.headline)
                                 ForEach(project.manifest.files) { file in
@@ -55,7 +83,11 @@ struct ReviewWorkspace: View {
                         }.focusable().focused($pane,equals: .assets).frame(width: geometry.size.width >= 1100 ? 200 : 160)
                         Divider()
                     }
-                    if let version = selected,
+                    if let assembly = selectedAssembly {
+                        ScriptAssemblyReviewPane(assembly: assembly, project: project, openScript: {
+                            scripts.requestedVersionID = assembly.record.versionID; router.tab = "Script"
+                        }, openStudio: { router.tab = "Studio" })
+                    } else if let version = selected,
                        let artifact = version.preferredArtifact(".preview.mp4") ?? version.preferredArtifact(".mp4") {
                         let url = project.folder.appendingPathComponent("cuts/"+version.folderName).appendingPathComponent(artifact)
                         ReviewVersionWorkspace(store: store,project: project,version: version,url: url,router: router,feedbackVisible: feedback,
@@ -76,6 +108,10 @@ struct ReviewWorkspace: View {
                 if let draft = router.editor?.draft,draft.request.target.versionID != selected?.id { router.inlineDrawing = false }
             }
             .onDisappear { router.onWorkspaceCommand = nil }
+            .task {
+                await scripts.load()
+                if let id = scripts.requestedAssemblyID { assemblyID = id; scripts.requestedAssemblyID = nil }
+            }
             .sheet(isPresented: $building) {
                 VStack { HStack { Text("Build and export").font(.title2); Spacer(); Button("Done") { building = false }.keyboardShortcut(.cancelAction) }.padding(); CutView(store: store,playbackRouter: router,showPlayers: false) }
                     .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper).clautoThemeAppearance()
@@ -93,6 +129,7 @@ struct ReviewWorkspace: View {
         case .focusFeedback: feedback = true; pane = .feedback; focusGeneration = UUID()
         case .previousVersion,.nextVersion:
             guard let selected, let index = versions.firstIndex(where: { $0.id == selected.id }) else { return }
+            assemblyID = nil
             let next = min(versions.count-1,max(0,index+(command == .previousVersion ? -1:1)))
             versionID = versions[next].id
         default: break

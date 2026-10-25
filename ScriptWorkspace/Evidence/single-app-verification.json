@@ -1,0 +1,20 @@
+{
+  "app": "/Users/nathanfennel/Documents/Codex/2026-10-25/task-19/clauto-script-first/.artifacts/DerivedData/Build/Products/Debug/Clauto Editor.app",
+  "bundleID": "com.nathanfennel.Clauto-Editor",
+  "codeImagesSHA256": {
+    "__preview.dylib": "3079738d84f68ca0c63043367e3d52754bab8f2bbca95d2a2fd5ac73703b2f17",
+    "Clauto Editor.debug.dylib": "a4b216bbe3f37ffb1accb8ed91fe2a9ac0dfc38e894be82da6b481df3a802661",
+    "Clauto Editor": "763cf366c7528a0609e8b39825b09348c3886d67ac0186d07ff58e4ab4ab8f4e"
+  },
+  "sameAppLinkedFeatures": {
+    "ScriptWorkspaceView": true,
+    "ScriptAssemblyReviewPane": true,
+    "SoundTimelineEditorView": true,
+    "GraphicStudioView": true,
+    "FontStudioView": true,
+    "CutoutStudioView": true
+  },
+  "separateScriptQABundleExists": false,
+  "nativeTests": "Test run with 508 tests in 45 suites passed after 98.584 seconds.",
+  "pythonRegressions": "92 passed in 2.16s"
+}

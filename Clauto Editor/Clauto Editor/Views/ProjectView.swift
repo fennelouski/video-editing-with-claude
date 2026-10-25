@@ -49,7 +49,7 @@ struct ProjectView: View {
                         else if tab == "Files" { FilesView(store: store, project: project) }
                         else if tab == "Studio" { CreativeStudioView(store: store,project: project) }
                         else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
-                        else if tab == "Script" { ScriptWorkspaceView(project: project) }
+                        else if tab == "Script" { ScriptWorkspaceView(store: store, project: project, router: playbackRouter) }
                         else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
                     }.frame(maxHeight: .infinity)
                     if tab != "Transcript" && tab != "Script" && tab != "Cut" && tab != "Studio" {
