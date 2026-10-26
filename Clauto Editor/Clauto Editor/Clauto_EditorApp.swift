@@ -1,6 +1,6 @@
 //
 //  Clauto_EditorApp.swift
-//  Clauto Editor
+//  Clauto Video (legacy target and bundle identity retained)
 //
 //  Created by Nathan on 10/13/26.
 //
@@ -49,7 +49,7 @@ struct Clauto_EditorApp: App {
         }
         Settings {
             VStack(spacing: 0) {
-                HStack { ClautoWindowControls(onRail: false); Spacer(); Text("Clauto workspace").font(ClautoDesign.type(13, weight: .semibold)) }
+                HStack { ClautoWindowControls(onRail: false); Spacer(); Text("Clauto Video workspace").font(ClautoDesign.type(13, weight: .semibold)) }
                     .padding(.horizontal, 24).padding(.vertical, 14).background(ClautoDesign.paper)
                 ClautoRule()
                 SetupView(store: store)

@@ -335,4 +335,81 @@ struct ScriptWorkspaceTests {
         #expect(saved.state.versions.count == 1 && saved.state.versions[0].title == "Saved exactly once")
         #expect(try Data(contentsOf: index) == damaged)
     }
+    @Test func connectedWriterUsesCompleteSourcesAndPrivateProvenanceWithStaleRefusal() async throws {
+        let f = try await fixture();defer { f.cleanup() }
+        let repository = ScriptWorkspaceRepository()
+        let initial = try #require(try await repository.load(project: f.project))
+        #expect(throws: (any Error).self) { _ = try ScriptWriterSubmission(session: initial,title: "Writer",model: "opus") }
+        var reviewed = try await reviewAll(repository,initial)
+        reviewed.state.versions = [script(f)]
+        let submission = try ScriptWriterSubmission(session: reviewed,title: "Independent",model: "opus")
+        for row in f.catalog.rows { #expect(submission.prompt.contains(row.text)) }
+        #expect(!submission.prompt.contains(f.root.path))
+        #expect(!submission.prompt.contains("PRIVATE_AUTHOR_SENTINEL") && !submission.prompt.contains("PRIVATE_TITLE"))
+        let response = ScriptWriterResponse(bytes: try ScriptInterchange.exportVersion(script(f),catalog: f.catalog),reportedModel: "claude-opus-synthetic-test")
+        let saved = try await repository.saveWriterResponse(project: f.project,submission: submission,response: response)
+        let version = try #require(saved.state.versions.last)
+        #expect(saved.state.versions.count == 1 && version.title == "Independent" && version.approval == nil)
+        #expect(version.provenance.model == "claude-opus-synthetic-test" && !version.provenance.identityVerified)
+        #expect(version.importedArtifact == response.bytes)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.project.folder.appendingPathComponent(".clauto/script-writer").path).count == 1)
+        await #expect(throws: (any Error).self) { _ = try await repository.saveWriterResponse(project: f.project,submission: submission,response: response) }
+        let current = try #require(try await repository.load(project: f.project))
+        #expect(current.state.versions.count == 1)
+        let next = try ScriptWriterSubmission(session: current,title: "Invalid response",model: "")
+        await #expect(throws: (any Error).self) { _ = try await repository.saveWriterResponse(project: f.project,submission: next,response: .init(bytes: Data("fake words".utf8),reportedModel: nil)) }
+        #expect(try await repository.load(project: f.project)?.state.versions.count == 1)
+    }
+    @Test func connectedWriterNeverTruncatesAnOversizedSourcePacket() async throws {
+        let f = try await fixture();defer { f.cleanup() }
+        var project = f.project;project.brief.about = String(repeating: "long transcript context ",count: 4000)
+        let session = ScriptWorkspaceSession(project: project,catalog: f.catalog,state: try state(f))
+        #expect(throws: (any Error).self) { _ = try ScriptWriterSubmission(session: session,title: "Independent",model: "opus") }
+        var comparison = try state(f);comparison.versions = [script(f),script(f,reverse: true)]
+        try comparison.startComparison(comparison.versions.map(\.id))
+        let blind = ScriptWorkspaceSession(project: f.project,catalog: f.catalog,state: comparison)
+        #expect(throws: (any Error).self) { _ = try ScriptWriterSubmission(session: blind,title: "Independent",model: "opus") }
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_CONNECTED_WRITER_ACCEPTANCE"] == "1"))
+    func realConnectedWriterAcceptanceUsesOnlySyntheticSpeech() async throws {
+        let f = try await fixture();defer { f.cleanup() }
+        let session = ScriptWorkspaceSession(project: f.project,catalog: f.catalog,state: try state(f))
+        let submission = try ScriptWriterSubmission(session: session,title: "Synthetic connected writer acceptance",model: "opus")
+        let response = try await ConnectedScriptWriter().write(submission)
+        let version = try ScriptInterchange.importVersion(response.bytes,catalog: f.catalog,provenance: .init(author: "Connected acceptance only",model: response.reportedModel ?? "unreported",origin: "Synthetic speech; no private user input"))
+        #expect(!version.beats.isEmpty && version.approval == nil)
+        #expect(response.reportedModel?.lowercased().contains("opus") == true)
+        if let path = ProcessInfo.processInfo.environment["CLAUTO_CONNECTED_WRITER_EVIDENCE"] {
+            let evidence: [String:Any] = ["requestedModel":"opus","reportedModel":response.reportedModel ?? "unreported","identityVerified":false,"prompt":submission.prompt,"response":String(decoding: response.bytes,as: UTF8.self),"responseSHA256":TranscriptSourceMap.sha(response.bytes),"validSourceBoundResponse":true,"userProjectDataSent":false]
+            try JSONSerialization.data(withJSONObject: evidence,options: [.prettyPrinted,.sortedKeys]).write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    @MainActor @Test func cancellingConnectedWriterJoinsItBeforeExitWithoutPublishingADraft() async throws {
+        let f = try await fixture();defer { f.cleanup() }
+        let repository = ScriptWorkspaceRepository(),initial = try #require(try await repository.load(project: f.project))
+        _ = try await reviewAll(repository,initial)
+        let writer = HoldingScriptWriterFixture(),controller = ScriptWorkspaceController(project: f.project,repository: repository,writer: writer)
+        await controller.load();await controller.prepareWriter(title: "Cancelled draft",model: "")
+        controller.generateScript()
+        for _ in 0..<100 { if await writer.started { break };try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.busy && controller.generating)
+        #expect(await controller.flushForExit())
+        let cancelled = await writer.cancelled
+        #expect(!controller.busy && !controller.generating && cancelled)
+        #expect(try await repository.load(project: f.project)?.state.versions.isEmpty == true)
+    }
+
+}
+
+private actor HoldingScriptWriterFixture: ScriptWriting {
+    var started = false
+    var cancelled = false
+    func write(_ submission: ScriptWriterSubmission) async throws -> ScriptWriterResponse {
+        started = true
+        while !cancelled { try await Task.sleep(for: .milliseconds(20)) }
+        throw CancellationError()
+    }
+    func cancel() { cancelled = true }
 }

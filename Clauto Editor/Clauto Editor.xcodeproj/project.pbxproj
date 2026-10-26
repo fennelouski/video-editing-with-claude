@@ -31,7 +31,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		D8E50E23307E619200A4B56F /* Clauto Editor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Clauto Editor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D8E50E23307E619200A4B56F /* Clauto Video.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Clauto Video.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8E50E32307E619300A4B56F /* Clauto EditorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Clauto EditorTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8E50E3C307E619300A4B56F /* Clauto EditorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Clauto EditorUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -96,7 +96,7 @@
 		D8E50E24307E619200A4B56F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D8E50E23307E619200A4B56F /* Clauto Editor.app */,
+				D8E50E23307E619200A4B56F /* Clauto Video.app */,
 				D8E50E32307E619300A4B56F /* Clauto EditorTests.xctest */,
 				D8E50E3C307E619300A4B56F /* Clauto EditorUITests.xctest */,
 			);
@@ -129,7 +129,7 @@
                 A30000000000000000000005,
 			);
 			productName = "Clauto Editor";
-			productReference = D8E50E23307E619200A4B56F /* Clauto Editor.app */;
+			productReference = D8E50E23307E619200A4B56F /* Clauto Video.app */;
 			productType = "com.apple.product-type.application";
 		};
 		D8E50E31307E619300A4B56F /* Clauto EditorTests */ = {
@@ -454,6 +454,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.nathanfennel.Clauto-Editor";
+                WRAPPER_NAME = "Clauto Video.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -492,6 +493,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.nathanfennel.Clauto-Editor";
+                WRAPPER_NAME = "Clauto Video.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -520,7 +522,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clauto Editor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Clauto Editor";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clauto Video.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Clauto Editor";
 			};
 			name = Debug;
 		};
@@ -541,7 +543,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clauto Editor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Clauto Editor";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clauto Video.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Clauto Editor";
 			};
 			name = Release;
 		};

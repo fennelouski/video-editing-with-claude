@@ -27,6 +27,7 @@ private struct ScriptWorkspaceContent: View {
     @State private var factsReviewed = false
     @State private var pickedVersions: Set<UUID> = []
     @State private var renamingVersion = false
+    @State private var writerSetup = false
     private var session: ScriptWorkspaceSession? { controller.session }
     private var version: ScriptVersion? { session?.state.versions.first(where: { $0.id == selectedVersion }) }
     private var mustCompare: Bool { session?.state.reviewInProgress == true }
@@ -69,6 +70,12 @@ private struct ScriptWorkspaceContent: View {
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
             .buttonStyle(ClautoButtonStyle())
             .disabled(controller.busy)
+            .overlay(alignment: .topTrailing) {
+                if controller.generating {
+                    Button("Cancel script request") { Task { await controller.cancelWriter() } }.padding(18).accessibilityIdentifier("cancelScriptWriter")
+                }
+            }
+            .sheet(isPresented: $writerSetup,onDismiss: { controller.discardWriter() }) { ScriptWriterSheet(controller: controller) }
             .onChange(of: session?.state.revisionID) {
                 factsReviewed = false
                 if selectedVersion == nil { selectedVersion = session?.state.versions.first?.id }
@@ -120,6 +127,7 @@ private struct ScriptWorkspaceContent: View {
                 if !mustCompare {
                     if !controller.assemblies.isEmpty { Button("Assemblies in Cut") { openCut() } }
                     Button("New / import version") { newVersion = true }.disabled(session?.coverageComplete != true).accessibilityIdentifier("newScriptVersion")
+                    Button("Draft with Claude…") { writerSetup = true }.disabled(session?.coverageComplete != true).accessibilityIdentifier("connectedScriptWriter")
                 }
             }
             if let session {
@@ -162,7 +170,7 @@ private struct ScriptWorkspaceContent: View {
             }
         }
         Button("Export local writer packet") { Task { await controller.exportWriterPacket() } }.disabled(!session.coverageComplete).accessibilityIdentifier("exportScriptWriterPacket")
-        Text("The packet stays local. Import a real writer's source-bound JSON as another version; no AI service is called or credited with a draft here.").font(ClautoDesign.caption)
+        Text("Export stays local. To use connected Claude, choose Draft with Claude and review the exact text before sending. Every response is validated as an independent, unapproved version.").font(ClautoDesign.caption)
     }
 
     @ViewBuilder private func writing(_ session: ScriptWorkspaceSession) -> some View {
@@ -236,5 +244,38 @@ private struct ScriptWorkspaceContent: View {
             Button("Begin blind comparison") { Task { await controller.perform(.compare(session.state.versions.filter { pickedVersions.contains($0.id) }.map(\.id))) } }
                 .disabled(pickedVersions.count < 2 || !session.coverageComplete).accessibilityIdentifier("beginBlindScriptComparison")
         }
+    }
+}
+
+private struct ScriptWriterSheet: View {
+    @Bindable var controller: ScriptWorkspaceController
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = "Independent script"
+    @State private var model = "opus"
+    var body: some View {
+        VStack(alignment: .leading,spacing: 18) {
+            Text("Draft an independent script").font(.title2)
+            if let submission = controller.writerSubmission {
+                Text("This exact brief and complete transcript text will be sent to your existing connected Claude account. No media files, file access, tools or other script versions are supplied.")
+                Text("Requested model: \(submission.requestedModel ?? "account default"). A model alias does not verify an exact version such as Opus 5.5. Unavailable models fail without substitution.").font(.caption)
+                ScrollView { Text(submission.prompt).font(.system(.caption,design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity,alignment: .leading) }.frame(height: 310).accessibilityIdentifier("scriptWriterTextReview")
+                Text("A valid response becomes a separate draft. It needs blind comparison and your approval before timeline assembly. Model attribution stays private and unverified.").font(.caption)
+                HStack {
+                    Button("Back") { controller.discardWriter() }
+                    Spacer()
+                    Button("Send text and draft") { controller.generateScript();dismiss() }.accessibilityIdentifier("sendScriptWriter")
+                }
+            } else {
+                TextField("New version title",text: $title).textFieldStyle(.roundedBorder)
+                TextField("Requested model ID or alias",text: $model).textFieldStyle(.roundedBorder).accessibilityIdentifier("scriptWriterModel")
+                Text("Use a model available through your existing subscription. Leave blank for its current default. Clauto does not add an AI service or sign in for you.").font(.caption)
+                if let failure = controller.failure { Text(failure).font(.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled) }
+                HStack {
+                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Review text to send") { Task { await controller.prepareWriter(title: title,model: model) } }.accessibilityIdentifier("reviewScriptWriterText")
+                }
+            }
+        }.padding(26).frame(width: 720).font(ClautoDesign.body).clautoThemeAppearance()
     }
 }

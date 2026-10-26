@@ -43,10 +43,12 @@ private actor ConversationCommandFixture: CommandRunning {
     var cancelled = 0
     let lines: [String]
     let help: String
-    init(lines: [String] = [],help: String = ClaudeClientContract.requiredFlags.joined(separator: " ")) { self.lines = lines; self.help = help }
+    let probe: ProcessResult?
+    init(lines: [String] = [],help: String = ClaudeClientContract.requiredFlags.joined(separator: " "),probe: ProcessResult? = nil) { self.lines = lines; self.help = help;self.probe = probe }
     func run(_ command: ProcessCommand,onLine: (@Sendable (ProcessLine) async -> Void)?) async throws -> ProcessResult {
         commands.append(command)
         if command.arguments == ["--help"] { return .init(exitCode: 0,output: help,error: "",cancelled: false) }
+        if command.arguments == ["--print","--max-turns"],let probe { return probe }
         for line in lines { await onLine?(.init(text: line,isError: false)) }
         return .init(exitCode: 0,output: "",error: "",cancelled: cancelled > 0)
     }
@@ -127,6 +129,19 @@ struct LiveConversationTests {
         #expect(reply.finished && reply.failed && reply.text == "Received assistant words")
         #expect(reply.events.last == .result(text: "Synthetic raw client diagnostic: run a command elsewhere",failed: true,subtype: "error"))
     }
+    @Test func requestedWriterModelRequiresActualClientCapabilityAndPreservesTextOnlyLimits() throws {
+        let exe = URL(fileURLWithPath: "/usr/bin/true")
+        var contract = ClaudeClientContract(executable: exe,executableSHA256: try ClaudeClientContract.digest(exe),helpSHA256: String(repeating: "a",count: 64))
+        let id = UUID(),text = "Complete synthetic source packet"
+        var request = ClaudeTurnRequest(sessionID: UUID(),resume: false,prompt: text,project: URL(fileURLWithPath: "/private-project"),engine: URL(fileURLWithPath: "/private-engine"),projectID: id,textOnlyWorkspace: URL(fileURLWithPath: "/tmp/only-text"),textAuthorization: .init(projectID: id,text: text),requestedModel: "opus")
+        #expect(throws: (any Error).self) { _ = try ClaudeCLITransport(contract: contract).command(request) }
+        contract.supportsModelSelection = true
+        let args = try ClaudeCLITransport(contract: contract).command(request).arguments
+        #expect(args[try #require(args.firstIndex(of: "--model"))+1] == "opus")
+        #expect(args.contains("--restricted") && args.contains("--safe-mode") && !args.contains("--add-dir"))
+        request.requestedModel = "--permission-mode=skip"
+        #expect(throws: (any Error).self) { _ = try ClaudeCLITransport(contract: contract).command(request) }
+    }
     @Test func exactExplicitTextAuthorizationAndClientCommandGrantNoProjectAccess() throws {
         let exe = URL(fileURLWithPath: "/usr/bin/true"), contract = ClaudeClientContract(executable: exe,executableSHA256: try ClaudeClientContract.digest(exe),helpSHA256: String(repeating: "a",count: 64))
         let project = UUID(), transport = ClaudeCLITransport(contract: contract)
@@ -149,6 +164,18 @@ struct LiveConversationTests {
         #expect(contract.executableSHA256 == (try ClaudeClientContract.digest(exe)))
         #expect(await runner.commands.map(\.arguments) == [["--help"]])
         await #expect(throws: (any Error).self) { _ = try await ClaudeClientContract.inspect(executable: exe,runner: ConversationCommandFixture(help: "incompatible")) }
+    }
+    @Test func hiddenTurnLimitRequiresExactLocalParserProofAndUnknownFlagsFailClosed() async throws {
+        let exe = URL(fileURLWithPath: "/usr/bin/true")
+        let help = ClaudeClientContract.requiredFlags.filter { $0 != "--max-turns" }.joined(separator: " ")
+        let proof = ProcessResult(exitCode: 1,output: "",error: "error: option '--max-turns <turns>' argument missing\n",cancelled: false)
+        let runner = ConversationCommandFixture(help: help,probe: proof)
+        let contract = try await ClaudeClientContract.inspect(executable: exe,runner: runner)
+        #expect(contract.capabilityProbeSHA256 != nil)
+        #expect(await runner.commands.map(\.arguments) == [["--help"],["--print","--max-turns"]])
+        let unknown = ProcessResult(exitCode: 1,output: "",error: "error: unknown option '--max-turns'",cancelled: false)
+        await #expect(throws: (any Error).self) { _ = try await ClaudeClientContract.inspect(executable: exe,runner: ConversationCommandFixture(help: help,probe: unknown)) }
+        await #expect(throws: (any Error).self) { _ = try await ClaudeClientContract.inspect(executable: exe,runner: ConversationCommandFixture(help: help)) }
     }
     @Test func existingAccountFlowUsesSubscriptionLoginAndNeverAcceptsAnAPIKeyAsReady() async throws {
         let exe = URL(fileURLWithPath: "/usr/bin/true")

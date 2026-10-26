@@ -43,12 +43,19 @@ struct ReviewWorkspace: View {
                     }.disabled(selected == nil || selectedAssembly != nil).accessibilityIdentifier("editTimelineSounds")
                     Button { feedback.toggle() } label: { ClautoIcon(.conversation) }.accessibilityLabel("Toggle feedback").clautoHelp("Feedback")
                 }.padding(10)
+                if selectedAssembly == nil,selected?.artifacts.contains("inputs/import-binding.json") == true {
+                    Text("Rendered review movie · original editable source layers are not included. Source attachments are retained references, not new script or fact approval.")
+                        .font(ClautoDesign.caption).frame(maxWidth: .infinity,alignment: .leading).padding(10).accessibilityIdentifier("renderedReviewNotice")
+                }
                 ClautoRule()
                 HStack(spacing: 0) {
                     if showAssets {
                         ScrollView {
                             VStack(alignment: .leading,spacing: 14) {
                                 Text("Versions").font(.headline)
+                                Button("Import verified review…") { Task {
+                                    if let packet = await FileDialogs.files().first { await store.importVerifiedReview(packet,project: project) }
+                                } }.disabled(store.working).accessibilityIdentifier("importVerifiedReview")
                                 ForEach(versions) { version in
                                     Button { assemblyID = nil; versionID = version.id } label: {
                                         HStack { ClautoIcon(version.id == selected?.id ? .play:.version); Text("v\(version.number) · \(version.label)").frame(maxWidth: .infinity,alignment: .leading) }

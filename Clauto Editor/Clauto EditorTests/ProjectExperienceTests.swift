@@ -98,7 +98,7 @@ struct ProjectExperienceTests {
         #expect(resultMovie.succeeded)
         let movieSHA = TranscriptSourceMap.sha(try Data(contentsOf: movie))
         try JSONSerialization.data(withJSONObject: ["sha256":movieSHA,"review":movie.path,"technical_checks_passed":true,"duration_seconds":f.target.duration,"actual_frames":36]).write(to: receipt)
-        let request = ReviewMovieImportRequest(movie: movie,movieSHA256: movieSHA,nativeTimeline: f.project.folder.appendingPathComponent("cuts/v001/exports/cut.fcpxml"),script: f.project.folder.appendingPathComponent(f.target.approvedScriptPath),plan: f.project.folder.appendingPathComponent(f.target.approvedPlanPath),brief: f.project.folder.appendingPathComponent("cuts/v001/inputs/brief.md"),verificationReceipt: receipt,number: 1,label: "Another verified edition")
+        let request = ReviewMovieImportRequest(movie: movie,movieSHA256: movieSHA,nativeTimeline: nil,script: f.project.folder.appendingPathComponent(f.target.approvedScriptPath),plan: f.project.folder.appendingPathComponent(f.target.approvedPlanPath),brief: f.project.folder.appendingPathComponent("cuts/v001/inputs/brief.md"),verificationReceipt: receipt,number: 1,label: "Another verified edition")
         let result = try await ReviewMovieImportService().importReview(request,root: f.root,engine: f.root,existingProject: f.project)
         #expect(result.id == f.project.id && result.folder == f.project.folder)
         #expect(try Data(contentsOf: pointer) == pointerBefore && Data(contentsOf: metadata) == metadataBefore)
@@ -107,11 +107,29 @@ struct ProjectExperienceTests {
         let object = try #require(JSONSerialization.jsonObject(with: binding) as? [String:Any])
         #expect(object["originalVersionNumber"] as? Int == 1 && object["number"] as? Int == 2)
         #expect(object["productionAuthorized"] as? Bool == false)
+        #expect(object["timelineKind"] as? String == "single_rendered_movie_reference" && object["originalSourceLayersEditable"] as? Bool == false)
+        let xml = try XMLDocument(contentsOf: result.folder.appendingPathComponent("cuts/v002/exports/watched.fcpxml"),options: .nodeLoadExternalEntitiesNever)
+        #expect(try xml.nodes(forXPath: "/fcpxml/resources/asset").count == 1)
+        let src = try #require(xml.nodes(forXPath: "/fcpxml/resources/asset/media-rep/@src").first?.stringValue)
+        #expect(URL(string: src) == result.folder.appendingPathComponent("cuts/v002/exports/verified.mp4"))
+        _ = try await ReviewMovieImportService().importReview(request,root: f.root,engine: f.root,existingProject: result)
+        #expect(try await WorkflowRepository().versions(project: result).count == 2)
+        #expect(try Data(contentsOf: pointer) == pointerBefore)
+        let importedVersion = try #require(try await WorkflowRepository().versions(project: result).first { $0.number == 2 })
+        let target = try await WorkflowRepository().voiceReviewTarget(importedVersion,project: result)
+        #expect(target.preview.sha256 == movieSHA && target.versionNumber == 2)
     }
 }
 
 #if !canImport(ClautoCore)
 @MainActor @Suite(.serialized) struct ProjectExperienceNativeTests {
+    @Test func renamedAppPreservesItsExistingBundleAndExecutableIdentity() {
+        #expect(Bundle.main.bundleIdentifier == "com.nathanfennel.Clauto-Editor")
+        #expect(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String == "Clauto Video")
+        #expect(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == "Clauto Video")
+        #expect(Bundle.main.executableURL?.lastPathComponent == "Clauto Editor")
+        #expect(Bundle.main.bundleURL.lastPathComponent == "Clauto Video.app")
+    }
     @Test func groupingPersistsAndSwitchesVersionsWithoutChangingProjectBytesOrDrafts() async throws {
         let root = try experienceRoot();defer { try? FileManager.default.removeItem(at: root) }
         let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }

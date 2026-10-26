@@ -50,7 +50,7 @@ actor HandoffExportService {
         guard let consumer = CGDataConsumer(data: data) else { throw ProjectFailure.invalidProject }
         var page = CGRect(x: 0, y: 0, width: 612, height: 792)
         guard let context = CGContext(consumer: consumer, mediaBox: &page,
-                                      [kCGPDFContextTitle: report.title, kCGPDFContextCreator: "Clauto Editor"] as CFDictionary) else { throw ProjectFailure.invalidProject }
+                                      [kCGPDFContextTitle: report.title, kCGPDFContextCreator: "Clauto Video"] as CFDictionary) else { throw ProjectFailure.invalidProject }
         let framesetter = CTFramesetterCreateWithAttributedString(content)
         var index = 0, number = 1
         while index < content.length {
@@ -62,7 +62,7 @@ actor HandoffExportService {
             let visible = CTFrameGetVisibleStringRange(frame)
             guard visible.length > 0 else { throw WorkflowFailure.invalid("The handoff text could not fit on the page.") }
             index += visible.length
-            let footer = NSAttributedString(string: "Clauto Editor  |  Page \(number)", attributes: [
+            let footer = NSAttributedString(string: "Clauto Video  |  Page \(number)", attributes: [
                 NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 9, nil),
             ])
             context.textPosition = CGPoint(x: 42, y: 30)

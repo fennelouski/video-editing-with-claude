@@ -90,6 +90,7 @@ struct ClaudeTurnRequest: Sendable {
     var projectID: UUID? = nil
     var textOnlyWorkspace: URL? = nil
     var textAuthorization: ClaudeTextAuthorization? = nil
+    var requestedModel: String? = nil
 }
 
 protocol ClaudeTurnTransport: Sendable {

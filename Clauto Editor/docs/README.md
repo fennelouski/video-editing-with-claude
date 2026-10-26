@@ -1,8 +1,8 @@
-# Clauto Editor
+# Clauto Video
 
 A macOS app that lets someone make an edited video with Claude Code without ever opening Terminal.
 
-Clauto Editor is the front door to the pipeline in this repo. It installs the tools, asks the
+Clauto Video is the front door to the pipeline in this repo. It installs the tools, asks the
 questions, takes the files, runs Claude Code in the background, and shows the result. The user
 describes the video; Claude does the editing; the user reacts and asks for changes.
 

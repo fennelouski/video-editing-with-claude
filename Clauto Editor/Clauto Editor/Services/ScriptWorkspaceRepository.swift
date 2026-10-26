@@ -55,6 +55,7 @@ actor ScriptWorkspaceRepository {
         guard let transcript = try await transcriptRepository.load(project: fresh) else {
             throw WorkflowFailure.invalid("Import the complete source transcript catalog in Transcript before writing a script.")
         }
+        try Task.checkCancellation()
         let lease = try ProjectMutationLease.acquire(fresh); defer { withExtendedLifetime(lease) {} }
         var session = try read(project: fresh, transcript: transcript, root: lease.root)
         let metadata = try lease.root.child(".clauto", create: true)
@@ -122,6 +123,32 @@ actor ScriptWorkspaceRepository {
         """
         return try await exportFiles(["transcript-catalog.json": JSONEncoder().encode(session.catalog),
             "engine-sources.json": ScriptInterchange.exportSources(session.catalog), "writer-instructions.txt": Data(prompt.utf8)], session: session)
+    }
+
+    func saveWriterResponse(project: Project,submission: ScriptWriterSubmission,response: ScriptWriterResponse) async throws -> ScriptWorkspaceSession {
+        guard let current = try await load(project: project),current.state.revisionID == submission.revision,current.coverageComplete,!current.state.reviewInProgress else {
+            throw WorkflowFailure.invalid("Sources or scripts changed while the writer was running. No generated version was applied; reload and request a fresh draft.")
+        }
+        try Task.checkCancellation()
+        if let requested = submission.requestedModel {
+            guard let reported = response.reportedModel,
+                  reported == requested || (["opus","sonnet","haiku"].contains(requested) && reported.lowercased().contains(requested)) else {
+                throw WorkflowFailure.invalid("The provider did not report the requested model. No substitute script version was saved. Choose a supported exact model or leave the model blank for the account default.")
+            }
+        }
+        let provenance = ScriptProvenance(author: "Connected Claude",model: response.reportedModel ?? "Provider did not report a model",origin: "Connected text response; requested model: \(submission.requestedModel ?? "account default"); model identity unverified; request SHA-256: \(TranscriptSourceMap.sha(Data(submission.prompt.utf8)))")
+        // Validate before publishing any version. Invalid generated selections do
+        // not become recorded speech or silently get repaired into pickups.
+        _ = try ScriptInterchange.importVersion(response.bytes,catalog: current.catalog,provenance: provenance)
+        do {
+        let lease = try ProjectMutationLease.acquire(current.project)
+        let folder = try lease.root.child(".clauto").child("script-writer",create: true)
+        let record: [String:Any] = ["request":submission.prompt,"requestedModel":submission.requestedModel ?? "account default","reportedModel":response.reportedModel ?? "unreported","sourceRevision":submission.revision.uuidString,"response":String(decoding: response.bytes,as: UTF8.self),"responseSHA256":TranscriptSourceMap.sha(response.bytes),"identityVerified":false]
+        try folder.writeNew(JSONSerialization.data(withJSONObject: record,options: [.sortedKeys]),name: UUID().uuidString+".json")
+        withExtendedLifetime(lease) {}
+        }
+        try Task.checkCancellation()
+        return try await update(project: project,expectedRevision: submission.revision,action: .importScript(response.bytes,provenance,submission.title))
     }
 
     func assemble(project: Project, expectedRevision: UUID, versionID: UUID) async throws -> URL {

@@ -290,6 +290,7 @@ final class EditorStore {
         }
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
+        if !(await scriptWorkspaces.flushForExit()) { voicesSaved = false }
         for controller in graphicStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in fontStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in cutoutStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
@@ -656,6 +657,22 @@ final class EditorStore {
         guard let project = selected, runningProjectID == nil else { return }
         do { try await workflow.restore(version, project: project); currentCuts[project.id] = version }
         catch { notice = error.localizedDescription }
+    }
+
+    func importVerifiedReview(_ packetURL: URL,project: Project) async {
+        guard !working,runningProjectID == nil,!hasPendingReviewWork else { notice = "Finish saving or stop the active operation before importing a review.";return }
+        working = true
+        do {
+            let bytes = try SourceRenderDirectory.open(packetURL.deletingLastPathComponent()).read(packetURL.lastPathComponent,limit: 1024*1024)
+            let packet = try JSONDecoder().decode(ReviewMovieImportPacket.self,from: bytes)
+            guard packet.projectID == project.id else { throw WorkflowFailure.invalid("This review packet belongs to another project. Select its existing project first.") }
+            try await storage.validateProjectWrites(project)
+            let imported = try await ReviewMovieImportService().importReview(packet.request,root: projectRoot,engine: engineRoot,existingProject: project)
+            update(imported)
+            notice = "Rendered review registered in this project. Original source layers are not included; existing cuts and source footage remain unchanged.";noticeTitle = "Review added"
+        } catch { notice = error.localizedDescription }
+        working = false
+        if selectedID == project.id { await loadWorkflow() }
     }
 
     func exportHandoff(_ version: CutVersion) async -> URL? {

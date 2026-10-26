@@ -276,7 +276,7 @@ import Observation
         generation = UUID(); retainedRouter = session.router
         window.presentation = self
         window.appearance = NSAppearance(named: .darkAqua)
-        window.title = "\(session.project.manifest.name) · v\(session.version.number)"
+        window.title = "\(session.project.manifest.name) · v\(session.version.number) — Clauto Video"
         window.isReleasedWhenClosed = false; window.delegate = self; window.minSize = NSSize(width: 420,height: 280)
         videoWindow = window; detached = true
         let host = NSHostingView(rootView: DetachedReviewVideo(session: session,presentation: self,generation: generation))

@@ -92,10 +92,7 @@ script. The importer validates every whole-row word selection and rejects invent
 recorded text, stale hashes and invalid pickups. It preserves unresolved writer
 fact/coverage flags in visible notes and the original input bytes privately.
 
-This candidate does not call an AI model or label local deterministic behavior as
-generation. A real, authorized writer response, including an independently produced
-Opus response, can be imported and attributed privately. It adds no paid service,
-credential, account connection or permission. Model identity is not attested.
+Draft with Claude now offers an optional real text-only request through the existing verified subscription client. Full-source review and a completed comparison remain prerequisites. Review the exact full-source/Brief text before sending. Other script versions and private author mappings are excluded. The complete packet must fit the existing 64 KiB transport limit; oversized packets fail without truncation and remain exportable locally. A requested model ID is passed only when the actual client supports model selection; it is never silently substituted. An alias such as `opus` does not attest Opus 5.5. Reported model identity, requested model, exact request/response and source revision are retained privately in `.clauto/script-writer/`. Invalid source selections are refused; a valid response becomes a separate unapproved version. Changed state during the request prevents publication. Cancellation and exit stop/join the owned request. No new paid service, credentials, account or security permission is added. Real account/model availability is separate runtime acceptance. Manual import of an independently produced response remains supported.
 
 Current state is a checked pointer at `.clauto/script-workspace.json`; immutable
 UUID checkpoints and their hashes live under `.clauto/script-workspace/`. Stale
@@ -110,7 +107,7 @@ Source review and comparison scroll vertically; scoring controls reflow at narro
 widths. Recorded speech has no editable text field.
 
 Use `script/build_script_candidate.sh --build-only` to build the existing Clauto
-Editor target in local derived data. It keeps the existing app name and bundle ID,
+Editor target in local derived data. It builds the visibly renamed Clauto Video bundle with the existing bundle ID,
 does not stage/re-identify a second bundle, and does not install or launch anything.
 The earlier separately identified development QA copy was retired and removed.
 Any later app launch still requires coordination with the film foreground owner.

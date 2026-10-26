@@ -16,7 +16,7 @@ xcodebuild -project 'Clauto Editor/Clauto Editor.xcodeproj' -scheme 'Clauto Edit
   -clonedSourcePackagesDirPath .artifacts/SourcePackages \
   -disableAutomaticPackageResolution -skipPackageUpdates CODE_SIGNING_ALLOWED=NO build \
   > .artifacts/script-editor-build.log 2>&1 || { tail -45 .artifacts/script-editor-build.log; exit 1; }
-APP_BUNDLE="$ROOT_DIR/.artifacts/DerivedData/Build/Products/Debug/Clauto Editor.app"
+APP_BUNDLE="$ROOT_DIR/.artifacts/DerivedData/Build/Products/Debug/Clauto Video.app"
 # This is the existing app target and bundle identity. Do not stage, rename,
 # re-identify, install or launch a second Script/QA application.
 echo "$APP_BUNDLE"

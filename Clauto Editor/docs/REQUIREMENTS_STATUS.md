@@ -1,4 +1,6 @@
-# Clauto Editor implementation coverage
+# Clauto Video implementation coverage
+
+The [current request ledger](REQUEST_LEDGER.md) records the later script, storage, navigation and visible-rename work. Historical milestone and broader product acceptance limits below remain separately scoped.
 
 The editor is incomplete. A project launch, compiled control or passing fixture
 does not establish full-product acceptance. This checklist reconciles the

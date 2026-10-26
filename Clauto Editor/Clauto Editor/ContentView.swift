@@ -63,7 +63,7 @@ struct ContentView: View {
                 FrameCommentEditor(controller: controller, close: { playbackRouter.dismissEditor() })
                     .interactiveDismissDisabled()
             }
-            .navigationTitle(store.selected.map { store.libraryName(for: $0) } ?? "Clauto")
+            .navigationTitle(store.selected.map { store.libraryName(for: $0)+" — Clauto Video" } ?? "Clauto Video")
             .sheet(item: $coverProject) { project in ProjectCoverEditor(library: store.covers,projectID: project.id,name: store.libraryName(for: project)) }
             .sheet(item: $groupDraft) { draft in ProjectGroupEditor(store: store,draft: draft) }
             .onChange(of: playbackRouter.tab) { _, tab in if tab != "Cut" { playbackRouter.inlineDrawing = false } }
@@ -105,7 +105,7 @@ struct ContentView: View {
             ClautoWindowControls().padding(.horizontal, 24).padding(.top, 18)
             HStack(spacing: 12) {
                 ClautoEmblem(bracketColor: ClautoDesign.railText, stripColor: ClautoDesign.citron).frame(width: 38, height: 38)
-                Text("Clauto").font(ClautoDesign.type(24, weight: .semibold)).tracking(-0.5)
+                Text("Clauto Video").font(ClautoDesign.type(21, weight: .semibold)).tracking(-0.5).lineLimit(1).minimumScaleFactor(0.8)
             }.padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 30)
             Text("Projects").accessibilityAddTraits(.isHeader).font(ClautoDesign.type(13, weight: .semibold)).foregroundStyle(ClautoDesign.railText).padding(.horizontal, 24).padding(.bottom, 12)
             ScrollView {
