@@ -23,7 +23,7 @@ actor ProjectRepository {
         }
     }
 
-    func create(name: String, root: URL, engine: URL, engineVersion: String = "development", resolution: ExportResolution = .fullHD, importedReviewOnly: Bool = false) throws -> Project {
+    func create(name: String, root: URL, engine: URL, engineVersion: String = "development", resolution: ExportResolution = .fullHD, importedReviewOnly: Bool = false, storageProfileID: UUID? = nil, storageRoots: [StorageRole:URL]? = nil) throws -> Project {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 160, !name.contains("/"), !name.contains(":"),
               !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
@@ -39,7 +39,7 @@ actor ProjectRepository {
                 try manager.createDirectory(at: folder.appendingPathComponent(path), withIntermediateDirectories: true)
             }
             var project = Project(manifest: ProjectManifest(importedReviewOnly: importedReviewOnly ? true : nil, name: name, engineVersion: engineVersion, exportResolution: resolution), folder: folder, brief: Brief(),folderIdentity: try SourceRenderDirectory.open(folder).identity)
-            let paths = ["footage": folder.appendingPathComponent("footage").path,
+            var paths = ["footage": folder.appendingPathComponent("footage").path,
                          "assets": folder.appendingPathComponent("assets").path,
                          "build": folder.appendingPathComponent("build").path,
                          "cuts": folder.appendingPathComponent("cuts").path,
@@ -47,6 +47,17 @@ actor ProjectRepository {
                          "templates": engine.appendingPathComponent("templates").path,
                          "whisper_model": project.manifest.whisperModel,
                          "model_cache": root.path.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") ? "/Volumes/Videos/Food Videos/Katie YouTube/Models" : root.appendingPathComponent("Models").path]
+            if let storageProfileID,let storageRoots {
+                guard Set(storageRoots.keys) == Set(StorageRole.allCases),storageRoots[.edits]?.resolvingSymlinksInPath().standardizedFileURL == root.resolvingSymlinksInPath().standardizedFileURL else { throw ProjectFailure.invalidProject }
+                var locations: [StorageRole:String] = [.edits:folder.path]
+                for role in StorageRole.allCases where role != .edits {
+                    let owned = try SourceRenderDirectory.open(storageRoots[role]!)
+                    locations[role] = try owned.child(project.id.uuidString,create: true).url.path
+                    paths["storage_"+role.rawValue] = locations[role]
+                }
+                project.manifest.storageLayout = .init(profileID: storageProfileID,folders: locations)
+                paths["model_cache"] = URL(fileURLWithPath: locations[.cache]!).appendingPathComponent("Models").path
+            }
             try encoder.encode(paths).write(to: folder.appendingPathComponent("paths.json"), options: .atomic)
             try project.brief.markdown.write(to: folder.appendingPathComponent("brief.md"), atomically: true, encoding: .utf8)
             let rules = """
@@ -82,6 +93,10 @@ actor ProjectRepository {
         var manifest = try decoder.decode(ProjectManifest.self,from: bytes)
         guard manifest.schemaVersion == 1, (manifest.mutationRevision ?? 0) >= 0 else { throw ProjectFailure.invalidProject }
         try manifest.durationBounds?.validate()
+        if let layout = manifest.storageLayout {
+            guard Set(layout.folders.keys) == Set(StorageRole.allCases),layout.folders[.edits] == root.url.path,
+                  layout.folders.values.allSatisfy({ $0.hasPrefix("/") && URL(fileURLWithPath: $0).standardizedFileURL.path == $0 }) else { throw ProjectFailure.invalidProject }
+        }
         for file in manifest.files { _ = try intakeURL(file,folder: root.url) }
         manifest = try ProjectRepositoryReferenceSnapshot.recover(manifest,in: root.url)
         guard let markdown = String(data: try root.read("brief.md",limit: 64*1024*1024),encoding: .utf8) else { throw ProjectFailure.invalidProject }
@@ -104,7 +119,7 @@ actor ProjectRepository {
         return next
     }
 
-    func add(_ sources: [URL], to project: Project, group: FileGroup? = nil, copy: Bool = false) throws -> Project {
+    func add(_ sources: [URL], to project: Project, group: FileGroup? = nil, copy: Bool = false,ingestProvenance: [String:String] = [:]) throws -> Project {
         let lease = try ProjectMutationLease.acquire(project); defer { withExtendedLifetime(lease) {} }
         try Self.validateDrive(lease.root.url)
         var next = try fresh(lease)
@@ -142,7 +157,7 @@ actor ProjectRepository {
                 let filename = isFont && !manager.fileExists(atPath: lease.root.url.appendingPathComponent(destinationFolder + "/" + source.lastPathComponent).path) ? source.lastPathComponent : (isGrain ? "paper-grain-\(UUID().uuidString.prefix(8)).\(source.pathExtension)" : "\(UUID().uuidString.prefix(8))-\(source.lastPathComponent)")
                 let file = ProjectFile(name: source.lastPathComponent, group: category,
                                        relativePath: "\(destinationFolder)/\(filename)",
-                                       originalPath: source.path, copied: copied, needsRole: group == nil && category == .audio)
+                                       originalPath: source.path, copied: copied, needsRole: group == nil && category == .audio,ingestSourcePath: ingestProvenance[source.path])
                 let destination = try intakeURL(file, folder: lease.root.url)
                 if copied { try manager.copyItem(at: source, to: destination) }
                 else { try manager.createSymbolicLink(at: destination, withDestinationURL: source) }

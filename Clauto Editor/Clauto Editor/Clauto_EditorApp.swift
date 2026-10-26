@@ -32,6 +32,7 @@ struct Clauto_EditorApp: App {
                     // An explicit project chooses the selection, while the same
                     // app still discovers the rest of the configured workspace.
                     await store.restore()
+                    store.storage.startMonitoring()
                 }
         }
         .defaultSize(width: 1320, height: 860)

@@ -38,7 +38,7 @@ struct ContentView: View {
                     }.padding(16).background(ClautoDesign.soft).accessibilityElement(children: .contain)
                 }
                 if let project = store.selected {
-                    ProjectView(store: store, project: project, playbackRouter: playbackRouter, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id)
+                    ProjectView(store: store, project: project, playbackRouter: playbackRouter, initialTab: initialProjectTab, initialTranscriptReviewGates: initialTranscriptReviewGates).id(project.id.uuidString+":"+project.folder.path)
                 } else {
                     VStack(alignment: .leading, spacing: 28) {
                         ClautoEmpty(title: "New project", detail: "")
@@ -136,6 +136,9 @@ struct ContentView: View {
             }
             Spacer(minLength: 18)
             VStack(alignment: .leading, spacing: 4) {
+                if let warning = store.storage.summaryWarning {
+                    Text(warning).font(ClautoDesign.caption).padding(8).accessibilityIdentifier("storageSpaceWarning")
+                }
                 if store.projectRootIssue != nil {
                     Text("Project folder unavailable. Saved projects stay listed.").font(ClautoDesign.caption).padding(8)
                         .help(store.projectRootIssue ?? "")

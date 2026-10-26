@@ -49,6 +49,11 @@ import Observation
 @MainActor final class ScriptWorkspaceRegistry {
     private struct Key: Hashable { let id: UUID; let path: String; let device: Int32?; let inode: UInt64? }
     private var controllers: [Key: ScriptWorkspaceController] = [:]
+    var hasPendingWork: Bool { controllers.values.contains { $0.busy } }
+    func remove(projectID: UUID) throws {
+        guard !controllers.contains(where: { $0.key.id == projectID && $0.value.busy }) else { throw WorkflowFailure.invalid("Finish the active script operation before changing its project location.") }
+        controllers = controllers.filter { $0.key.id != projectID }
+    }
     func controller(for project: Project) -> ScriptWorkspaceController {
         let key = Key(id: project.id, path: project.folder.resolvingSymlinksInPath().standardizedFileURL.path,
             device: project.folderIdentity?.device, inode: project.folderIdentity?.inode)

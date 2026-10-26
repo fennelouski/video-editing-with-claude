@@ -35,6 +35,7 @@ struct ProjectFile: Codable, Identifiable, Hashable, Sendable {
     var copied: Bool
     var needsRole: Bool
     var creativeReferenceRole: CreativeReference.Role? = nil
+    var ingestSourcePath: String? = nil
     var displayedGroup: FileGroup { creativeReferenceRole == nil ? group : .creativeReferences }
 }
 
@@ -57,6 +58,7 @@ struct ProjectManifest: Codable, Identifiable, Sendable {
     var scriptSelection: ProjectScriptReference? = nil
     var requiresScriptSelection: Bool? = nil
     var mutationRevision: Int64? = nil
+    var storageLayout: ProjectStorageLayout? = nil
     var outputResolution: ExportResolution { exportResolution ?? .fullHD }
 }
 

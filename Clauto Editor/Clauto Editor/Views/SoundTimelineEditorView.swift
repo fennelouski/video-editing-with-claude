@@ -6,6 +6,7 @@ struct SoundTimelineEditorView: View {
     let store: EditorStore
     @State private var controller: SoundTimelineController
     @State private var reviewExport: DerivedCut?
+    @State private var workspaceOwner = UUID()
     @Environment(\.dismiss) private var dismiss
     init(store:EditorStore,project:Project,version:CutVersion) { self.store=store;_controller=State(initialValue:SoundTimelineController(project:project,version:version)) }
     var body: some View {
@@ -62,7 +63,8 @@ struct SoundTimelineEditorView: View {
             } else { ContentUnavailableView("Sound catalog unavailable",systemImage:"waveform.slash") }
         }.background(Color(nsColor:.windowBackgroundColor)).frame(minWidth:1100,minHeight:780).task { await controller.load() }
             .interactiveDismissDisabled(controller.unsaved)
-            .onDisappear { controller.browser?.stop() }
+            .onAppear { store.registerSoundWorkspace(workspaceOwner,projectID: controller.project.id) }
+            .onDisappear { controller.browser?.stop();store.unregisterSoundWorkspace(workspaceOwner) }
             .sheet(item:$reviewExport) { export in
                 VStack {
                     HStack { Text("Edited audio export").font(.headline);Spacer();Button("Done") { reviewExport=nil } }

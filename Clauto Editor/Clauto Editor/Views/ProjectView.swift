@@ -159,6 +159,7 @@ private struct FilesView: View {
     @State private var copyMedia = false
     @State private var targetedGroup: FileGroup?
     @State private var targeted = false
+    @State private var showStorage = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -169,10 +170,13 @@ private struct FilesView: View {
                         .disabled(store.working || store.runningProjectID == project.id).accessibilityIdentifier("addFiles")
                 }
                 ClautoToggle(title: "Copy media into this project", isOn: $copyMedia)
+                if store.storage.profile != nil {
+                    Text("New recordings are copied and hash-verified in the confirmed Originals location first; source recordings stay in place. The project-copy option makes an additional project-owned copy. External graphics and libraries keep their existing reference behavior.").font(ClautoDesign.caption)
+                }
                 ClautoDisclosure("Asset library & local models") {
                     HStack {
                         Button("Use Asset Library…") { Task { if let folder = await FileDialogs.folder() { await store.useProjectFolder(folder, key: "assets") } } }
-                        Button("Choose Model Cache…") { Task { if let folder = await FileDialogs.folder() { await store.useProjectFolder(folder, key: "model_cache") } } }
+                        Button("Choose Model Cache…") { Task { if let folder = await FileDialogs.folder() { await store.useProjectFolder(folder, key: "model_cache") } } }.disabled(project.manifest.storageLayout != nil)
                     }.disabled(store.runningProjectID != nil)
                     Text("An asset library contains textures, fonts, cutouts and foley. Speech models run locally from the chosen cache; missing models stop the run.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 }
@@ -207,6 +211,7 @@ private struct FilesView: View {
             Task { await store.intake(urls, copy: copyMedia) }; return true
         } isTargeted: { targeted = $0 }
         .background(targeted ? ClautoDesign.soft : ClautoDesign.paper)
+        .sheet(isPresented: $showStorage) { StorageSetupView(store: store,initialPage: "Recoverable cache") }
     }
     private func fileRow(_ file: ProjectFile) -> some View {
         let url = project.folder.appendingPathComponent(file.relativePath)
@@ -232,7 +237,12 @@ private struct FilesView: View {
             }
             Menu {
                 Text(file.originalPath)
+                if let source = file.ingestSourcePath { Text("Imported from: "+source) }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file.copied ? url:URL(fileURLWithPath: file.originalPath)]) }.disabled(!exists)
+                if file.group == .footage,["mov","mp4","m4v"].contains(url.pathExtension.lowercased()) {
+                    Button("Create source preview proxy") { Task { await store.storage.createProxy(url,project: project);showStorage = true } }
+                        .disabled(!exists || store.storage.profile == nil || store.working || store.storage.busy)
+                }
             } label: { ClautoIcon(.settings,size: 16) }.accessibilityLabel("Details for \(file.name)")
             ClautoAction("Remove", icon: .close, kind: .quiet) { Task { await store.remove(file) } }.disabled(store.working || store.runningProjectID == project.id)
                 .accessibilityLabel("Remove \(file.name) from project")

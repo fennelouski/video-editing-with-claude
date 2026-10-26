@@ -130,6 +130,46 @@ final class EditorStore {
     @ObservationIgnored private var selectionGeneration: UInt64 = 0
     @ObservationIgnored private var restorationID: UUID?
     @ObservationIgnored private var restoringSelection = false
+    @ObservationIgnored private var storageController: StorageSetupController?
+    @ObservationIgnored private var storageOwnsWorking = false
+    @ObservationIgnored private var soundEditorProjects: [UUID:UUID] = [:]
+    func registerSoundWorkspace(_ owner: UUID,projectID: UUID) { soundEditorProjects[owner] = projectID }
+    func unregisterSoundWorkspace(_ owner: UUID) { soundEditorProjects.removeValue(forKey: owner) }
+    var storage: StorageSetupController {
+        if let storageController { return storageController }
+        let controller = StorageSetupController(defaults: defaults,canLock: { [weak self] project in
+            guard let self,self.soundEditorProjects.isEmpty,self.runningProjectID == nil,!self.checking,!self.hasPendingReviewWork,!self.scriptWorkspaces.hasPendingWork,
+                  !self.reviewPlayers.values.contains(where: { $0.project.id == project.id }),
+                  self.projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
+            self.working = true;self.storageOwnsWorking = true;return true
+        },release: { [weak self] in
+            guard let self,self.storageOwnsWorking else { return };self.storageOwnsWorking = false;self.working = false
+        },protectedPaths: { [weak self] in self?.protectedStoragePaths ?? [] },activate: { [weak self] project,journal in
+            guard let self else { throw ProjectFailure.invalidProject };try await self.adoptStorageCopy(project,journal: journal)
+        })
+        storageController = controller;return controller
+    }
+    private var protectedStoragePaths: [URL] {
+        [Bundle.main.bundleURL,engineRoot]+projects.flatMap { project in
+            [project.folder]+project.manifest.files.flatMap { [URL(fileURLWithPath: $0.originalPath),project.folder.appendingPathComponent($0.relativePath)] }
+        }
+    }
+    private func adoptStorageCopy(_ project: Project,journal: StorageMigrationJournal) async throws {
+        guard storageOwnsWorking,project.id == journal.plan.projectID,
+              [.activated,.rolledBack].contains(journal.state),
+              project.folder == (journal.state == .activated ? journal.destination:journal.plan.source),
+              !scriptWorkspaces.hasPendingWork else { throw ProjectFailure.invalidProject }
+        try scriptWorkspaces.remove(projectID: project.id)
+        transcriptReviews.removeValue(forKey: project.id);voiceReviews.removeValue(forKey: project.id);frameComments.removeValue(forKey: project.id)
+        graphicStudios.removeValue(forKey: project.id);fontStudios.removeValue(forKey: project.id);cutoutStudios.removeValue(forKey: project.id);liveConversations.removeValue(forKey: project.id)
+        runs.removeValue(forKey: project.id);cutVersions.removeValue(forKey: project.id);currentCuts.removeValue(forKey: project.id)
+        restorationID = UUID();selectionGeneration &+= 1
+        projects.removeAll { $0.id == project.id };update(project)
+        projectBookmarks.removeAll { $0.projectID == project.id }
+        let previous = (defaults.stringArray(forKey: recentKey) ?? []).filter { $0 != journal.plan.source.path && $0 != journal.destination.path }
+        defaults.set(previous,forKey: recentKey)
+        selectedID = project.id;remember();await loadWorkflow()
+    }
 
     init(defaults: UserDefaults = .standard) {
         let env = ProcessInfo.processInfo.environment
@@ -196,9 +236,10 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
+        let storageSaved = await storageController?.flushForExit() ?? true
         await workspaceSetup.pauseForExit()
         if let task = versionSaveTask { await task.value }
         // Retry retained Brief drafts, then wait for their actual acknowledgements.
@@ -218,7 +259,7 @@ final class EditorStore {
             notice = failure + " Return to its verified export to retry, or choose Keep verified export only."
             noticeTitle = "Version not saved"
         }
-        return transcriptsSaved && voicesSaved && failedVersionSaves.isEmpty && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
+        return storageSaved && transcriptsSaved && voicesSaved && failedVersionSaves.isEmpty && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
     }
 
     func resumeReviewWorkAfterCancelledExit() {
@@ -293,7 +334,8 @@ final class EditorStore {
         working = true; defer { working = false }
         do {
             let version = (try? String(contentsOf: engineRoot.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) ?? "development"
-            let project = try await repository.create(name: name, root: projectRoot, engine: engineRoot, engineVersion: version, resolution: defaultExportResolution)
+            let locations = try await storage.rootsForNewProject()
+            let project = try await repository.create(name: name, root: locations?.1[.edits] ?? projectRoot, engine: engineRoot, engineVersion: version, resolution: defaultExportResolution,storageProfileID: locations?.0.id,storageRoots: locations?.1)
             update(project); selectedID = project.id; remember()
             return true
         } catch { notice = error.localizedDescription; return false }
@@ -344,7 +386,10 @@ final class EditorStore {
             let requests = try referenceURLs.map(CreativeReferenceImport.local)
             let otherURLs = urls.filter { !referenceURLs.contains($0) }
             var next = project
-            if !otherURLs.isEmpty { next = try await repository.add(otherURLs, to: next, group: group, copy: copy) }
+            if !otherURLs.isEmpty {
+                let (intake,provenance) = try await storage.intakeCopies(otherURLs,project: next)
+                next = try await repository.add(intake, to: next, group: group, copy: copy,ingestProvenance: provenance)
+            }
             if !requests.isEmpty { next = try await repository.addCreativeReferences(requests, to: next) }
             update(next)
         }
@@ -515,6 +560,7 @@ final class EditorStore {
             // Reopening after an awaited save must retain the originally chosen
             // physical project, rather than blessing a replacement at its path.
             try presentationState.requireCutInput(project,chosen: chosen)
+            try await storage.validateProjectWrites(project)
             let run = try await workflow.prepare(project: project, engine: engineRoot, label: label, primaryID: primaryID, narrationIDs: narrationIDs)
             runs[project.id] = run
             await execute(run, project: project, start: 1, stop: 3)
@@ -535,6 +581,7 @@ final class EditorStore {
 
     private func execute(_ run: EditRun, project: Project, start: Int, stop: Int) async {
         do {
+            try await storage.validateProjectWrites(project)
             let result = try await PipelineService(runner: runner, disk: workflow).execute(run, project: project, engine: engineRoot, start: start, stop: stop) { event in
                 await MainActor.run {
                     var progress = self.runs[project.id] ?? run

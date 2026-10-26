@@ -256,7 +256,12 @@ actor WorkflowRepository {
         let version = try String(contentsOf: engine.appendingPathComponent("ENGINE_VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         guard version == project.manifest.engineVersion else { throw WorkflowFailure.invalid("This run requires its original engine version.") }
         if let cache = settings["model_cache"] {
-            guard cache.hasPrefix("/"), !project.folder.path.hasPrefix("/Volumes/Videos/") || URL(fileURLWithPath: cache).resolvingSymlinksInPath().path.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") else { throw ProjectFailure.invalidProject }
+            guard cache.hasPrefix("/") else { throw ProjectFailure.invalidProject }
+            if let chosen = project.manifest.storageLayout?.folders[.cache] {
+                guard URL(fileURLWithPath: cache).standardizedFileURL.path == URL(fileURLWithPath: chosen).appendingPathComponent("Models").standardizedFileURL.path else { throw ProjectFailure.invalidProject }
+            } else {
+                guard !project.folder.path.hasPrefix("/Volumes/Videos/") || URL(fileURLWithPath: cache).resolvingSymlinksInPath().path.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") else { throw ProjectFailure.invalidProject }
+            }
             try ProjectRepository.validateDrive(URL(fileURLWithPath: cache))
         } else { throw WorkflowFailure.invalid("Choose a model cache before running.") }
         try validateScriptInput(run,project: project,settings: settings)
@@ -368,7 +373,10 @@ actor WorkflowRepository {
                 throw WorkflowFailure.invalid("The \(key) folder must belong to this project. Reopen the project with its original folder settings.")
             }
         }
-        if project.folder.path.hasPrefix("/Volumes/Videos/") {
+        if let chosen = project.manifest.storageLayout?.folders[.cache] {
+            guard paths["model_cache"] == URL(fileURLWithPath: chosen).appendingPathComponent("Models").path else { throw WorkflowFailure.invalid("This project's model cache no longer matches its confirmed storage layout.") }
+            try ProjectRepository.validateDrive(URL(fileURLWithPath: chosen))
+        } else if project.folder.path.hasPrefix("/Volumes/Videos/") {
             guard let cache = paths["model_cache"], cache.hasPrefix("/Volumes/Videos/Food Videos/Katie YouTube/") else {
                 throw WorkflowFailure.invalid("Choose a model cache on the Videos NAS before running.")
             }

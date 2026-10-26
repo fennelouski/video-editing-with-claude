@@ -4,6 +4,7 @@ struct SetupView: View {
     @Bindable var store: EditorStore
     @State private var skip = ""
     @State private var skipError: String?
+    @State private var showStorage = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -12,6 +13,9 @@ struct SetupView: View {
                     ForEach(ClautoThemeID.allCases) { theme in Text(theme.label).tag(theme) }
                 }.accessibilityIdentifier("clautoThemePicker")
                 ClautoDisclosure("Storage & tools") {
+                    ClautoAction("Plan storage locations",icon: .folder) { showStorage = true }.accessibilityIdentifier("openStorageSetup")
+                    Text("Review disk capacity, roles and reserves; manage verified copies and recoverable proxies.").font(ClautoDesign.caption)
+                    ClautoRule()
                     folderRow("Projects", url: store.projectRoot) { store.setFolders(projects: $0) }
                     ClautoRule()
                     folderRow("Editing engine", url: store.engineRoot) { store.setFolders(engine: $0) }
@@ -57,6 +61,7 @@ struct SetupView: View {
         }.font(ClautoDesign.body).foregroundStyle(ClautoDesign.ink).background(ClautoDesign.paper)
             .buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)
             .onAppear { skip = String(store.playbackPreferences.skipSeconds) }
+            .sheet(isPresented: $showStorage) { StorageSetupView(store: store) }
     }
     private func priority(_ state: SetupCheck.State) -> Int {
         switch state { case .needsAttention: 0; case .notChecked: 1; case .ready: 2 }
