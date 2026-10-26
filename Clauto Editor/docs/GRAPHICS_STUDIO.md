@@ -38,11 +38,17 @@ choose a newly compiled/extracted revision explicitly.
   balance is required before export. At most 96 displayed atoms. Rearrangement
   illustrates conservation, not kinetics, mechanisms, products or safety.
 - Objects: parametric cube or copied UTF-8 vertex-only OBJ geometry, up to 1 MiB,
-  512 vertices and 128 triangles. Polygon faces must be planar and convex;
+  20,000 vertices and 40,000 triangles, also subject to the 1 MiB editable-scene
+  JSON budget. Polygon faces must be planar and convex;
   degenerate faces, materials, textures and external references refuse. Coordinates
   are centered for orthographic projection and rotation with illustrative shading.
   Opaque triangles use interpolated hardware depth; translucent meshes use ordered
   alpha blending and do not promise physically correct intersecting transparency.
+  New object scenes use the reusable matte craft rig: hero, inspection and
+  overhead templates, normalized placement, warm/raking light and seeded motion
+  sampled on two-frame pairs. Previously saved scenes without a rig retain their
+  original renderer. [The agent guide](../../docs/DEMO_STUDIO.md) covers strict
+  prepared requests, the curated model library and its recorded license evidence.
 - Markets: supplied linear demand/supply parameters, optional linear demand shift,
   explicit nonnegative plot bounds and analytic equilibrium. This is an
   illustration of supplied assumptions, not a forecast or financial advice.

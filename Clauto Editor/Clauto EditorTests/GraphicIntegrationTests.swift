@@ -297,7 +297,7 @@ import Testing
     }
     @Test func substitutedMovieWithMatchingAlphaCannotVerifyOrPublishAsTheOriginalRender() async throws {
         let (root,project,_) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
-        let repo = GraphicStudioRepository();var red = GraphicScene.preset(.object);red.width = 320;red.height = 240;red.frameCount = 2;red.object!.color = .init(r: 1,g: 0,b: 0)
+        let repo = GraphicStudioRepository();var red = GraphicScene.preset(.object);red.demoRig = nil;red.width = 320;red.height = 240;red.frameCount = 2;red.object!.color = .init(r: 1,g: 0,b: 0)
         let snapshot = try await repo.create(project,id: UUID(),label: "Red scene",scene: red),assets = try await GraphicAssetResolver().resolve(snapshot.draft.scene,project: project)
         let job = try await repo.prepareExport(project,snapshot: snapshot,id: UUID(),assets: assets)
         let original = try await GraphicAnimationExporter().export(snapshot.draft.scene,assets: assets,to: job.folder)

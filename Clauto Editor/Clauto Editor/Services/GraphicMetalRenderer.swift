@@ -44,7 +44,7 @@ private final class GraphicGPUWorker: @unchecked Sendable {
     func render(_ primitives: [GraphicPrimitiveGPU],width: Int,height: Int,job: FrameBlockingJob<CutoutRaster>) throws -> CutoutRaster {
         try job.checkCancellation()
         guard MemoryLayout<GraphicPrimitiveGPU>.stride==64,width>=1,height>=1,width<=7680,height<=7680,width*height<=8_388_608,
-              primitives.count<=256,primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
+              primitives.count<=160_000,(primitives.count<=256 || primitives.allSatisfy({ $0.tags.x==2 })),primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
         let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,width: width,height: height,mipmapped: false)
         description.storageMode = .shared; description.usage = [.shaderWrite,.shaderRead,.renderTarget]
         let values = primitives.isEmpty ? [GraphicPrimitiveGPU(a: .zero,b: .zero,color: .zero,tags: .zero)]:primitives
@@ -68,9 +68,20 @@ private final class GraphicGPUWorker: @unchecked Sendable {
             guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { throw ProjectFailure.invalidProject }
             var dimensions = SIMD2<UInt32>(UInt32(width),UInt32(height))
             encoder.setRenderPipelineState(trianglePipeline)
-            if primitives.allSatisfy({ $0.color.w>=0.999 }) { encoder.setDepthStencilState(depthState) }
+
             encoder.setVertexBuffer(buffer,offset: 0,index: 0);encoder.setVertexBytes(&dimensions,length: MemoryLayout<SIMD2<UInt32>>.stride,index: 1)
-            encoder.drawPrimitives(type: .triangle,vertexStart: 0,vertexCount: primitives.count*3);encoder.endEncoding()
+            // Analytic shadows precede geometry. Opaque depth belongs to each
+            // contiguous run; a translucent shadow must not disable mesh depth.
+            var start = 0
+            while start<primitives.count {
+                let opaque = primitives[start].color.w>=0.999 && primitives[start].tags.z==1
+                var end = start+1
+                while end<primitives.count && (primitives[end].color.w>=0.999 && primitives[end].tags.z==1)==opaque { end += 1 }
+                encoder.setDepthStencilState(opaque ? depthState:nil)
+                encoder.drawPrimitives(type: .triangle,vertexStart: start*3,vertexCount: (end-start)*3)
+                start = end
+            }
+            encoder.endEncoding()
         } else {
             guard let encoder = command.makeComputeCommandEncoder() else { throw ProjectFailure.invalidProject }
             var count = UInt32(primitives.count)
@@ -187,14 +198,14 @@ final class GraphicBlockingExecutor: @unchecked Sendable {
     }
 }
 actor GraphicMetalRenderer {
-    static let implementationVersion = "Clauto Metal graphics 1"
+    static let implementationVersion = "Clauto Metal graphics 2 · reusable matte studio"
     static var shaderSHA256: String { TranscriptSourceMap.sha(Data(GraphicGPUWorker.shader.utf8)) }
     private static let executor = GraphicBlockingExecutor(label: "com.clauto.graphics-gpu")
     private var worker: GraphicGPUWorker?
     func render(_ primitives: [GraphicPrimitiveGPU],width: Int,height: Int) async throws -> CutoutRaster {
         try Task.checkCancellation()
         guard MemoryLayout<GraphicPrimitiveGPU>.stride==64,width>=1,height>=1,width<=7680,height<=7680,width*height<=8_388_608,
-              primitives.count<=256,primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
+              primitives.count<=160_000,(primitives.count<=256 || primitives.allSatisfy({ $0.tags.x==2 })),primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
         let selected: GraphicGPUWorker
         if let worker { selected = worker }
         else {

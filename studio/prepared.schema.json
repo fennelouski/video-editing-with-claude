@@ -1,0 +1,332 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u001f]+$"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 320,
+      "maximum": 7680
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 240,
+      "maximum": 7680
+    },
+    "frameCount": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 2880,
+      "multipleOf": 2
+    },
+    "rig": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": [
+            "hero",
+            "inspection",
+            "overhead"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "turntable",
+            "rock",
+            "reveal"
+          ]
+        },
+        "yawRadians": {
+          "type": "number",
+          "minimum": -6.283185307179586,
+          "maximum": 6.283185307179586
+        },
+        "pitchRadians": {
+          "type": "number",
+          "minimum": -1.5707963267948966,
+          "maximum": 1.5707963267948966
+        },
+        "sweepRadians": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 6.283185307179586
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "stepFrames": {
+          "const": 2
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "sageClay",
+            "oatCard",
+            "walnutIron"
+          ]
+        },
+        "light": {
+          "type": "string",
+          "enum": [
+            "warmSoft",
+            "raking"
+          ]
+        }
+      },
+      "required": [
+        "template",
+        "action",
+        "yawRadians",
+        "pitchRadians",
+        "sweepRadians",
+        "seed",
+        "stepFrames",
+        "material",
+        "light"
+      ],
+      "additionalProperties": false
+    },
+    "assumptions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "minLength": 1
+      }
+    },
+    "reviewNotes": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "requestID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "mesh": {
+      "type": "object",
+      "properties": {
+        "vertices": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              },
+              "z": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "triangles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 40000,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 19999
+            }
+          }
+        },
+        "spinRadiansPerSecond": {
+          "type": "number",
+          "minimum": -5,
+          "maximum": 5
+        },
+        "color": {
+          "type": "object",
+          "properties": {
+            "r": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "g": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "b": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "a": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "r",
+            "g",
+            "b",
+            "a"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "vertices",
+        "triangles",
+        "spinRadiansPerSecond",
+        "color"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "assetID": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "creator": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "modifications": {
+          "type": "string",
+          "maxLength": 2048,
+          "minLength": 1
+        },
+        "sourceURL": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "sourceSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rightsStatus": {
+          "type": "string",
+          "enum": [
+            "local-unverified",
+            "cc0",
+            "licensed"
+          ]
+        },
+        "sourceFiles": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "licenseText": {
+          "type": "string",
+          "maxLength": 16384
+        }
+      },
+      "required": [
+        "assetID",
+        "name",
+        "creator",
+        "license",
+        "modifications",
+        "sourceURL",
+        "sourceSHA256",
+        "rightsStatus",
+        "sourceFiles",
+        "licenseText"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "rightsStatus": {
+                "enum": [
+                  "cc0",
+                  "licensed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "licenseText": {
+                "minLength": 1
+              },
+              "sourceURL": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "label",
+    "width",
+    "height",
+    "frameCount",
+    "rig",
+    "assumptions",
+    "reviewNotes",
+    "requestID",
+    "mesh",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clauto.local/schemas/demo-prepared-v1.json",
+  "title": "Native Clauto demo import v1",
+  "description": "Self-contained prepared mesh/rig/provenance envelope, maximum1MiB. Native importer checks geometry index ranges/degeneracy, bounded canvas, strict keys and actual import state. Evidence and license assertions require independent review; these fields do not prove rights by themselves."
+}

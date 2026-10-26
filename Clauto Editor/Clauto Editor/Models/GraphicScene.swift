@@ -136,7 +136,7 @@ struct GraphicMesh: Codable,Equatable,Sendable {
     var spinRadiansPerSecond = 0.3
     var color = GraphicColor.sage
     func validate() throws {
-        guard (3...512).contains(vertices.count),!triangles.isEmpty,triangles.count<=128,vertices.allSatisfy(\.finite),
+        guard (3...20_000).contains(vertices.count),!triangles.isEmpty,triangles.count<=40_000,vertices.allSatisfy(\.finite),
               triangles.allSatisfy({ $0.count==3 && Set($0).count==3 && $0.allSatisfy({ vertices.indices.contains($0) }) }),
               color.valid,spinRadiansPerSecond.isFinite,abs(spinRadiansPerSecond)<=5 else { throw WorkflowFailure.invalid("Choose a bounded triangle mesh with valid vertex indices.") }
         for face in triangles {
@@ -174,6 +174,8 @@ struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
     var textLayers: [GraphicTextLayer] = []
     var assumptions: [GraphicAssumption] = []
     var reviewNotes = ""
+    var demoRig: GraphicDemoRig?
+    var demoProvenance: GraphicDemoProvenance?
     static let frameDuration = 1001.0/24000.0
     var validationLabel: String {
         switch kind {
@@ -196,6 +198,8 @@ struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
             try layer.transform.validate(frameCount: frameCount)
             guard !layer.text.isEmpty,layer.text.utf8.count<=4096,layer.fontSize.isFinite,(0.005...0.5).contains(layer.fontSize),layer.color.valid,layer.font.map({ CutoutSourceInfo.validHash($0.ttfSHA256) }) ?? true else { throw ProjectFailure.invalidProject }
         }
+        if let demoRig { guard kind == .object else { throw ProjectFailure.invalidProject };try demoRig.validate() }
+        if let demoProvenance { guard kind == .object else { throw ProjectFailure.invalidProject };try demoProvenance.validate() }
         switch kind {
         case .titleCard:break
         case .particles:guard let particles else { throw ProjectFailure.invalidProject };try particles.validate()

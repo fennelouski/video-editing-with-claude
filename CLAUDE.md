@@ -94,6 +94,12 @@ stages 1–5  ─────►  FINAL CUT PRO  ─────►  stage 6
 
 ## Conventions
 
+- **Reusable illustrative 3D demos.** Read `docs/DEMO_STUDIO.md` and run
+  `python3 scripts/demo_studio.py discover` before authoring a new demo. Reuse
+  the versioned rig/schema/library; prepare a validated request for native
+  Studio → Graphics import. Preserve rights evidence, scientific qualifications
+  and real scanned artwork. The app's live Claude chat remains text-only.
+
 - **Source time vs timeline time.** Stage 3 anchors cues to the transcript (source time). Stage 2
   removes ~30% of that source. Anything positioned on the timeline — graphics, markers, chapters,
   captions — **must** be remapped with `fcpxml.TimelineMap`. This has caused two separate bugs

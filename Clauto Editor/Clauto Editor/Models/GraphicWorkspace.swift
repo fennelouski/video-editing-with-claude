@@ -39,7 +39,9 @@ extension GraphicScene {
         case .particles:return .init(kind: kind,particles: .init())
         case .atom:return .init(kind: kind,atom: .init())
         case .market:return .init(kind: kind,market: .init())
-        case .object:return .init(kind: kind,object: .cube)
+        case .object:
+            var scene = Self(kind: kind,width: 1920,height: 1080,object: .cube)
+            scene.demoRig = .preset(.hero);return scene
         case .molecule:return .init(kind: kind,molecule: .init(atoms: [.init(id: 1,element: "O",position: .init(x: 0,y: 0),radius: 0.4,color: .sage),.init(id: 2,element: "H",position: .init(x: -0.7907,y: 0.6122),radius: 0.24,color: .oat),.init(id: 3,element: "H",position: .init(x: 0.7907,y: 0.6122),radius: 0.24,color: .oat)],bonds: [.init(first: 1,second: 2),.init(first: 1,second: 3)]))
         case .reaction:return .init(kind: kind,reaction: .init(reactants: [.init(coefficient: 2,atoms: ["H":2]),.init(coefficient: 1,atoms: ["O":2])],products: [.init(coefficient: 2,atoms: ["H":2,"O":1])]))
         }

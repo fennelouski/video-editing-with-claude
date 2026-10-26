@@ -77,6 +77,25 @@ import Observation
             await owner.load();try owner.adopt(value,expected: number)
         }
     }
+    func importDemo(_ url: URL) {
+        guard !hasPendingWork else { return };let number = editNumber
+        run("Importing prepared demo…") { owner in
+            let bytes = try await GraphicMeshIntake().read(url),request = try GraphicDemoRequest.decode(bytes),scene = try request.scene()
+            try Task.checkCancellation()
+            guard owner.editNumber==number else { throw WorkflowFailure.invalid("Your newer scene inputs remain active. Import the prepared demo again when they are saved.") }
+            let snapshot = try await owner.repository.create(owner.project,id: request.requestID,label: request.label,scene: scene)
+            // Repeated preparation has one identity. Existing edited scenes must
+            // never be silently replaced by an older repeat of the same request.
+            guard snapshot.draft.scene==scene,snapshot.draft.label==request.label else {
+                throw WorkflowFailure.invalid("This demo request already exists with different saved edits. Open its saved scene, or prepare a new request identity to keep both.")
+            }
+            await owner.load();try owner.adopt(snapshot,expected: number)
+            owner.exported = try await owner.repository.currentExport(owner.project,sceneID: request.requestID)
+        }
+    }
+    func applyDemoTemplate(_ template: GraphicDemoRig.Template,sceneID: UUID) {
+        changeScene(sceneID,kind: .object) { $0.scene.demoRig = .preset(template) }
+    }
     func open(_ id: UUID) {
         guard !hasPendingWork else { return };let number = editNumber
         run("Opening scene…") { owner in try owner.adopt(await owner.repository.load(owner.project,id: id),expected: number)
@@ -170,10 +189,10 @@ import Observation
             let bytes = try await GraphicMeshIntake().read(url)
             let (source,mesh) = try await owner.repository.importOBJ(owner.project,sceneID: draft.id,id: UUID(),name: url.lastPathComponent,bytes: bytes)
             try Task.checkCancellation();guard owner.editNumber==number else { throw WorkflowFailure.invalid("Your newer scene inputs remain active. Choose the mesh again to apply it.") }
-            guard owner.apply({ $0.scene.object = mesh;$0.objectSource = source }) else { return };_ = await owner.saveNow()
+            guard owner.apply({ $0.scene.object = mesh;$0.scene.demoProvenance = nil;$0.objectSource = source }) else { return };_ = await owner.saveNow()
         }
     }
-    func useCube(sceneID: UUID? = nil) { guard sceneID.map({ $0==draft?.id }) ?? true,draft?.scene.kind == .object else { return };change { $0.scene.object = .cube;$0.objectSource = nil } }
+    func useCube(sceneID: UUID? = nil) { guard sceneID.map({ $0==draft?.id }) ?? true,draft?.scene.kind == .object else { return };change { $0.scene.object = .cube;$0.scene.demoProvenance = nil;$0.objectSource = nil } }
     func saveNow() async -> Bool {
         autosave?.cancel();autosave = nil;if let saveTask { return await saveTask.value }
         let task = Task { [weak self] () -> Bool in

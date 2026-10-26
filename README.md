@@ -13,6 +13,10 @@ The governing documents are:
 The native macOS app is in **`Clauto Editor/`**. See its [requirements and verification checklist](Clauto%20Editor/docs/IMPLEMENTATION.md)
 for the current implementation, remaining milestones and local build entrypoint.
 
+For reusable illustrative 3D demos, use the existing native Studio → Graphics
+workflow and the [demo studio agent guide](docs/DEMO_STUDIO.md). It documents
+offline discovery, validated recipes, curated model provenance and native export.
+
 ## Two rules that shape everything
 
 **1. The pipeline never generates footage or imagery.**
