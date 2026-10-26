@@ -28,9 +28,10 @@ struct Clauto_EditorApp: App {
                     #endif
                     if let path = ProcessInfo.processInfo.environment["CLAUTO_OPEN_PROJECT"] {
                         await store.open(URL(fileURLWithPath: path, isDirectory: true))
-                    } else {
-                        await store.restore()
                     }
+                    // An explicit project chooses the selection, while the same
+                    // app still discovers the rest of the configured workspace.
+                    await store.restore()
                 }
         }
         .defaultSize(width: 1320, height: 860)

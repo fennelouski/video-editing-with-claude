@@ -97,6 +97,7 @@ private actor ProjectRestorationGate {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defaults.set(root.appendingPathComponent("configured-empty").path, forKey: "ClautoProjectsRoot")
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = ProjectRepository()
         let first = try await repository.create(name: "First", root: root, engine: root)
@@ -122,6 +123,7 @@ private actor ProjectRestorationGate {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defaults.set(root.appendingPathComponent("configured-empty").path, forKey: "ClautoProjectsRoot")
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = ProjectRepository()
         let first = try await repository.create(name: "First", root: root, engine: root)
@@ -145,6 +147,7 @@ private actor ProjectRestorationGate {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defaults.set(root.appendingPathComponent("configured-empty").path, forKey: "ClautoProjectsRoot")
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = ProjectRepository()
         let first = try await repository.create(name: "Preferred", root: root, engine: root)
@@ -170,6 +173,7 @@ private actor ProjectRestorationGate {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defaults.set(root.appendingPathComponent("configured-empty").path, forKey: "ClautoProjectsRoot")
         defer { try? FileManager.default.removeItem(at: root) }
         defaults.set([root.appendingPathComponent("Unavailable recent").path], forKey: "ClautoRecentProjects")
         let store = EditorStore(defaults: defaults), gate = ProjectRestorationGate()
@@ -190,6 +194,7 @@ private actor ProjectRestorationGate {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defaults.set(root.appendingPathComponent("configured-empty").path, forKey: "ClautoProjectsRoot")
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = ProjectRepository()
         let first = try await repository.create(name: "Earlier window", root: root, engine: root)

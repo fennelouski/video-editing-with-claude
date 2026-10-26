@@ -11,6 +11,7 @@ mkdir -p .artifacts
 export CLANG_MODULE_CACHE_PATH="$ROOT_DIR/.build/xcode-module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 xcodebuild -project 'Clauto Editor/Clauto Editor.xcodeproj' -scheme 'Clauto Editor' \
+  -jobs 2 \
   -configuration Debug -derivedDataPath .artifacts/DerivedData \
   -clonedSourcePackagesDirPath .artifacts/SourcePackages \
   -disableAutomaticPackageResolution -skipPackageUpdates CODE_SIGNING_ALLOWED=NO build \

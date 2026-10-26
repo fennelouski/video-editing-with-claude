@@ -6,6 +6,20 @@ import Darwin
 final class EditorStore {
     static let nasRoot = URL(fileURLWithPath: "/Volumes/Videos/Food Videos/Katie YouTube/Projects/Clauto Editor", isDirectory: true)
     var projects: [Project] = []
+    var discoveringProjects = false
+    var projectCatalogIssues: [ProjectCatalogIssue] = []
+    var projectRootIssue: String?
+    var projectBookmarks: [ProjectCatalogBookmark] = []
+    var unopenedProjectIssues: [ProjectCatalogIssue] {
+        projectCatalogIssues.filter { issue in !projects.contains { $0.folder.path == issue.path } }
+    }
+    func projectName(for issue: ProjectCatalogIssue) -> String {
+        projectBookmarks.first(where: { $0.path == issue.path })?.name
+            ?? URL(fileURLWithPath: issue.path).lastPathComponent
+    }
+    func projectUnavailable(_ project: Project) -> Bool {
+        projectCatalogIssues.contains { $0.path == project.folder.path }
+    }
     var selectedID: UUID? {
         didSet {
             selectionGeneration &+= 1
@@ -112,6 +126,7 @@ final class EditorStore {
     @ObservationIgnored private var presentationState = ProjectPresentationState()
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let recentKey = "ClautoRecentProjects"
+    @ObservationIgnored private let catalogKey = "ClautoProjectCatalog"
     @ObservationIgnored private var selectionGeneration: UInt64 = 0
     @ObservationIgnored private var restorationID: UUID?
     @ObservationIgnored private var restoringSelection = false
@@ -220,30 +235,44 @@ final class EditorStore {
 
     var initialProjectTab: String {
         RecentProjectRestoration.tab(ProcessInfo.processInfo.environment["CLAUTO_PROJECT_TAB"]
+            ?? selectedID.flatMap { (defaults.dictionary(forKey: "ClautoProjectTabs") as? [String: String])?[$0.uuidString] }
             ?? defaults.string(forKey: "ClautoSelectedProjectTab"))
     }
 
     func rememberProjectTab(_ value: String) {
         defaults.set(RecentProjectRestoration.tab(value), forKey: "ClautoSelectedProjectTab")
+        if let selectedID {
+            var tabs = defaults.dictionary(forKey: "ClautoProjectTabs") as? [String: String] ?? [:]
+            tabs[selectedID.uuidString] = RecentProjectRestoration.tab(value)
+            defaults.set(tabs, forKey: "ClautoProjectTabs")
+        }
     }
 
     func restore(openProject: @Sendable (URL) async throws -> Project = { try await ProjectRepository().open($0) }) async {
-        let operation = UUID(), generation = selectionGeneration
+        let operation = UUID(), generation = selectionGeneration, root = projectRoot
         restorationID = operation
+        discoveringProjects = true
+        defer { if restorationID == operation { discoveringProjects = false } }
         let preferredID = defaults.string(forKey: "ClautoSelectedProjectID")
         let preferredPath = defaults.string(forKey: "ClautoSelectedProjectPath")
+        let bookmarks = defaults.data(forKey: catalogKey).flatMap { try? JSONDecoder().decode([ProjectCatalogBookmark].self, from: $0) } ?? []
         do {
-            let restored = try await RecentProjectRestoration.load(defaults.stringArray(forKey: recentKey) ?? [], open: openProject)
-            guard restorationID == operation else { return }
+            let paths = projects.map { $0.folder.path } + (defaults.stringArray(forKey: recentKey) ?? []) + bookmarks.map(\.path)
+            let restored = try await RecentProjectRestoration.discover(root: root, paths: paths, known: ProjectCatalogBookmark.retaining(projects, previous: bookmarks), open: openProject)
+            guard restorationID == operation, projectRoot == root else { return }
             try Task.checkCancellation()
-            var unavailable = restored.unavailablePaths
+            var issues = restored.issues
             var admitted = RecentProjectRestoration()
             for project in restored.projects {
                 do {
                     try ProjectPresentationState.requireUnambiguousOpen(project, among: projects)
                     update(project); admitted.projects.append(project)
-                } catch { unavailable.append(project.folder.path) }
+                } catch { issues.append(.init(path: project.folder.path, detail: error.localizedDescription)) }
             }
+            projectCatalogIssues = issues
+            projectRootIssue = restored.rootIssue
+            projectBookmarks = ProjectCatalogBookmark.retaining(projects, previous: bookmarks)
+            remember()
             // A user selecting/opening another project during I/O owns that
             // selection. Neither a slower restore nor a second window steals it.
             if selectionGeneration == generation {
@@ -253,9 +282,6 @@ final class EditorStore {
                     restoringSelection = true
                     selectedID = admitted.selection(id: preferredID, path: preferredPath)
                     restoringSelection = false
-                }
-                if !unavailable.isEmpty {
-                    notice = "\(unavailable.count) recent project\(unavailable.count == 1 ? " is" : "s are") unavailable. Reconnect the project drive or choose its folder again. Your projects stay in Recents."
                 }
             }
         } catch is CancellationError { }
@@ -278,7 +304,14 @@ final class EditorStore {
         // An older restoration must not replace this action's error or choose
         // a different project behind it.
         selectionGeneration &+= 1
-        do { let project = try await repository.open(folder); try ProjectPresentationState.requireUnambiguousOpen(project,among: projects); update(project); selectedID = project.id; remember() }
+        do {
+            let project = try await repository.open(folder)
+            let bookmarks = defaults.data(forKey: catalogKey).flatMap { try? JSONDecoder().decode([ProjectCatalogBookmark].self, from: $0) } ?? []
+            try ProjectCatalogBookmark.requireOriginal(project, among: ProjectCatalogBookmark.retaining(projects, previous: bookmarks))
+            try ProjectPresentationState.requireUnambiguousOpen(project,among: projects)
+            update(project); projectCatalogIssues.removeAll { $0.path == folder.path || $0.path == project.folder.path }
+            selectedID = project.id; remember()
+        }
         catch { notice = error.localizedDescription }
     }
 
@@ -547,7 +580,10 @@ final class EditorStore {
     }
 
     func setFolders(projects: URL? = nil, engine: URL? = nil) {
-        if let projects { projectRoot = projects; defaults.set(projects.path, forKey: "ClautoProjectsRoot") }
+        if let projects {
+            projectRoot = projects; defaults.set(projects.path, forKey: "ClautoProjectsRoot")
+            Task { await restore() }
+        }
         if let engine { engineRoot = engine; defaults.set(engine.path, forKey: "ClautoEngineRoot") }
         workspaceSetup.invalidate()
     }
@@ -615,6 +651,8 @@ final class EditorStore {
         else { projects.append(presentationState.present(project,over: nil)) }
     }
     private func remember() {
+        projectBookmarks = ProjectCatalogBookmark.retaining(projects, previous: projectBookmarks)
+        if let bytes = try? JSONEncoder().encode(projectBookmarks) { defaults.set(bytes, forKey: catalogKey) }
         defaults.set(RecentProjectRestoration.recentPaths(selected: selected, projects: projects,
             previous: defaults.stringArray(forKey: recentKey) ?? []), forKey: recentKey)
     }

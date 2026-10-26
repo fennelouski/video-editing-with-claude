@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 #if canImport(ClautoCore)
 @testable import ClautoCore

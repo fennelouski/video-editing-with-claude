@@ -62,7 +62,10 @@ struct ContentView: View {
             }
             .navigationTitle(store.selected?.manifest.name ?? "Clauto")
             .onChange(of: playbackRouter.tab) { _, tab in if tab != "Cut" { playbackRouter.inlineDrawing = false } }
-            .onChange(of: store.selectedID) { playbackRouter.inlineDrawing = false }
+            .onChange(of: store.selectedID) {
+                playbackRouter.inlineDrawing = false
+                playbackRouter.tab = store.initialProjectTab
+            }
             .sheet(isPresented: $showSetup) {
                 VStack(spacing: 0) {
                     SetupView(store: store)
@@ -106,17 +109,39 @@ struct ContentView: View {
                                 ClautoIcon(.project, size: 18).padding(.top, 2)
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(project.manifest.name).font(ClautoDesign.type(14, weight: .medium)).fixedSize(horizontal: false, vertical: true)
-                                    Text("\(store.currentCuts[project.id].map { "Cut v\($0.number)" } ?? "Draft") · \(project.manifest.files.count) files").font(ClautoDesign.caption)
+                                    Text(store.projectUnavailable(project) ? "Unavailable · saved in library" : "\(store.currentCuts[project.id].map { "Cut v\($0.number)" } ?? "Draft") · \(project.manifest.files.count) files").font(ClautoDesign.caption)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.padding(13).foregroundStyle(store.selectedID == project.id ? ClautoDesign.onAccent : ClautoDesign.railText)
                                 .background(store.selectedID == project.id ? ClautoDesign.citron : .clear, in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
                         }.buttonStyle(ClautoInlineButtonStyle(onRail: true)).clipShape(ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
                             .accessibilityLabel(project.manifest.name).accessibilityAddTraits(store.selectedID == project.id ? .isSelected : [])
+                            .accessibilityValue(store.projectUnavailable(project) ? "Unavailable. Reconnect the project drive." : "Available")
+                            .accessibilityIdentifier("project-\(project.id.uuidString)")
+                            .help(project.folder.path)
+                    }
+                    ForEach(store.unopenedProjectIssues) { issue in
+                        Button { Task { await store.open(URL(fileURLWithPath: issue.path, isDirectory: true)) } } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(store.projectName(for: issue)).font(ClautoDesign.type(14, weight: .medium))
+                                Text("Unavailable · retry opening").font(ClautoDesign.caption)
+                            }.frame(maxWidth: .infinity, alignment: .leading).padding(13)
+                        }.buttonStyle(ClautoInlineButtonStyle(onRail: true))
+                            .accessibilityLabel("\(store.projectName(for: issue)), unavailable, retry opening")
+                            .help(issue.detail + "\n" + issue.path)
+                    }
+                    if store.projects.isEmpty && store.unopenedProjectIssues.isEmpty && !store.discoveringProjects {
+                        Text("No projects found. Create a project or open an existing project folder.").font(ClautoDesign.caption).padding(12)
                     }
                 }.padding(.horizontal, 12)
             }
             Spacer(minLength: 18)
             VStack(alignment: .leading, spacing: 4) {
+                if store.projectRootIssue != nil {
+                    Text("Project folder unavailable. Saved projects stay listed.").font(ClautoDesign.caption).padding(8)
+                        .help(store.projectRootIssue ?? "")
+                }
+                railAction(store.discoveringProjects ? "Finding projects…" : "Refresh projects", icon: .open) { Task { await store.restore() } }
+                    .disabled(store.discoveringProjects).accessibilityIdentifier("refreshProjects")
                 railAction("New project", icon: .add) { showNewProject = true }.keyboardShortcut("n")
                 railAction("Open project", icon: .open) { Task { if let folder = await FileDialogs.folder(initial: store.projectRoot) { await store.open(folder) } } }.keyboardShortcut("o")
                 railAction("Workspace", icon: .settings) { showSetup = true }

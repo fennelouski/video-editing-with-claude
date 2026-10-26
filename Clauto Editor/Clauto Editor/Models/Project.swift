@@ -145,22 +145,29 @@ struct Project: Identifiable, Sendable {
 struct RecentProjectRestoration: Sendable {
     var projects: [Project] = []
     var unavailablePaths: [String] = []
+    var issues: [ProjectCatalogIssue] = []
+    var rootIssue: String?
 
-    static func load(_ paths: [String],
+    static func load(_ paths: [String], known: [ProjectCatalogBookmark] = [],
                      open: @Sendable (URL) async throws -> Project) async throws -> Self {
         var result = Self(), seen = Set<String>()
         for path in paths {
             try Task.checkCancellation()
-            guard seen.insert(path).inserted else { continue }
+            let folder = URL(fileURLWithPath: path, isDirectory: true)
+            guard seen.insert(folder.resolvingSymlinksInPath().standardizedFileURL.path).inserted else { continue }
             do {
-                let project = try await open(URL(fileURLWithPath: path, isDirectory: true))
+                let project = try await open(folder)
                 try Task.checkCancellation()
+                try ProjectCatalogBookmark.requireOriginal(project, among: known)
                 try ProjectPresentationState.requireUnambiguousOpen(project, among: result.projects)
                 if !result.projects.contains(where: { ProjectPresentationState.sameRoot($0, project) }) {
                     result.projects.append(project)
                 }
             } catch is CancellationError { throw CancellationError() }
-            catch { result.unavailablePaths.append(path) }
+            catch {
+                result.unavailablePaths.append(path)
+                result.issues.append(.init(path: path, detail: error.localizedDescription))
+            }
         }
         try Task.checkCancellation()
         return result
@@ -179,7 +186,7 @@ struct RecentProjectRestoration: Sendable {
     static func recentPaths(selected: Project?, projects: [Project], previous: [String]) -> [String] {
         var seen = Set<String>()
         return ((selected.map { [$0.folder.path] } ?? []) + projects.map { $0.folder.path } + previous)
-            .filter { seen.insert($0).inserted }
+            .filter { seen.insert(URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path).inserted }
     }
 
     static func tab(_ value: String?) -> String {
