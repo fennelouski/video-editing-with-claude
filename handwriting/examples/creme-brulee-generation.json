@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "exactText": "Crème brûlée",
+  "locale": "fr",
+  "kind": "aiGenerated",
+  "provider": "built-in image_gen",
+  "model": "not reported by built-in tool",
+  "requestID": "exec-89695656-500f-4dc4-9bb4-21b794da8f33",
+  "sourceName": "creme-brulee-source.png",
+  "sourceSHA256": "dedb485a016fcec8ae869381071ebfa8f2835d2d2e7850b44cb717f90501efae",
+  "reviewStatus": "draft",
+  "liked": false,
+  "spellingChecked": false,
+  "alphaEdgesChecked": false,
+  "notes": "Actual built-in AI output generated for workflow QA. Visual inspection by an agent is not user approval. No approved reusable preset is bundled.",
+  "prompt": "Use case: scientific-educational. Asset type: isolated handwritten video label for Clauto handwriting workflow QA. Text (verbatim, French): \"Crème brûlée\". Preserve every letter, space, case and accent exactly: grave accent on è, circumflex on û, acute accent on é. Warm walnut charcoal felt-tip everyday cursive handwriting, readable medium strokes with natural joins and modest baseline variation. Wide compact one-line composition with ample empty margins. Genuine transparent alpha background, no paper or checkerboard baked into pixels. No pen, hand, scene, border, decorations, underlines, additional words or watermark. This is artwork generation, not a typeset font. No claim of recorded pen telemetry."
+}

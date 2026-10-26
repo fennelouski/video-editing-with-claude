@@ -66,6 +66,11 @@ final class EditorStore {
     func scriptWorkspace(for project: Project) -> ScriptWorkspaceController { scriptWorkspaces.controller(for: project) }
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var handwritingStudios: [UUID: HandwritingStudioController] = [:]
+    func handwritingStudio(for project: Project) -> HandwritingStudioController {
+        if let current = handwritingStudios[project.id] { return current }
+        let next = HandwritingStudioController(project: project); handwritingStudios[project.id] = next; return next
+    }
     var graphicStudios: [UUID: GraphicStudioController] = [:]
     func graphicStudio(for project: Project) -> GraphicStudioController {
         if let current = graphicStudios[project.id] { return current }
@@ -278,7 +283,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || handwritingStudios.values.contains(where: \.hasPendingWork) || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         let storageSaved = await storageController?.flushForExit() ?? true
@@ -291,6 +296,7 @@ final class EditorStore {
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
         if !(await scriptWorkspaces.flushForExit()) { voicesSaved = false }
+        for controller in handwritingStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in graphicStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in fontStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in cutoutStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
