@@ -43,7 +43,7 @@ import Testing
     }
     /// Optional real library proof. The environment opts into disposable output;
     /// regular tests remain self-contained and never discover private projects.
-    @Test func preparedLibraryPanRendersAndExportsThroughExistingVerifiedContract() async throws {
+    @MainActor @Test func preparedLibraryPanRendersAndExportsThroughExistingVerifiedContract() async throws {
         guard let input = ProcessInfo.processInfo.environment["CLAUTO_DEMO_PREPARED"],
               let destination = ProcessInfo.processInfo.environment["CLAUTO_DEMO_PROOF"] else { return }
         let request = try GraphicDemoRequest.decode(Data(contentsOf: URL(fileURLWithPath: input)))
@@ -59,22 +59,48 @@ import Testing
         }
         let renderer = GraphicSceneRenderer()
         var hashes: [String:String] = [:]
-        for frame in [0,scene.frameCount/2/2*2,scene.frameCount-2,scene.frameCount-1] {
+        for frame in [0,scene.frameCount/4/2*2,scene.frameCount/2/2*2,scene.frameCount*3/4/2*2,scene.frameCount-2,scene.frameCount-1] {
             let raster = try await renderer.render(scene,frame: frame),png = try CutoutImageIO.png(raster)
-            #expect(try await GraphicSceneRenderer().render(scene,frame: frame).rgba==raster.rgba)
+            let repeated = try await GraphicSceneRenderer().render(scene,frame: frame)
+            let repeatedPNG = try CutoutImageIO.png(repeated)
+            #expect(repeated.rgba==raster.rgba && repeatedPNG==png)
             let name = String(format: "after-%04d.png",frame)
             try png.write(to: root.appendingPathComponent(name),options: .withoutOverwriting)
             hashes[name] = TranscriptSourceMap.sha(png)
         }
         var legacy = scene;legacy.demoRig = nil;legacy.demoProvenance = nil
         try CutoutImageIO.png(await GraphicSceneRenderer().render(legacy,frame: 0)).write(to: root.appendingPathComponent("same-model-legacy-rig.png"),options: .withoutOverwriting)
-        let movie = root.appendingPathComponent("export",isDirectory: true)
-        try FileManager.default.createDirectory(at: movie,withIntermediateDirectories: false)
-        let output = try await GraphicAnimationExporter().export(scene,assets: .init(),to: SourceRenderDirectory.open(movie))
-        let proof = try await GraphicMovieVerifier().verify(SourceRenderDirectory.open(movie),scene: scene,output: output)
-        #expect(proof.decodedEveryFrame && proof.frameCount==scene.frameCount)
-        try CreativeAssetFiles.encoder().encode(proof).write(to: movie.appendingPathComponent("decode-proof.json"),options: .withoutOverwriting)
-        try GraphicFinalCutXML.make(scene: scene,label: request.label,movie: output.movieURL).write(to: movie.appendingPathComponent("timeline.fcpxml"),options: .withoutOverwriting)
+        for template in GraphicDemoRig.Template.allCases {
+            var variation = scene
+            variation.demoRig = .preset(template)
+            variation.demoRig!.material = .walnutIron
+            variation.demoRig!.seed = request.rig.seed
+            let raster = try await GraphicSceneRenderer().render(variation,frame: scene.frameCount/2)
+            let name = "template-\(template.rawValue).png",png = try CutoutImageIO.png(raster)
+            try png.write(to: root.appendingPathComponent(name),options: .withoutOverwriting)
+            hashes[name] = TranscriptSourceMap.sha(png)
+        }
+        let engine = root.appendingPathComponent("synthetic-engine",isDirectory: true)
+        try FileManager.default.createDirectory(at: engine,withIntermediateDirectories: false)
+        let project = try await ProjectRepository().create(name: "Synthetic 3D studio proof",root: root,engine: engine)
+        let repository = GraphicStudioRepository(),controller = GraphicStudioController(project: project,repository: repository)
+        controller.importDemo(URL(fileURLWithPath: input))
+        for _ in 0..<2000 { if controller.busy==nil { break };try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.issue==nil)
+        let snapshot = try #require(controller.saved)
+        #expect(snapshot.draft.scene==scene && snapshot.draft.scene.demoProvenance==request.provenance)
+        let result = try await GraphicSceneExportService(repository: repository).export(project,snapshot: snapshot)
+        #expect(result.revision.proof.decodedEveryFrame && result.revision.proof.frameCount==scene.frameCount)
+        #expect(result.becameCurrent && result.snapshot.draft.currentRevisionID==result.revision.id)
+        let current = try await repository.currentExport(project,sceneID: scene.id)
+        #expect(current?.revision.id==result.revision.id)
+        controller.importDemo(URL(fileURLWithPath: input))
+        for _ in 0..<2000 { if controller.busy==nil { break };try await Task.sleep(for: .milliseconds(5)) }
+        #expect(controller.issue==nil && controller.saved?.draft.currentRevisionID==result.revision.id)
+        #expect(try await repository.list(project).count==1)
+        #expect(await controller.flushForExit())
+        let locations = ["movie":result.movieURL.path,"timeline":result.timelineURL.path,"sceneID":scene.id.uuidString,"revisionID":result.revision.id.uuidString]
+        try CreativeAssetFiles.encoder().encode(locations).write(to: root.appendingPathComponent("export-location.json"),options: .withoutOverwriting)
         try Data(contentsOf: URL(fileURLWithPath: input)).write(to: root.appendingPathComponent("prepared.json"),options: .withoutOverwriting)
         try CreativeAssetFiles.encoder().encode(hashes).write(to: root.appendingPathComponent("frame-hashes.json"),options: .withoutOverwriting)
     }

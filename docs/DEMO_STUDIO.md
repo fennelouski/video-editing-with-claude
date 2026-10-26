@@ -69,7 +69,9 @@ Discovery returns `templatePresets` with every concrete field. The native hero
 preset uses yaw 0.6, pitch 0.45 and a 1.2-radian gentle rock; inspection uses pitch
 0.65 and a full-turn turntable; overhead uses yaw 0, pitch 1.25 and a static hold.
 All start with sage clay and warm soft lighting. The pan example deliberately
-chooses walnut iron. `template` records the chosen preset family; explicit rig
+chooses walnut iron. The ready-to-validate pan variants are
+`studio/examples/kaykit-pan-inspection.json` and
+`studio/examples/kaykit-pan-overhead.json`; they use the same pinned model. `template` records the chosen preset family; explicit rig
 angles, action, material and light govern the actual frame after edits.
 
 The rig centers model bounds, normalizes a bounding sphere and fits the projected
