@@ -15,7 +15,21 @@ private func testDisk(_ id: String,local: Bool = true,group: String? = nil,free:
     .init(id: id,name: "Private "+id,path: "/private/"+id,capacityGroup: group ?? id,filesystem: local ? "apfs":"smbfs",totalBytes: 1000*StorageWorkload.gib,availableBytes: free,importantUsageBytes: nil,local: local,internalDevice: local,medium: local ? .ssd:.unknown,writable: true,available: true,observed: Date(),performance: .estimate(local: local,medium: local ? .ssd:.unknown))
 }
 private func smallWorkload() -> StorageWorkload { .init(originalsGiB: 0,footageHours: 0,finishedMinutes: 0,reserveFraction: 0.01,minimumReserveGiB: 1) }
-private func preparedProfile(_ root: URL,service: StorageWorkspaceService = .init()) async throws -> StorageProfile {
+private func fixtureStorageService(_ root: URL) -> StorageWorkspaceService {
+    StorageWorkspaceService { url in
+        var observed = try StorageVolumeProbe.observe(url)
+        // Only this disposable fixture's capacity is synthetic. Real bookmark
+        // volume IDs, identities and filesystem behavior remain checked.
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        if path == root.path || path.hasPrefix(root.path+"/") {
+            observed.totalBytes = 100*StorageWorkload.gib;observed.availableBytes = 90*StorageWorkload.gib
+            observed.importantUsageBytes = nil
+        }
+        return observed
+    }
+}
+private func preparedProfile(_ root: URL,service: StorageWorkspaceService? = nil) async throws -> StorageProfile {
+    let service = service ?? fixtureStorageService(root)
     let volume = try StorageVolumeProbe.observe(root)
     let advice = StorageAdvice(source: .localRules,choices: Dictionary(uniqueKeysWithValues: StorageRole.allCases.map { ($0,volume.id) }),explanation: "Synthetic test",warnings: [],responseSHA256: nil)
     var folders: [StorageRole:StorageFolderGrant] = [:]
@@ -79,7 +93,7 @@ struct StoragePlanningTests {
     }
     @Test func replacedOwnedFolderFailsClosedAndMonitorRetainsPath() async throws {
         let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
-        let service = StorageWorkspaceService(),profile = try await preparedProfile(root,service: service)
+        let service = fixtureStorageService(root),profile = try await preparedProfile(root,service: service)
         let grant = try #require(profile.folders[.cache]),cache = URL(fileURLWithPath: grant.displayPath)
         try FileManager.default.moveItem(at: cache,to: cache.appendingPathExtension("retained"))
         try FileManager.default.createDirectory(at: cache,withIntermediateDirectories: false)
@@ -181,7 +195,7 @@ struct StorageMigrationTests {
     }
     @Test func originalCopyProvenanceAndProjectLayoutUseExistingProjectContract() async throws {
         let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
-        let service = StorageWorkspaceService(),profile = try await preparedProfile(root,service: service)
+        let service = fixtureStorageService(root),profile = try await preparedProfile(root,service: service)
         var roots: [StorageRole:URL] = [:]
         for role in StorageRole.allCases { roots[role] = try await service.resolved(profile.folders[role]!,role: role) }
         let repository = ProjectRepository(),project = try await repository.create(name: "Managed",root: roots[.edits]!,engine: root,storageProfileID: profile.id,storageRoots: roots)
@@ -255,7 +269,7 @@ private actor UnavailableStorageAdvisor: StorageAdvising {
     @Test func reviewIsWriteFreeAndChangesInvalidateApprovalBeforeFutureOnlyConfirmation() async throws {
         let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
         let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
-        let controller = StorageSetupController(defaults: defaults,cache: .init(defaults: nil),advisor: UnavailableStorageAdvisor())
+        let controller = StorageSetupController(defaults: defaults,service: fixtureStorageService(root),cache: .init(defaults: nil),advisor: UnavailableStorageAdvisor())
         controller.workload = smallWorkload();await controller.recommend(useConnectedAI: false)
         for role in StorageRole.allCases { await controller.choose(role: role,folder: root) }
         await controller.review()
@@ -341,14 +355,15 @@ extension StorageCacheTests {
         let legacy = try await repository.create(name: "Existing Pizza",root: legacyRoot,engine: root)
         let before = try fileBytes(legacy.folder)
         defaults.set(legacyRoot.path,forKey: "ClautoProjectsRoot");defaults.set(root.path,forKey: "ClautoEngineRoot");defaults.set([legacy.folder.path],forKey: "ClautoRecentProjects")
-        let store = EditorStore(defaults: defaults);await store.restore()
+        let store = EditorStore(defaults: defaults,storageService: fixtureStorageService(root));await store.restore()
         store.rememberProjectTab("Script")
         let controller = store.scriptWorkspace(for: legacy)
         let storage = store.storage;storage.workload = smallWorkload();await storage.recommend(useConnectedAI: false)
         let chosen = root.appendingPathComponent("Chosen");try FileManager.default.createDirectory(at: chosen,withIntermediateDirectories: false)
         for role in StorageRole.allCases { await storage.choose(role: role,folder: chosen) }
-        await storage.review();#expect(storage.error == nil)
-        let editRoot = try #require(await storage.confirmProfile());store.setFolders(projects: editRoot)
+        await storage.review()
+        try #require(storage.reviewedProfile != nil,Comment(rawValue: storage.error ?? "Storage review did not complete."))
+        let editRoot = try #require(await storage.confirmProfile(),Comment(rawValue: storage.error ?? "Storage profile confirmation did not complete."));store.setFolders(projects: editRoot)
         #expect(await store.create("New managed project"))
         let managed = try #require(store.selected)
         #expect(managed.manifest.storageLayout?.profileID == storage.profile?.id)
@@ -368,6 +383,7 @@ extension StorageCacheTests {
         let store = EditorStore(defaults: defaults);await store.restore();store.selectedID = project.id
         let before = try fileBytes(project.folder),otherBefore = try fileBytes(other.folder),originalController = store.scriptWorkspace(for: project)
         let storage = store.storage
+        storage.workload = smallWorkload() // Synthetic local copy must fit this Mac's real reserve.
         await storage.planCopy(project: project,destination: target)
         #expect(storage.copyPlan != nil && storage.journal == nil)
         store.runningProjectID = project.id;await storage.confirmCopy(project: project)
@@ -376,7 +392,7 @@ extension StorageCacheTests {
         let soundOwner = UUID();store.registerSoundWorkspace(soundOwner,projectID: project.id)
         await storage.confirmCopy(project: project);#expect(storage.journal == nil)
         store.unregisterSoundWorkspace(soundOwner);await storage.confirmCopy(project: project)
-        #expect(storage.error == nil && storage.journal?.state == .copyVerified)
+        try #require(storage.journal?.state == .copyVerified,Comment(rawValue: storage.error ?? "The copy did not reach verification."))
         await storage.reopenCopy();storage.humanCheckedPlayback = true;await storage.confirmPlayback()
         #expect(storage.journal?.state == .playbackChecked)
         await storage.activateCopy(original: project)

@@ -157,7 +157,7 @@ struct GraphicMesh: Codable,Equatable,Sendable {
 struct GraphicAssumption: Codable,Equatable,Identifiable,Sendable { var id = UUID();var text: String }
 
 struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
-    enum Kind: String,Codable,CaseIterable,Sendable { case particles,molecule,atom,reaction,object,market }
+    enum Kind: String,Codable,CaseIterable,Sendable { case titleCard,particles,molecule,atom,reaction,object,market }
     var schemaVersion = 1
     var id = UUID()
     var kind: Kind
@@ -177,6 +177,7 @@ struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
     static let frameDuration = 1001.0/24000.0
     var validationLabel: String {
         switch kind {
+        case .titleCard:"Editable title artwork"
         case .particles:"2D fixed-step toy physics · ideal disks, no air resistance"
         case .molecule:"Typed molecular diagram · geometry and chemistry need human review"
         case .atom:"Illustrative orbit diagram · not a quantum simulation"
@@ -188,7 +189,7 @@ struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
     func validate(forRendering: Bool = true) throws {
         guard schemaVersion==1,width>=320,height>=240,width<=7680,height<=7680,width*height<=8_388_608,
               (1...2880).contains(frameCount),assumptions.count<=32,Set(assumptions.map(\.id)).count==assumptions.count,assumptions.allSatisfy({ !$0.text.isEmpty && $0.text.utf8.count<=2048 }),reviewNotes.utf8.count<=8192,
-              [particles != nil,molecule != nil,atom != nil,reaction != nil,object != nil,market != nil].filter({ $0 }).count==1 else { throw WorkflowFailure.invalid("Choose one scene model, a supported canvas and up to 120 seconds of animation.") }
+              [particles != nil,molecule != nil,atom != nil,reaction != nil,object != nil,market != nil].filter({ $0 }).count==(kind == .titleCard ? 0:1) else { throw WorkflowFailure.invalid("Choose one scene model, a supported canvas and up to 120 seconds of animation.") }
         guard imageLayers.count+textLayers.count<=16,Set(imageLayers.map(\.id)+textLayers.map(\.id)).count==imageLayers.count+textLayers.count else { throw ProjectFailure.invalidProject }
         for layer in imageLayers { try layer.transform.validate(frameCount: frameCount);guard CutoutSourceInfo.validHash(layer.imageSHA256) else { throw CutoutFailure.changedSource } }
         for layer in textLayers {
@@ -196,6 +197,7 @@ struct GraphicScene: Codable,Equatable,Identifiable,Sendable {
             guard !layer.text.isEmpty,layer.text.utf8.count<=4096,layer.fontSize.isFinite,(0.005...0.5).contains(layer.fontSize),layer.color.valid,layer.font.map({ CutoutSourceInfo.validHash($0.ttfSHA256) }) ?? true else { throw ProjectFailure.invalidProject }
         }
         switch kind {
+        case .titleCard:break
         case .particles:guard let particles else { throw ProjectFailure.invalidProject };try particles.validate()
         case .molecule:guard let molecule else { throw ProjectFailure.invalidProject };try molecule.validate()
         case .atom:guard let atom else { throw ProjectFailure.invalidProject };try atom.validate()

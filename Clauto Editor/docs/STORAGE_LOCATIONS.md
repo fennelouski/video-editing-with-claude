@@ -125,9 +125,12 @@ focused run passed **53/53** including existing catalog/restoration/script guard
 A single earlier monolithic run reached its 180-second watchdog without test
 failures; the complete bounded batches supersede that incomplete attempt.
 
-The same native app and all test sources compile successfully. Native store
-execution and actual UI review are still **pending a fresh coordinated Clauto
-foreground slot**. Compiling those tests is not a claim they executed. The review
+The same native app and all test sources compile successfully. The latest 11-case native store/window run **executed and passed** at
+`.artifacts/catalog-store-20261026T151227Z/`. Disposable setup fixtures inject
+synthetic capacity facts under their temporary roots to avoid depending on
+changing host free space; production uses the real filesystem probe. Actual
+live storage-pane inspection remains deferred at the parent's A440 handoff;
+no live storage profile was applied. The review
 candidate is not installed, merged or released. No live storage profile has been
 confirmed, no live project migrated, and no live media/cache deleted.
 

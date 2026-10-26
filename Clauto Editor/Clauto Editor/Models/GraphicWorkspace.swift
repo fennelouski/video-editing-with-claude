@@ -35,6 +35,7 @@ struct GraphicWorkspaceSummary: Identifiable,Sendable {
 extension GraphicScene {
     static func preset(_ kind: Kind) -> Self {
         switch kind {
+        case .titleCard:return .init(kind: kind,textLayers: [.init(text: "Your title",fontSize: 0.10,transform: .init(x: 0.5,y: 0.42,width: 0.82,height: 0.3))])
         case .particles:return .init(kind: kind,particles: .init())
         case .atom:return .init(kind: kind,atom: .init())
         case .market:return .init(kind: kind,market: .init())

@@ -66,18 +66,20 @@ struct StorageManagedRoot: Codable, Equatable, Sendable {
 }
 
 actor StorageWorkspaceService {
+    private let probe: @Sendable (URL) throws -> StorageVolume
+    init(probe: @escaping @Sendable (URL) throws -> StorageVolume = StorageVolumeProbe.observe) { self.probe = probe }
     func volumes() throws -> [StorageVolume] {
         var urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: [.volumeNameKey],options: [.skipHiddenVolumes]) ?? []
         urls.insert(FileManager.default.homeDirectoryForCurrentUser,at: 0)
         var result: [StorageVolume] = [],seen = Set<String>()
         for url in urls {
             try Task.checkCancellation()
-            if let volume = try? StorageVolumeProbe.observe(url), seen.insert(volume.id).inserted { result.append(volume) }
+            if let volume = try? probe(url), seen.insert(volume.id).inserted { result.append(volume) }
         }
         return result.sorted { $0.local != $1.local ? $0.local : $0.name < $1.name }
     }
     func grant(folder: URL,role: StorageRole) throws -> StorageFolderGrant {
-        let volume = try StorageVolumeProbe.observe(folder)
+        let volume = try probe(folder)
         guard volume.writable else { throw WorkflowFailure.invalid("Choose a writable folder.") }
         let bookmark = try folder.bookmarkData(options: [.withSecurityScope],includingResourceValuesForKeys: [.volumeUUIDStringKey],relativeTo: nil)
         return .init(bookmark: bookmark,lastPath: folder.resolvingSymlinksInPath().standardizedFileURL.path,volumeID: volume.id,components: ["Clauto Video",role.folderName])
@@ -110,7 +112,7 @@ actor StorageWorkspaceService {
         var observed: [StorageVolume] = []
         for grant in profile.folders.values {
             let access = try StorageFolderAccess(grant); defer { withExtendedLifetime(access) {} }
-            let volume = try StorageVolumeProbe.observe(access.url)
+            let volume = try probe(access.url)
             if !observed.contains(where: { $0.id == volume.id }) { observed.append(volume) }
         }
         try StorageRecommendation.validate(profile.advice,volumes: observed,workload: profile.workload)
@@ -138,7 +140,7 @@ actor StorageWorkspaceService {
             guard let grant = profile.folders[role] else { return .init(role: role,path: "Not configured",availableBytes: nil,reserveBytes: 0,issue: "Choose a folder.") }
             do {
                 let access = try StorageFolderAccess(grant); defer { withExtendedLifetime(access) {} }
-                let volume = try StorageVolumeProbe.observe(access.url), reserve = profile.workload.reserve(on: volume)
+                let volume = try probe(access.url), reserve = profile.workload.reserve(on: volume)
                 if grant.managedRootID != nil { _ = try resolved(grant,role: role) }
                 return .init(role: role,path: grant.displayPath,availableBytes: volume.availableBytes,reserveBytes: reserve,
                     issue: !volume.writable ? "Read-only volume. New writes are paused." : volume.availableBytes < reserve ? "Available space is below your reserve. New copies and cache jobs are paused." : nil)
@@ -148,7 +150,7 @@ actor StorageWorkspaceService {
     func requireSpace(_ profile: StorageProfile,role: StorageRole,bytes: Int64) throws -> URL {
         guard bytes >= 0, let grant = profile.folders[role] else { throw ProjectFailure.invalidProject }
         let access = try StorageFolderAccess(grant); defer { withExtendedLifetime(access) {} }
-        let volume = try StorageVolumeProbe.observe(access.url)
+        let volume = try probe(access.url)
         guard volume.writable, volume.availableBytes - bytes >= profile.workload.reserve(on: volume) else { throw WorkflowFailure.invalid("This write would use the configured reserve, or the drive is unavailable. Free recoverable space, reduce the request, or choose another folder.") }
         return try resolved(grant,role: role)
     }

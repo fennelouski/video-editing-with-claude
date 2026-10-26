@@ -62,6 +62,14 @@ import Observation
             value.scene = scene;value.objectSource = nil
         }
     }
+    func create(template: StudioStarter) {
+        guard !hasPendingWork else { return };let number = editNumber,id = UUID()
+        run("Creating editable template…") { owner in
+            var scene = template.scene(projectName: owner.project.manifest.name,aspect: owner.project.manifest.aspect);scene.id = id
+            let value = try await owner.repository.create(owner.project,id: id,label: template.title,scene: scene)
+            await owner.load();try owner.adopt(value,expected: number)
+        }
+    }
     func create(kind: GraphicScene.Kind,label: String) {
         guard !hasPendingWork else { return };let number = editNumber,id = UUID()
         run("Creating scene…") { owner in

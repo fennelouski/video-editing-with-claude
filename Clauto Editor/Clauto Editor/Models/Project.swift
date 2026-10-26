@@ -192,7 +192,7 @@ struct RecentProjectRestoration: Sendable {
     }
 
     static func tab(_ value: String?) -> String {
-        guard let value, ["Brief", "Files", "Transcript", "Script", "Cut", "Studio"].contains(value) else { return "Brief" }
+        guard let value, ["Brief", "Chat", "Files", "Transcript", "Script", "Cut", "Studio"].contains(value) else { return "Brief" }
         return value
     }
 }

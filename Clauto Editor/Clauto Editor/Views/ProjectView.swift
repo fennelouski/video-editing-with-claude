@@ -8,6 +8,7 @@ struct ProjectView: View {
     private var tab: String { playbackRouter.tab }
     // Intentional one-time seed; parent keys this view by project ID when switching projects.
     @State private var draft: Brief
+    @State private var showCoverEditor = false
 
     let initialTranscriptReviewGates: Bool
     init(store: EditorStore, project: Project, playbackRouter: ReviewWindowRouter, initialTab: String = "Brief", initialTranscriptReviewGates: Bool = false) {
@@ -22,45 +23,42 @@ struct ProjectView: View {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(project.manifest.name).font(ClautoDesign.heading).lineLimit(2).accessibilityAddTraits(.isHeader)
+                        Text(store.libraryName(for: project)).font(ClautoDesign.heading).lineLimit(2).accessibilityAddTraits(.isHeader)
                         Text(store.currentCuts[project.id].map { "Current cut v\($0.number) · \($0.label)" } ?? "Describe the cut you want to make.")
                             .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                     }
                     Spacer(minLength: 10)
+                    if let group = store.libraryGroup(for: project.id) {
+                        Picker("Version",selection: Binding(get: { project.id },set: { store.selectedID = $0 })) {
+                            ForEach(store.projects.filter { group.members.contains($0.id) }) { member in Text(member.manifest.name).tag(member.id) }
+                        }.frame(maxWidth: 300).accessibilityIdentifier("projectVersionPicker")
+                    }
                     Menu {
                         Text(project.folder.path).textSelection(.enabled)
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.folder]) }
+                        Button("Edit illustrated cover…") { showCoverEditor = true }
                     } label: { ClautoIcon(.settings,size: 18) }.accessibilityLabel("Project details").accessibilityIdentifier("projectDetails")
                 }.padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 22)
                 HStack {
-                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Files", .files), ("Transcript", .brief), ("Script", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
+                    ClautoSegments(selection: Binding(get: { tab },set: { playbackRouter.tab = $0 }), options: [("Brief", .brief), ("Chat", .conversation), ("Files", .files), ("Transcript", .brief), ("Script", .brief), ("Cut", .cut), ("Studio", .files)]).accessibilityIdentifier("projectTabs")
                     Spacer()
                 }.padding(.horizontal, 28).padding(.bottom, 20)
                 ClautoRule()
-                if geometry.size.width >= 1060 && tab == "Brief" {
-                    HStack(spacing: 0) {
-                        BriefView(brief: $draft, store: store, project: project)
-                        Rectangle().fill(ClautoDesign.rule).frame(width: 1)
-                        conversation(compact: false).frame(width: 310).frame(maxHeight: .infinity, alignment: .top).background(ClautoDesign.sheet)
-                    }
-                } else {
-                    Group {
-                        if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
-                        else if tab == "Files" { FilesView(store: store, project: project) }
-                        else if tab == "Studio" { CreativeStudioView(store: store,project: project) }
-                        else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
-                        else if tab == "Script" { ScriptWorkspaceView(store: store, project: project, router: playbackRouter) }
-                        else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
-                    }.frame(maxHeight: .infinity)
-                    if tab != "Transcript" && tab != "Script" && tab != "Cut" && tab != "Studio" {
-                        ClautoRule()
-                        conversation(compact: true)
-                    }
-                }
+                Group {
+                    if tab == "Brief" { BriefView(brief: $draft, store: store, project: project) }
+                    else if tab == "Chat" { conversation(compact: false) }
+                    else if tab == "Files" { FilesView(store: store, project: project) }
+                    else if tab == "Studio" { CreativeStudioView(store: store,project: project) }
+                    else if tab == "Transcript" { TranscriptReviewView(store: store, project: project, reviewGatesExpanded: initialTranscriptReviewGates) }
+                    else if tab == "Script" { ScriptWorkspaceView(store: store, project: project, router: playbackRouter) }
+                    else { ReviewWorkspace(store: store,project: project,router: playbackRouter) }
+                }.frame(maxWidth: .infinity,maxHeight: .infinity)
+
             }
         }.background(ClautoDesign.paper).foregroundStyle(ClautoDesign.ink).font(ClautoDesign.body).buttonStyle(ClautoButtonStyle()).scrollIndicators(.hidden)
             .onChange(of: draft) { store.save(draft, for: project.id) }
             .task { await store.loadWorkflow() }
+            .sheet(isPresented: $showCoverEditor) { ProjectCoverEditor(library: store.covers,projectID: project.id,name: store.libraryName(for: project)) }
     }
     @ViewBuilder private func conversation(compact: Bool) -> some View {
         LiveConversationView(controller: store.liveConversation(for: project),legacyRequests: store.conversations[project.id] ?? [],compact: compact)
@@ -160,6 +158,7 @@ private struct FilesView: View {
     @State private var targetedGroup: FileGroup?
     @State private var targeted = false
     @State private var showStorage = false
+    @State private var assetPreview: ProjectAssetPreview?
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -212,15 +211,22 @@ private struct FilesView: View {
         } isTargeted: { targeted = $0 }
         .background(targeted ? ClautoDesign.soft : ClautoDesign.paper)
         .sheet(isPresented: $showStorage) { StorageSetupView(store: store,initialPage: "Recoverable cache") }
+        .sheet(item: $assetPreview) { item in ProjectAssetPreviewView(item: item) }
     }
     private func fileRow(_ file: ProjectFile) -> some View {
         let url = project.folder.appendingPathComponent(file.relativePath)
         let exists = FileManager.default.fileExists(atPath: url.path)
         return HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(file.name).font(ClautoDesign.type(14, weight: .semibold)).lineLimit(2)
-                if !exists { Text("Missing").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember) }
-            }
+            Button { assetPreview = .init(id: file.id,title: file.name,url: url) } label: {
+                HStack(spacing: 10) {
+                    ClautoIcon(.open,size: 18)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(file.name).font(ClautoDesign.type(14, weight: .semibold)).lineLimit(2)
+                        Text(exists ? "Click to preview":"Missing — reconnect source").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                    }
+                }.frame(maxWidth: .infinity,alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(ClautoInlineButtonStyle()).disabled(!exists)
+                .accessibilityLabel("Preview "+file.name).accessibilityIdentifier("previewAsset-"+file.id.uuidString)
             Spacer()
             if file.displayedGroup == .scripts {
                 ClautoAction(project.manifest.scriptSelection?.sourceFileID == file.id ? "Use this copy" : "Use for new cuts",icon: .check,kind: .quiet) {

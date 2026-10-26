@@ -12,11 +12,11 @@ struct ReviewMovieImportRequest: Sendable {
     let number: Int
     let label: String
 }
-/// Imports existing bytes into a new review-only project. This does not mint a
+/// Imports existing bytes into a new or explicitly selected existing project. This does not mint a
 /// fresh script/plan/fact approval or admit camera originals to a renderer.
 struct ReviewMovieImportService: Sendable {
-    func importReview(_ request: ReviewMovieImportRequest, root projectRoot: URL, engine: URL) async throws -> Project {
-        guard request.number > 0, request.movie.pathExtension == "mp4", TranscriptCatalog.isSHA(request.movieSHA256) else { throw ProjectFailure.invalidProject }
+    func importReview(_ request: ReviewMovieImportRequest, root projectRoot: URL, engine: URL, existingProject: Project? = nil,makeCurrent: Bool = false) async throws -> Project {
+        guard (1..<1_000_000).contains(request.number), request.movie.pathExtension == "mp4", TranscriptCatalog.isSHA(request.movieSHA256) else { throw ProjectFailure.invalidProject }
         let source = try SourceRenderDirectory.open(request.movie.deletingLastPathComponent())
         let movieName = request.movie.lastPathComponent
         guard try source.voiceHash(movieName,limit: VoiceMasterByteContract.sourceLimit) == request.movieSHA256 else { throw WorkflowFailure.invalid("The selected movie does not match its verified receipt.") }
@@ -36,10 +36,23 @@ struct ReviewMovieImportService: Sendable {
         let nominalRate = try await tracks[0].load(.nominalFrameRate)
         guard videoRange.start.seconds == 0 else { throw WorkflowFailure.invalid("Offset movie tracks require explicit timing support before review import.") }
         guard avDuration.isFinite, duration > 0, abs(duration-reportedDuration) <= 1.0/24000,
-              abs(avDuration-duration) <= 1001.0/24000, abs(Double(nominalRate)-24000.0/1001) < 0.0001 else { throw WorkflowFailure.invalid("The verified movie has an unsupported frame duration.") }
+              abs(avDuration-duration) <= 1001.0/24000, abs(Double(nominalRate)-24000.0/1001) < 0.0001 else { throw WorkflowFailure.invalid("The verified movie has unsupported timing (\(nominalRate) fps; track \(avDuration)s; receipt \(reportedDuration)s for \(reportedFrames) frames).") }
         let version = try String(contentsOf: engine.appendingPathComponent("ENGINE_VERSION"),encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
-        let project = try await ProjectRepository().create(name: request.label+" review",root: projectRoot,engine: engine,engineVersion: version,importedReviewOnly: true)
-        let owned = try SourceRenderDirectory.open(project.folder), cut = try owned.child("cuts").child(String(format: "v%03d",request.number),create: true,exclusive: true)
+        let project: Project
+        if let existingProject {
+            let reopened = try await ProjectRepository().open(existingProject.folder)
+            guard reopened.id == existingProject.id,reopened.folderIdentity == existingProject.folderIdentity,reopened.manifest.engineVersion == version else { throw ProjectFailure.invalidProject }
+            project = reopened
+        } else { project = try await ProjectRepository().create(name: request.label+" review",root: projectRoot,engine: engine,engineVersion: version,importedReviewOnly: true) }
+        let lease = try ProjectMutationLease.acquire(project);defer { withExtendedLifetime(lease) {} }
+        let owned = lease.root,cuts = try owned.child("cuts")
+        let versions = try FileManager.default.contentsOfDirectory(atPath: cuts.url.path).compactMap { name throws -> Int? in
+            guard name.hasPrefix("v"),let number = Int(name.dropFirst()) else { return nil }
+            guard (1..<1_000_000).contains(number) else { throw WorkflowFailure.invalid("This library has a cut version outside the supported range; no existing cut was replaced.") };return number
+        }
+        let number = existingProject == nil ? request.number:max(request.number,(versions.max() ?? 0)+1)
+        guard number < 1_000_000 else { throw ProjectFailure.invalidProject }
+        let cut = try cuts.child(String(format: "v%03d",number),create: true,exclusive: true)
         let exports = try cut.child("exports",create: true), inputs = try cut.child("inputs",create: true), script = try inputs.child("script",create: true), plan = try cut.child("plan",create: true)
         let copiedSHA = try source.voiceHash(movieName,limit: VoiceMasterByteContract.sourceLimit,copyTo: exports)
         guard copiedSHA == request.movieSHA256, try exports.voiceHash(movieName,limit: VoiceMasterByteContract.sourceLimit) == copiedSHA else { throw ProjectFailure.invalidProject }
@@ -59,15 +72,17 @@ struct ReviewMovieImportService: Sendable {
         let snapshot = try JSONSerialization.data(withJSONObject: ["saved_sha256":xmlSHA,"source_sha256":xmlSHA,"scope":"imported_reference_only_no_new_production_approval"],options: [.sortedKeys])
         try exports.writeNew(snapshot,name: "watched.snapshot.json")
         let artifacts = ["exports/"+movieName,"exports/watched.fcpxml","exports/watched.snapshot.json","inputs/script/"+scriptName,"inputs/brief.md","inputs/original-verification.json","plan/imported.plan.json","inputs/import-binding.json"]
-        let cutVersion = CutVersion(number: request.number,label: request.label+" · imported verified movie",engineVersion: version,runID: UUID(),artifacts: artifacts,approvedPlanHash: planSHA,briefHash: briefSHA,approvedScript: "inputs/script/"+scriptName)
+        let cutVersion = CutVersion(number: number,label: request.label+" · imported verified movie",engineVersion: version,runID: UUID(),artifacts: artifacts,approvedPlanHash: planSHA,briefHash: briefSHA,approvedScript: "inputs/script/"+scriptName)
         let binding: [String:Any] = ["schemaVersion":1,"scope":"review_existing_movie_only","projectID":project.id.uuidString,"versionID":cutVersion.id.uuidString,
             "originalMovie":request.movie.path,"movieSHA256":copiedSHA,"nativeTimelineSHA256":xmlSHA,"scriptSHA256":scriptSHA,"planSHA256":planSHA,"briefSHA256":briefSHA,"verificationReceiptSHA256":receiptSHA,
-            "durationSeconds":duration,"actualAVTrackDurationSeconds":avDuration,"verifiedFrameCount":reportedFrames,"number":request.number,"originalsModified":false,"newEditorialApproval":false,"newFactApproval":false,"productionAuthorized":false,
+            "durationSeconds":duration,"actualAVTrackDurationSeconds":avDuration,"verifiedFrameCount":reportedFrames,"number":number,"originalVersionNumber":request.number,"originalsModified":false,"newEditorialApproval":false,"newFactApproval":false,"productionAuthorized":false,
             "candidateMode":VoiceCandidateEditPlan.mode]
         try inputs.writeNew(JSONSerialization.data(withJSONObject: binding,options: [.sortedKeys]),name: "import-binding.json")
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
         try cut.writeNew(encoder.encode(cutVersion),name: "clauto-version.json")
-        try owned.child("cuts").writeNew(encoder.encode(cutVersion.id),name: "current.json")
+        let hasCurrent = try CreativeAssetFiles.exists("current.json",in: cuts)
+        if existingProject == nil || !hasCurrent { try cuts.writeNew(encoder.encode(cutVersion.id),name: "current.json") }
+        else if makeCurrent { try cuts.replacePointer(encoder.encode(cutVersion.id),name: "current.json") }
         try owned.checkPath(); try cut.checkPath(); return project
     }
 }

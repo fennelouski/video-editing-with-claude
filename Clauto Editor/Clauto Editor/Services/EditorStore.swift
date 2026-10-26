@@ -26,6 +26,10 @@ final class EditorStore {
             guard !restoringSelection, let project = selected else { return }
             defaults.set(project.id.uuidString, forKey: "ClautoSelectedProjectID")
             defaults.set(project.folder.path, forKey: "ClautoSelectedProjectPath")
+            if let group = libraryGroup(for: project.id) {
+                var selections = defaults.dictionary(forKey: "ClautoProjectGroupSelections") as? [String:String] ?? [:]
+                selections[group.id.uuidString] = project.id.uuidString;defaults.set(selections,forKey: "ClautoProjectGroupSelections")
+            }
         }
     }
     var notice: String? { didSet { noticeTitle = "Needs attention" } }
@@ -131,13 +135,19 @@ final class EditorStore {
     @ObservationIgnored private var restorationID: UUID?
     @ObservationIgnored private var restoringSelection = false
     @ObservationIgnored private var storageController: StorageSetupController?
+    @ObservationIgnored private let storageService: StorageWorkspaceService
+    @ObservationIgnored private var projectCoverLibrary: ProjectCoverLibrary?
+    var covers: ProjectCoverLibrary {
+        if let projectCoverLibrary { return projectCoverLibrary }
+        let library = ProjectCoverLibrary(defaults: defaults);projectCoverLibrary = library;return library
+    }
     @ObservationIgnored private var storageOwnsWorking = false
     @ObservationIgnored private var soundEditorProjects: [UUID:UUID] = [:]
     func registerSoundWorkspace(_ owner: UUID,projectID: UUID) { soundEditorProjects[owner] = projectID }
     func unregisterSoundWorkspace(_ owner: UUID) { soundEditorProjects.removeValue(forKey: owner) }
     var storage: StorageSetupController {
         if let storageController { return storageController }
-        let controller = StorageSetupController(defaults: defaults,canLock: { [weak self] project in
+        let controller = StorageSetupController(defaults: defaults,service: storageService,canLock: { [weak self] project in
             guard let self,self.soundEditorProjects.isEmpty,self.runningProjectID == nil,!self.checking,!self.hasPendingReviewWork,!self.scriptWorkspaces.hasPendingWork,
                   !self.reviewPlayers.values.contains(where: { $0.project.id == project.id }),
                   self.projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
@@ -171,16 +181,48 @@ final class EditorStore {
         selectedID = project.id;remember();await loadWorkflow()
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,storageService: StorageWorkspaceService = .init()) {
+        self.storageService = storageService
         let env = ProcessInfo.processInfo.environment
         let preferences = env["CLAUTO_DEFAULTS_SUITE"].flatMap { UserDefaults(suiteName: $0) } ?? defaults
         self.defaults = preferences
+        if let bytes = preferences.data(forKey: "ClautoProjectGroups"),let groups = try? JSONDecoder().decode([ProjectLibraryGroup].self,from: bytes),(try? ProjectLibraryGroup.validate(groups)) != nil { libraryGroups = groups }
         playbackPreferences = ReviewPlaybackPreferences(defaults: preferences)
         defaultExportResolution = preferences.string(forKey: "ClautoDefaultExportResolution").flatMap(ExportResolution.init(rawValue:)) ?? .fullHD
         projectRoot = URL(fileURLWithPath: env["CLAUTO_PROJECTS_ROOT"] ?? preferences.string(forKey: "ClautoProjectsRoot") ?? Self.nasRoot.path, isDirectory: true)
         engineRoot = URL(fileURLWithPath: env["CLAUTO_ENGINE_ROOT"] ?? preferences.string(forKey: "ClautoEngineRoot") ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Clauto Editor/engine").path, isDirectory: true)
     }
 
+    private(set) var libraryGroups: [ProjectLibraryGroup] = []
+    var libraryEntries: [ProjectLibraryEntry] { ProjectLibraryEntry.entries(projects: projects,bookmarks: projectBookmarks,groups: libraryGroups) }
+    func libraryGroup(for id: UUID) -> ProjectLibraryGroup? { libraryGroups.first { $0.members.contains(id) } }
+    func libraryName(for project: Project) -> String { libraryGroup(for: project.id)?.name ?? project.manifest.name }
+    func groupProjects(_ ids: [UUID],name: String) {
+        do {
+            let known = Set(projectBookmarks.map(\.projectID)+projects.map(\.id))
+            guard Set(ids).isSubset(of: known) else { throw ProjectFailure.invalidProject }
+            var next = libraryGroups.filter { Set($0.members).isDisjoint(with: ids) }
+            let retained = libraryGroups.filter { !Set($0.members).isDisjoint(with: ids) }.flatMap(\.members)
+            let members = Array(Set(ids+retained)).sorted { $0.uuidString < $1.uuidString }
+            next.append(.init(id: libraryGroups.first { !Set($0.members).isDisjoint(with: ids) }?.id ?? UUID(),name: name,members: members))
+            try ProjectLibraryGroup.validate(next)
+            defaults.set(try JSONEncoder().encode(next),forKey: "ClautoProjectGroups");libraryGroups = next
+        } catch { notice = error.localizedDescription }
+    }
+    func ungroupProject(_ id: UUID) {
+        var next = libraryGroups
+        for i in next.indices { next[i].members.removeAll { $0 == id } }
+        next.removeAll { $0.members.count < 2 }
+        do { try ProjectLibraryGroup.validate(next);defaults.set(try JSONEncoder().encode(next),forKey: "ClautoProjectGroups");libraryGroups = next }
+        catch { notice = error.localizedDescription }
+    }
+    func selectLibraryEntry(_ entry: ProjectLibraryEntry) async {
+        if let current = selectedID,entry.memberIDs.contains(current) { return }
+        let available = projects.filter { entry.memberIDs.contains($0.id) }
+        if let saved = (defaults.dictionary(forKey: "ClautoProjectGroupSelections") as? [String:String])?[entry.id.uuidString],let id = UUID(uuidString: saved),available.contains(where: { $0.id == id }) { selectedID = id;return }
+        if let first = available.max(by: { (currentCuts[$0.id]?.number ?? 0) < (currentCuts[$1.id]?.number ?? 0) }) { selectedID = first.id;return }
+        if let known = projectBookmarks.first(where: { entry.memberIDs.contains($0.projectID) }) { await open(URL(fileURLWithPath: known.path)) }
+    }
     var selected: Project? { projects.first { $0.id == selectedID } }
     var details: String { selectedID.flatMap { runDetails[$0] } ?? "" }
     var checkSummary: String? { selectedID.flatMap { checkSummaries[$0] } }

@@ -36,6 +36,7 @@ struct GraphicFrameBuilder: Sendable {
         }
         func projected(_ v: SIMD3<Double>,_ zoom: Double = 1) -> SIMD2<Double> { .init(box.x+box.w/2+v.x*scale*zoom,box.y+box.h/2-v.y*scale*zoom) }
         switch scene.kind {
+        case .titleCard:break
         case .particles:
             let model = try required(scene.particles)
             if simulation == nil || simulation!.frame>index { simulation = try .init(model) }

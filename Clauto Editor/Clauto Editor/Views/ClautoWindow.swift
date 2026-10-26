@@ -39,7 +39,7 @@ struct ClautoWindowControls: View {
             control("Close window") { ClautoIcon(.close, size: 11) } action: {
                 // Keep the native close path and its delegate vetoes.
                 guard let window=handle.window else { return }
-                window.performClose(nil)
+                ClautoWindowActions.close(window)
                 #if DEBUG
                 if ProcessInfo.processInfo.environment["CLAUTO_SOUND_SILENT_QA"]=="1" { NSLog("Sound QA native close returned: visible=%d",window.isVisible ? 1:0) }
                 #endif
@@ -57,5 +57,19 @@ struct ClautoWindowControls: View {
                 .padding(3).contentShape(Rectangle())
         }
             .buttonStyle(ClautoInlineButtonStyle(onRail: onRail)).accessibilityLabel(label).clautoHelp(label)
+    }
+}
+
+/// AppKit's performClose consults its standard close control. Themes hide that
+/// control, so expose it only for the synchronous native action; delegate and
+/// sheet vetoes still apply. Never call close() to bypass those vetoes.
+@MainActor enum ClautoWindowActions {
+    static func close(_ window: NSWindow) {
+        guard window.styleMask.contains(.closable) else { return }
+        let button = window.standardWindowButton(.closeButton)
+        let wasHidden = button?.isHidden ?? false
+        button?.isHidden = false
+        defer { button?.isHidden = wasHidden }
+        window.performClose(nil)
     }
 }

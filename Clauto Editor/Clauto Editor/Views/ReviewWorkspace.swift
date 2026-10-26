@@ -11,6 +11,7 @@ struct ReviewWorkspace: View {
     @State private var feedback = true
     @State private var building = false
     @State private var soundEditing = false
+    @State private var assetPreview: ProjectAssetPreview?
     @State private var focusGeneration = UUID()
     @State private var workspaceWidth: CGFloat = 0
     @FocusState private var pane: Pane?
@@ -77,7 +78,11 @@ struct ReviewWorkspace: View {
                                 }
                                 ClautoRule(); Text("Assets").font(.headline)
                                 ForEach(project.manifest.files) { file in
-                                    Text(file.name).font(ClautoDesign.caption).textSelection(.enabled).frame(maxWidth: .infinity,alignment: .leading)
+                                    Button { assetPreview = .init(id: file.id,title: file.name,url: project.folder.appendingPathComponent(file.relativePath)) } label: {
+                                        HStack { Image(systemName: "doc");Text(file.name).lineLimit(2);Spacer() }.font(ClautoDesign.caption).frame(maxWidth: .infinity,alignment: .leading).padding(.vertical,5).contentShape(Rectangle())
+                                    }.buttonStyle(ClautoInlineButtonStyle())
+                                        .disabled(!FileManager.default.fileExists(atPath: project.folder.appendingPathComponent(file.relativePath).path))
+                                        .accessibilityLabel("Preview "+file.name).accessibilityIdentifier("cutPreviewAsset-"+file.id.uuidString)
                                 }
                             }.padding(12)
                         }.focusable().focused($pane,equals: .assets).frame(width: geometry.size.width >= 1100 ? 200 : 160)
@@ -100,6 +105,7 @@ struct ReviewWorkspace: View {
                 }.frame(maxWidth: .infinity,maxHeight: .infinity)
             }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { workspaceWidth = $0 }
         }.background { ClautoThemeSurface() }.textSelection(.enabled)
+            .sheet(item: $assetPreview) { item in ProjectAssetPreviewView(item: item) }
             .onAppear { if let id = router.returnVersionID { versionID = id; router.returnVersionID = nil }; router.onWorkspaceCommand = handle }
             .onChange(of: router.returnVersionID) { if let id = router.returnVersionID { versionID = id; router.returnVersionID = nil } }
             .onChange(of: selected?.id) {

@@ -1,0 +1,150 @@
+import Foundation
+import Testing
+#if canImport(ClautoCore)
+@testable import ClautoCore
+#else
+@testable import Clauto_Editor
+import AppKit
+import SwiftUI
+#endif
+
+private func experienceRoot() throws -> URL {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-experience-"+UUID().uuidString)
+    try FileManager.default.createDirectory(at: root,withIntermediateDirectories: false)
+    return root.resolvingSymlinksInPath().standardizedFileURL
+}
+struct ProjectExperienceTests {
+    @Test func chatIsAPersistedProjectWorkspace() {
+        #expect(RecentProjectRestoration.tab("Chat") == "Chat")
+        #expect(RecentProjectRestoration.tab("Files") == "Files")
+        #expect(RecentProjectRestoration.tab("unknown") == "Brief")
+    }
+    @Test func groupsKeepNativeIdentitiesAndOfflineVersionsWithoutNameHeuristics() async throws {
+        let root = try experienceRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let repository = ProjectRepository(),a = try await repository.create(name: "Pizza v7",root: root,engine: root),b = try await repository.create(name: "Pizza cadence",root: root,engine: root),other = try await repository.create(name: "Pan",root: root,engine: root)
+        let group = ProjectLibraryGroup(id: UUID(),name: "Pizza yeast",members: [a.id,b.id])
+        try ProjectLibraryGroup.validate([group])
+        let rows = ProjectLibraryEntry.entries(projects: [a,other],bookmarks: [a,b,other].map(ProjectCatalogBookmark.init),groups: [group])
+        #expect(rows.count == 2 && rows[0].name == "Pizza yeast" && rows[0].memberIDs == [a.id,b.id])
+        #expect(rows[1].id == other.id)
+        #expect(ProjectLibraryEntry.entries(projects: [a,b,other],bookmarks: [],groups: []).count == 3)
+        let duplicate = ProjectLibraryGroup(id: UUID(),name: "Other",members: [a.id,other.id])
+        #expect(throws: (any Error).self) { try ProjectLibraryGroup.validate([group,duplicate]) }
+        let reopenedA = try await repository.open(a.folder),reopenedB = try await repository.open(b.folder)
+        #expect(reopenedA.id == a.id && reopenedB.id == b.id)
+    }
+    @Test func everyStarterIsValidEditableAndUsesTheProjectShape() throws {
+        for starter in StudioStarter.allCases {
+            var scene = starter.scene(projectName: "Pizza yeast",aspect: "9:16")
+            try scene.validate()
+            #expect(scene.width == 720 && scene.height == 1280)
+            if scene.kind == .titleCard {
+                #expect(!scene.textLayers.isEmpty)
+                scene.textLayers[0].text = "My new words";try scene.validate()
+                let bytes = try JSONEncoder().encode(scene)
+                #expect(try JSONDecoder().decode(GraphicScene.self,from: bytes).textLayers[0].text == "My new words")
+            }
+        }
+    }
+    @MainActor @Test func starterCreationEditsAndReopensAsARealProjectScene() async throws {
+        let root = try experienceRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let project = try await ProjectRepository().create(name: "Template project",root: root,engine: root)
+        let controller = GraphicStudioController(project: project)
+        controller.create(template: .lowerThird)
+        for _ in 0..<500 { if controller.busy == nil { break };try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await controller.flushForExit())
+        let draft = try #require(controller.draft)
+        #expect(draft.scene.kind == .titleCard && draft.scene.textLayers.count == 2)
+        controller.changeScene(draft.id) { $0.scene.textLayers[0].text = "Katie" }
+        #expect(await controller.flushForExit())
+        let reopened = try await GraphicStudioRepository().load(project,id: draft.id)
+        #expect(reopened.draft.scene.textLayers[0].text == "Katie")
+        #expect(reopened.draft.scene.textLayers[1].text == "Add a short explanation")
+    }
+    @Test func titleTemplateRendersActualTransparentTextWithoutScientificFooter() async throws {
+        var scene = StudioStarter.title.scene(projectName: "My film",aspect: "16:9");scene.width = 640;scene.height = 360
+        let image = try await GraphicSceneRenderer().render(scene,frame: 0)
+        let alphas = stride(from: 3,to: image.rgba.count,by: 4).map { image.rgba[$0] }
+        #expect(alphas.contains { $0 > 0 } && alphas.contains(0))
+        let footer = (Int(Double(image.height)*0.94)*image.width+image.width/2)*4+3
+        #expect(image.rgba[footer] == 0)
+    }
+    @Test func illustratedCoversAreImmutableBoundedAndHashChecked() async throws {
+        let root = try experienceRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source.png"),raster = CutoutRaster(width: 32,height: 32,rgba: Data(repeating: 255,count: 32*32*4))
+        let bytes = try CutoutImageIO.png(raster);try bytes.write(to: source)
+        let repository = ProjectCoverRepository(root: root.appendingPathComponent("covers")),id = UUID()
+        let record = try await repository.save(source,projectID: id,generator: "Synthetic test only",prompt: "Test prompt",expectedSHA256: TranscriptSourceMap.sha(bytes))
+        #expect(record.projectID == id && record.sourceSHA256 == TranscriptSourceMap.sha(bytes))
+        #expect(try CutoutImageIO.decode(await repository.thumbnail(record)).raster.width <= 512)
+        #expect(try Data(contentsOf: source) == bytes)
+        await #expect(throws: (any Error).self) { _ = try await repository.save(source,projectID: id,generator: "Test",prompt: "",expectedSHA256: String(repeating: "a",count: 64)) }
+        var traversal = record;traversal.filename = "../source.png"
+        await #expect(throws: (any Error).self) { _ = try await repository.thumbnail(traversal) }
+        let saved = root.appendingPathComponent("covers/"+id.uuidString+"/"+record.filename)
+        try Data("changed".utf8).write(to: saved)
+        await #expect(throws: (any Error).self) { _ = try await repository.thumbnail(record) }
+    }
+    @Test func verifiedMovieCanAppendToAnExistingProjectWithoutReplacingItsCurrentCut() async throws {
+        let f = try await FrameReviewFixture.make();defer { try? FileManager.default.removeItem(at: f.root) }
+        try Data("synthetic".utf8).write(to: f.root.appendingPathComponent("ENGINE_VERSION"))
+        let original = CutVersion(number: 1,label: "Original",engineVersion: "synthetic",runID: UUID(),artifacts: ["exports/review.mp4"],approvedPlanHash: "fixture")
+        let encoder = JSONEncoder();encoder.dateEncodingStrategy = .iso8601
+        let metadata = f.project.folder.appendingPathComponent("cuts/v001/clauto-version.json"),pointer = f.project.folder.appendingPathComponent("cuts/current.json")
+        try encoder.encode(original).write(to: metadata);try encoder.encode(original.id).write(to: pointer)
+        let pointerBefore = try Data(contentsOf: pointer),metadataBefore = try Data(contentsOf: metadata)
+        let receipt = f.root.appendingPathComponent("receipt.json"),movie = f.root.appendingPathComponent("verified.mp4")
+        let resultMovie = try await ProcessRunner().run(.init(executable: ProcessRunner.executable("ffmpeg")!,arguments: ["-nostdin","-v","error","-f","lavfi","-i","color=s=160x90:r=24000/1001","-frames:v","36","-c:v","libx264","-bf","0","-video_track_timescale","24000","-pix_fmt","yuv420p",movie.path]))
+        #expect(resultMovie.succeeded)
+        let movieSHA = TranscriptSourceMap.sha(try Data(contentsOf: movie))
+        try JSONSerialization.data(withJSONObject: ["sha256":movieSHA,"review":movie.path,"technical_checks_passed":true,"duration_seconds":f.target.duration,"actual_frames":36]).write(to: receipt)
+        let request = ReviewMovieImportRequest(movie: movie,movieSHA256: movieSHA,nativeTimeline: f.project.folder.appendingPathComponent("cuts/v001/exports/cut.fcpxml"),script: f.project.folder.appendingPathComponent(f.target.approvedScriptPath),plan: f.project.folder.appendingPathComponent(f.target.approvedPlanPath),brief: f.project.folder.appendingPathComponent("cuts/v001/inputs/brief.md"),verificationReceipt: receipt,number: 1,label: "Another verified edition")
+        let result = try await ReviewMovieImportService().importReview(request,root: f.root,engine: f.root,existingProject: f.project)
+        #expect(result.id == f.project.id && result.folder == f.project.folder)
+        #expect(try Data(contentsOf: pointer) == pointerBefore && Data(contentsOf: metadata) == metadataBefore)
+        #expect(try await WorkflowRepository().versions(project: result).map(\.number).sorted() == [1,2])
+        let binding = try Data(contentsOf: result.folder.appendingPathComponent("cuts/v002/inputs/import-binding.json"))
+        let object = try #require(JSONSerialization.jsonObject(with: binding) as? [String:Any])
+        #expect(object["originalVersionNumber"] as? Int == 1 && object["number"] as? Int == 2)
+        #expect(object["productionAuthorized"] as? Bool == false)
+    }
+}
+
+#if !canImport(ClautoCore)
+@MainActor @Suite(.serialized) struct ProjectExperienceNativeTests {
+    @Test func groupingPersistsAndSwitchesVersionsWithoutChangingProjectBytesOrDrafts() async throws {
+        let root = try experienceRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = ProjectRepository(),a = try await repository.create(name: "Pizza v7",root: root,engine: root),b = try await repository.create(name: "Pizza cadence",root: root,engine: root),other = try await repository.create(name: "Pan",root: root,engine: root)
+        let before = try [a,b,other].map { try Data(contentsOf: $0.folder.appendingPathComponent("clauto-project.json")) }
+        defaults.set(root.path,forKey: "ClautoProjectsRoot")
+        let store = EditorStore(defaults: defaults);await store.restore();store.selectedID = b.id
+        let chat = store.liveConversation(for: b)
+        store.groupProjects([a.id,b.id],name: "Pizza yeast");store.selectedID = b.id;store.rememberProjectTab("Chat")
+        let group = try #require(store.libraryEntries.first { $0.groupID != nil })
+        store.selectedID = other.id;await store.selectLibraryEntry(group)
+        #expect(store.selectedID == b.id && store.initialProjectTab == "Chat" && store.liveConversation(for: b) === chat)
+        #expect(store.libraryEntries.count == 2 && store.projects.count == 3)
+        let reopened = EditorStore(defaults: defaults);await reopened.restore()
+        #expect(reopened.libraryEntries.count == 2 && reopened.libraryGroup(for: a.id)?.name == "Pizza yeast")
+        #expect(try [a,b,other].map { try Data(contentsOf: $0.folder.appendingPathComponent("clauto-project.json")) } == before)
+        store.ungroupProject(b.id);#expect(store.libraryEntries.count == 3)
+        #expect(await store.flushReviewWorkForExit())
+    }
+    @Test func authoredCloseWorksWithHiddenNativeControlAndHonorsDelegateVeto() {
+        final class Gate: NSObject,NSWindowDelegate {
+            var permit = false
+            var calls = 0
+            func windowShouldClose(_ sender: NSWindow) -> Bool { calls += 1;return permit }
+        }
+        let window = NSWindow(contentRect: .init(x: -2000,y: -2000,width: 320,height: 240),styleMask: [.titled,.closable],backing: .buffered,defer: false),gate = Gate()
+        window.isReleasedWhenClosed = false;window.delegate = gate;window.setIsVisible(true)
+        let button = window.standardWindowButton(.closeButton);button?.isHidden = true
+        ClautoWindowActions.close(window)
+        #expect(gate.calls == 1 && window.isVisible && button?.isHidden == true)
+        gate.permit = true;ClautoWindowActions.close(window)
+        #expect(gate.calls == 2 && !window.isVisible)
+        window.close()
+    }
+}
+#endif

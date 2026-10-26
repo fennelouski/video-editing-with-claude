@@ -59,6 +59,7 @@ enum GraphicFrameCompositor {
             }
             // Validation and declared assumptions are part of the pixels, not
             // metadata that can disappear when the movie is used elsewhere.
+            if scene.kind != .titleCard {
             let footer = scene.validationLabel+(scene.assumptions.isEmpty ? "":"\nAssumptions: "+scene.assumptions.map(\.text).joined(separator: "; "))
             let footerFont = try GraphicTypography.font(annotationBytes,size: max(10,Double(height)*0.025))
             let attributed = NSAttributedString(string: footer,attributes: [NSAttributedString.Key(kCTFontAttributeName as String):footerFont])
@@ -66,6 +67,7 @@ enum GraphicFrameCompositor {
             let box = CGRect(x: Double(width)*0.025,y: Double(height)*0.02,width: Double(width)*0.95,height: min(Double(height)*0.19,max(24,ceil(suggested.height)+12)))
             context.setFillColor(CGColor(srgbRed: 0.96,green: 0.94,blue: 0.87,alpha: 0.96));context.fill(box)
             try draw(footer,font: footerFont,color: .init(r: 0.1,g: 0.15,b: 0.12),in: box.insetBy(dx: 6,dy: 4),context: context,exactFont: true,requireFullText: true)
+            }
         }
         pixels.withUnsafeMutableBytes { memory in
             let values = memory.bindMemory(to: UInt8.self)

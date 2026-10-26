@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 struct GraphicStudioView: View {
     @Bindable var controller: GraphicStudioController
     @State private var newName = "My graphic"
-    @State private var kind = GraphicScene.Kind.particles
+    @State private var kind = GraphicScene.Kind.titleCard
     var body: some View {
         ScrollView {
             VStack(alignment: .leading,spacing: 24) {
@@ -83,7 +83,7 @@ struct GraphicStudioView: View {
 }
 
 private extension GraphicScene.Kind {
-    var title: String { switch self { case .particles:"Particle physics";case .molecule:"Molecule";case .atom:"Atom illustration";case .reaction:"Reaction diagram";case .object:"3D object";case .market:"Supply & demand" } }
+    var title: String { switch self { case .titleCard:"Title & caption";case .particles:"Particle physics";case .molecule:"Molecule";case .atom:"Atom illustration";case .reaction:"Reaction diagram";case .object:"3D object";case .market:"Supply & demand" } }
 }
 private struct GraphicNumberField: View {
     let title: String
