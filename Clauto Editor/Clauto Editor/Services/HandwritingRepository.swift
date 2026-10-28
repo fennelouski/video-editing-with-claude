@@ -88,10 +88,13 @@ actor HandwritingRepository {
     }
     private func validateStyle(_ preset: HandwritingStylePreset,lease: ProjectMutationLease,projectID: UUID) throws {
         try preset.validate()
+        guard try catalog(lease,projectID: projectID).entries.contains(where: { $0.assetID == preset.sourceAssetID && $0.revisionID == preset.sourceRevisionID }) else {
+            throw HandwritingFailure.invalid("The style source is not an admitted saved handwriting revision.")
+        }
         let stored = try read(parent(lease).child(preset.sourceAssetID.uuidString).child(preset.sourceRevisionID.uuidString),projectID: projectID,assetID: preset.sourceAssetID,revisionID: preset.sourceRevisionID)
         let source = stored.0,raster = try CutoutImageIO.decode(stored.1).raster
         guard source.review == preset.review,source.recipe == preset.recipe,source.provenance == preset.provenance,
-              source.exactText.utf8.elementsEqual(preset.exactText.utf8),source.locale == preset.locale,
+              source.exactText.utf8.elementsEqual(preset.exactText.utf8),source.locale.utf8.elementsEqual(preset.locale.utf8),
               raster.width == preset.sourceWidth,raster.height == preset.sourceHeight else { throw HandwritingFailure.invalid("The style must match its saved, explicitly approved source revision exactly.") }
     }
     func saveStyle(_ project: Project,preset: HandwritingStylePreset) throws -> URL {

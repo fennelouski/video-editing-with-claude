@@ -21,13 +21,13 @@ struct HandwritingStudioView: View {
                     }
                 }
                 if let document = controller.document {
-                    HStack {
+                    HandwritingControls {
                         ClautoAction("Save revision",icon: .check,kind: .primary) { Task { _ = await controller.saveNow() } }.disabled(controller.busy != nil || !controller.dirty)
                         ClautoAction("Undo") { controller.undoChange() }.disabled(!controller.canUndo || controller.busy != nil)
                         ClautoAction("Redo") { controller.redoChange() }.disabled(!controller.canRedo || controller.busy != nil)
                         ClautoAction("Import recipe JSON") { importRecipe() }.disabled(controller.busy != nil)
                         ClautoAction("Save editable JSON") { exportRecipe() }.disabled(controller.busy != nil)
-                        Spacer();Text(controller.dirty ? "Unsaved draft":"Saved with project").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                        Text(controller.dirty ? "Unsaved draft":"Saved with project").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                     }
                     HandwritingPreviewPanel(controller: controller)
                     HandwritingExtractionPanel(controller: controller,document: document).disabled(controller.busy != nil)
@@ -37,7 +37,7 @@ struct HandwritingStudioView: View {
                         ClautoAction("Export & verify",icon: .check,kind: .primary) { controller.exportAnimation() }.disabled(controller.busy != nil || document.review.status != .approved || controller.previewing)
                         if let result = controller.exported {
                             Text("\(result.proof.frameCount) frames decoded and verified · alpha retained").font(ClautoDesign.caption)
-                            HStack {
+                            HandwritingControls {
                                 ClautoAction("Show movie",icon: .folder) { NSWorkspace.shared.activateFileViewerSelecting([result.movieURL]) }
                                 ClautoAction("Show Final Cut layer") { NSWorkspace.shared.activateFileViewerSelecting([result.timelineURL]) }
                                 ClautoAction("Show recipe & originals") { NSWorkspace.shared.activateFileViewerSelecting([result.folderURL]) }
@@ -69,7 +69,7 @@ private struct HandwritingRequestPanel: View {
                 ClautoField(label: "Locale",text: Binding(get: { controller.locale },set: controller.setLocale),placeholder: "en / fr / ar").frame(width: 180)
                 ClautoField(label: "Art direction",text: $controller.artDirection,placeholder: "Describe the lettering you want",axis: .vertical)
             }
-            HStack {
+            HandwritingControls {
                 ClautoAction("Save AI artwork request") { saveRequest() }
                 ClautoAction("Import artwork",icon: .add,kind: .primary) { chooseImage(regeneration: false) }.disabled(controller.hasPendingWork)
                 if controller.document != nil { ClautoAction("Import regenerated revision") { chooseImage(regeneration: true) }.disabled(controller.hasPendingWork) }
@@ -77,11 +77,12 @@ private struct HandwritingRequestPanel: View {
             Text("The app currently uses an import/provider boundary. Save a request for an available image-generation tool, then import the actual result with its receipt. Preparing a request does not generate an image.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             ClautoDisclosure("Artwork source & generation receipt") {
                 ClautoChoice(title: "Source kind",selection: Binding(get: { controller.sourceKind },set: { kind in controller.sourceKind = kind;controller.updateProvenance { $0.kind = kind } }),options: [(.imported,"Imported original"),(.aiGenerated,"AI generated artwork"),(.fixture,"Test fixture · not live generation")])
-                HStack {
+                HandwritingControls {
                     ClautoField(label: "Provider / tool",text: Binding(get: { controller.provider },set: { text in controller.provider = text;controller.updateProvenance { $0.provider = text } }),placeholder: "Built-in image_gen / local scan")
                     ClautoField(label: "Model / version",text: Binding(get: { controller.model },set: { text in controller.model = text;controller.updateProvenance { $0.model = text } }),placeholder: "Receipt model or tool version")
                 }
                 ClautoField(label: "Generation request / receipt ID",text: Binding(get: { controller.requestID },set: { text in controller.requestID = text;controller.updateProvenance { $0.requestID = text } }),placeholder: "Required for AI artwork")
+                Text("Exact generation prompt").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 ClautoTextArea(text: Binding(get: { controller.generationPrompt },set: { text in controller.generationPrompt = text;controller.change { $0.generationPrompt = text;$0.provenance.prompt = text } }),label: "Exact generation prompt").frame(height: 100)
                 if let document = controller.document {
                     Text("Original: \(document.provenance.sourceName)\nSHA-256: \(document.provenance.sourceSHA256)").font(ClautoDesign.caption).textSelection(.enabled)
@@ -110,11 +111,11 @@ private struct HandwritingPreviewPanel: View {
     @State private var showPaths = true
     var body: some View {
         ClautoSection("Inspect & replay",detail: HandwritingRecipe.capability) {
-            HStack {
+            HandwritingControls {
                 ClautoToggle(title: "Inspect original",isOn: $showOriginal)
                 ClautoToggle(title: "Show complete extracted ink",isOn: $showInk)
                 ClautoToggle(title: "Show editable paths",isOn: $showPaths)
-                ClautoChoice(title: "Alpha-edge inspection background",selection: $background,options: [("checker","Checkerboard"),("light","Light paper"),("dark","Dark paper")]).frame(width: 250)
+                ClautoChoice(title: "Alpha-edge inspection background",selection: $background,options: [("checker","Checkerboard"),("light","Light paper"),("dark","Dark paper")])
             }
             if let raster = showOriginal ? controller.source:((showInk || controller.document?.recipe.strokes.isEmpty == true) ? controller.ink:controller.preview) {
                 HandwritingCanvas(controller: controller,raster: raster,background: background,showPaths: showPaths).frame(height: 320)
@@ -180,15 +181,15 @@ private struct HandwritingExtractionPanel: View {
     let document: HandwritingDocument
     var body: some View {
         ClautoSection("Separate lettering & clean edges",detail: "Preserve supplied alpha, or key a light/dark paper background. Paper keying recovers edge colors into the declared ink color; the original stays unchanged.") {
-            HStack {
+            HandwritingControls {
                 ClautoChoice(title: "Background separation",selection: Binding(get: { document.recipe.extraction.mode },set: { mode in controller.change { $0.recipe.extraction.mode = mode } }),options: [(.sourceAlpha,"Use original transparency"),(.lightPaper,"Dark lettering on light paper"),(.darkPaper,"Light lettering on dark paper")])
                 ClautoNumberField(label: "Coverage cutoff (0–0.95)",value: Binding(get: { document.recipe.extraction.threshold },set: { value in if value.isFinite,(0...0.95).contains(value) { controller.change { $0.recipe.extraction.threshold = value } } }))
                 ClautoNumberField(label: "Edge softness (0.001–1)",value: Binding(get: { document.recipe.extraction.softness },set: { value in if value.isFinite,(0.001...1).contains(value) { controller.change { $0.recipe.extraction.softness = value } } }))
             }
             if document.recipe.extraction.mode != .sourceAlpha {
-                HStack { inkChannel("Ink red",\.inkRed);inkChannel("Ink green",\.inkGreen);inkChannel("Ink blue",\.inkBlue) }
+                HandwritingControls { inkChannel("Ink red",\.inkRed);inkChannel("Ink green",\.inkGreen);inkChannel("Ink blue",\.inkBlue) }
             }
-            HStack {
+            HandwritingControls {
                 ClautoChoice(title: "Canvas tool",selection: $controller.canvasMode,options: [(.path,"Draw a new reveal path"),(.replacePath,"Replace selected path"),(.erase,"Erase background / stray ink"),(.restore,"Restore original ink")])
                 ClautoNumberField(label: "Brush radius · source pixels",value: $controller.brushRadius)
                 ClautoAction("Clear cleanup") { controller.clearCleanup() }.disabled(document.recipe.extraction.cleanup.isEmpty)
@@ -210,7 +211,7 @@ private struct HandwritingStrokePanel: View {
     @State private var toY = 50.0
     var body: some View {
         ClautoSection("Fine-tune the writing",detail: "Path order is editable. Start frames are explicit, so paths can overlap; duration and pauses use even integer frames. A dot marks each path’s writing start.") {
-            HStack {
+            HandwritingControls {
                 ClautoAction("Derive paths from actual ink",kind: .primary) { controller.derivePaths() }
                 ClautoNumberField(label: "Overlap when retiming · even frames",value: $controller.overlapFrames)
                 ClautoAction("Retime in path order") { controller.retime() }.disabled(document.recipe.strokes.isEmpty)
@@ -220,13 +221,13 @@ private struct HandwritingStrokePanel: View {
                 ClautoChoice(title: "Reveal path",selection: Binding(get: { controller.selectedStroke?.id ?? document.recipe.strokes[0].id },set: { controller.selectedStrokeID = $0 }),options: document.recipe.strokes.enumerated().map { index,stroke in (stroke.id,"Path \(index+1) · \(stroke.points.count) points · frame \(stroke.startFrame) → \(stroke.startFrame+stroke.durationFrames)") })
             }
             if let stroke = controller.selectedStroke {
-                HStack {
+                HandwritingControls {
                     frameField("Start frame",stroke: stroke,path: \.startFrame,minimum: 0)
                     frameField("Duration frames",stroke: stroke,path: \.durationFrames,minimum: 2)
                     frameField("Pause after · used by Retime",stroke: stroke,path: \.pauseAfterFrames,minimum: 0)
                     ClautoNumberField(label: "Mask width · source pixels",value: Binding(get: { stroke.maskWidthPixels },set: { value in if value.isFinite,(0.5...16384).contains(value) { controller.updateStroke(stroke.id) { $0.maskWidthPixels = value } } }))
                 }
-                HStack {
+                HandwritingControls {
                     ClautoChoice(title: "Easing",selection: Binding(get: { stroke.easing },set: { value in controller.updateStroke(stroke.id) { $0.easing = value } }),options: [(.linear,"Linear"),(.easeInOut,"Ease in & out")])
                     ClautoToggle(title: "Reverse writing direction",isOn: Binding(get: { stroke.reverse },set: { value in controller.updateStroke(stroke.id) { $0.reverse = value } }))
                     ClautoAction("Earlier") { controller.moveStroke(stroke.id,by: -1) }
@@ -236,8 +237,8 @@ private struct HandwritingStrokePanel: View {
             }
             ClautoDisclosure("Keyboard path correction") {
                 Text("Add a straight segment, or replace the selected path. Draw on the image for curved paths. Coordinates are percentages of the oriented original.").font(ClautoDesign.caption)
-                HStack { ClautoNumberField(label: "From X %",value: $fromX);ClautoNumberField(label: "From Y %",value: $fromY);ClautoNumberField(label: "To X %",value: $toX);ClautoNumberField(label: "To Y %",value: $toY) }
-                HStack {
+                HandwritingControls { ClautoNumberField(label: "From X %",value: $fromX);ClautoNumberField(label: "From Y %",value: $fromY);ClautoNumberField(label: "To X %",value: $toX);ClautoNumberField(label: "To Y %",value: $toY) }
+                HandwritingControls {
                     ClautoAction("Add segment") { addSegment(replace: false) }
                     ClautoAction("Replace selected path") { addSegment(replace: true) }.disabled(controller.selectedStroke == nil)
                 }
@@ -261,11 +262,12 @@ private struct HandwritingReviewPanel: View {
     var body: some View {
         ClautoSection("Review this exact revision",detail: "Likes alone do not approve a style. Check the rendered spelling and every diacritic against the exact text, inspect alpha edges on light and dark backgrounds, then approve explicitly.") {
             Text(document.exactText).font(ClautoDesign.type(22,weight: .semibold)).textSelection(.enabled)
-            HStack { reviewToggle("I like this style",\.liked);reviewToggle("Spelling & diacritics checked",\.spellingChecked);reviewToggle("Alpha edges checked",\.alphaEdgesChecked) }
+            HandwritingControls { reviewToggle("I like this style",\.liked);reviewToggle("Spelling & diacritics checked",\.spellingChecked);reviewToggle("Alpha edges checked",\.alphaEdgesChecked) }
             ClautoField(label: "Reviewed by",text: Binding(get: { document.review.reviewer },set: { value in controller.change({ $0.review.reviewer = value },visual: false) }),placeholder: "Your name")
+            Text("Why you like it, or why it was rejected").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
             ClautoTextArea(text: Binding(get: { document.review.comments },set: { value in controller.change({ $0.review.comments = value },visual: false) }),label: "Why you like it, or why it was rejected").frame(height: 90)
             ClautoField(label: "Suitable contexts · separate with commas",text: Binding(get: { document.review.contexts.joined(separator: ", ") },set: { text in controller.change({ $0.review.contexts = text.split(separator: ",",omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } },visual: false) }),placeholder: "Chapter titles, warm kitchen explanations")
-            HStack {
+            HandwritingControls {
                 ClautoAction("Approve this revision",icon: .check,kind: .primary) { controller.approve() }.disabled(!controller.canApprove || document.review.status == .approved)
                 ClautoAction("Reject & keep revision",kind: .quiet) { controller.reject() }.disabled(document.review.comments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Text("Status: \(document.review.status.rawValue)").font(ClautoDesign.caption)
@@ -283,7 +285,7 @@ private struct HandwritingStylesPanel: View {
     var body: some View {
         ClautoSection("Approved reusable styles",detail: "Future agents discover only explicitly approved presets with your reasons and suitable contexts. New artwork always requires its own review.") {
             if controller.document?.review.status == .approved {
-                HStack {
+                HandwritingControls {
                     ClautoField(label: "Style name",text: $controller.styleName,placeholder: "Warm kitchen marker")
                     ClautoAction("Save approved style",icon: .check,kind: .primary) { controller.saveStyle() }.disabled(controller.busy != nil || controller.styleName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -298,5 +300,15 @@ private struct HandwritingStylesPanel: View {
                 }.padding(14).background(ClautoDesign.soft)
             }
         }
+    }
+}
+
+/// Keep every correction and review control reachable in the editor's narrow pane.
+private struct HandwritingControls<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220),spacing: 12,alignment: .leading)],alignment: .leading,spacing: 12) {
+            content
+        }.frame(maxWidth: .infinity,alignment: .leading)
     }
 }

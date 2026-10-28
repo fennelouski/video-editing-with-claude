@@ -64,6 +64,7 @@ import FoundationXML
         var normalized = value;normalized.exactText = value.exactText.precomposedStringWithCanonicalMapping
         #expect(normalized != value)
         #expect(decoded.locale == "fr-FR" && decoded.review.status == .draft)
+        #expect(decoded.recipe.rendererVersion == HandwritingRecipe.implementationVersion)
         #expect(!decoded.review.liked && !decoded.review.spellingChecked && !decoded.review.alphaEdgesChecked)
         var incomplete = value.review;incomplete.status = .approved
         #expect(throws: (any Error).self) { try incomplete.validate() }
@@ -81,6 +82,8 @@ import FoundationXML
         invalid = recipe();invalid.strokes[0].durationFrames = Int.max
         #expect(throws: (any Error).self) { try invalid.validate(width: 64,height: 40) }
         invalid = recipe();invalid.strokes[0].maskWidthPixels = .nan
+        #expect(throws: (any Error).self) { try invalid.validate(width: 64,height: 40) }
+        invalid = recipe();invalid.rendererVersion = "unknown-future-renderer"
         #expect(throws: (any Error).self) { try invalid.validate(width: 64,height: 40) }
         invalid = recipe();invalid.extraction.softness = .infinity
         #expect(throws: (any Error).self) { _ = try renderer.extract(source: ink(),recipe: invalid) }
@@ -147,7 +150,8 @@ import FoundationXML
         } }
         let source = CutoutRaster(width: 64,height: 40,rgba: Data(bytes))
         let paths = try renderer.suggestedStrokes(for: source,locale: "fr-FR")
-        #expect(!paths.isEmpty && paths == (try renderer.suggestedStrokes(for: source,locale: "fr-FR")))
+        let repeated = try renderer.suggestedStrokes(for: source,locale: "fr-FR")
+        #expect(!paths.isEmpty && paths == repeated)
         #expect(paths.contains { $0.points.contains { $0.y < 0.35 } })
         var generated = HandwritingRecipe(strokes: paths);generated.retimeInOrder()
         try generated.validate(width: source.width,height: source.height)
@@ -196,6 +200,35 @@ import FoundationXML
         var tampered = draft;tampered.review.comments = "Changed outside immutable publication."
         try CreativeAssetFiles.encoder().encode(tampered).write(to: folder.appendingPathComponent("document.json"),options: .atomic)
         await #expect(throws: (any Error).self) { _ = try await repository.load(project,assetID: draft.id,revisionID: draft.revisionID) }
+    }
+
+    @MainActor @Test func undoRedoKeepExactTextFieldsAndSavedRevisionInSync() async throws {
+        let (root,project) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appendingPathComponent("synthetic-original.png")
+        try CutoutImageIO.png(ink()).write(to: sourceURL)
+        let controller = HandwritingStudioController(project: project)
+        controller.exactText = "Cre\u{300}me brûlée";controller.locale = "fr-FR"
+        controller.importImage(sourceURL)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while controller.busy != nil || controller.previewing {
+            try #require(ContinuousClock.now < deadline)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(controller.document != nil)
+        #expect(await controller.saveNow())
+        let saved = try #require(controller.saved)
+        controller.setExactText("Different text")
+        controller.undoChange()
+        #expect(controller.exactText.utf8.elementsEqual(saved.exactText.utf8))
+        #expect(controller.document?.exactText.utf8.elementsEqual(saved.exactText.utf8) == true)
+        #expect(controller.document?.parentRevisionID == saved.revisionID)
+        #expect(controller.document?.revisionID != saved.revisionID)
+        controller.redoChange()
+        #expect(controller.exactText == "Different text" && controller.document?.exactText == "Different text")
+        controller.setLocale("en")
+        controller.undoChange()
+        #expect(controller.locale == "fr-FR" && controller.document?.locale == "fr-FR")
+        #expect(await controller.flushForExit())
     }
 
     @Test func alphaMovieActuallyDecodesEveryExactTimestampAndXMLKeepsSeparateLayer() async throws {

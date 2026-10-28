@@ -93,17 +93,18 @@ struct HandwritingStroke: Codable, Equatable, Identifiable, Sendable {
 
 struct HandwritingRecipe: Codable, Equatable, Sendable {
     var schemaVersion = 1
+    var rendererVersion = Self.implementationVersion
     var extraction = HandwritingExtraction()
     var strokes: [HandwritingStroke] = []
     var frameCount = 120
     static let capability = "Editable raster mask reveal approximation; not recorded or reconstructed pen strokes"
-    static let rendererVersion = "clauto-handwriting-mask-1"
+    static let implementationVersion = "clauto-handwriting-mask-1"
     func validate(width: Int, height: Int) throws {
-        guard schemaVersion == 1, width > 0, height > 0, width <= 8192, height <= 8192,
+        guard schemaVersion == 1, rendererVersion == Self.implementationVersion, width > 0, height > 0, width <= 8192, height <= 8192,
               width * height <= 4_000_000, (2...2400).contains(frameCount), frameCount % 2 == 0,
               strokes.count <= 512, Set(strokes.map(\.id)).count == strokes.count,
               strokes.reduce(0, { $0 + $1.points.count }) <= 16_384 else {
-            throw HandwritingFailure.invalid("Handwriting supports at most 4 megapixels, 512 paths, 16,384 path points and 2–2400 even frames.")
+            throw HandwritingFailure.invalid("Choose renderer clauto-handwriting-mask-1 with at most 4 megapixels, 512 paths, 16,384 path points and 2–2400 even frames.")
         }
         try extraction.validate(width: width, height: height)
         for stroke in strokes { try stroke.validate(frameCount: frameCount, width: width, height: height) }

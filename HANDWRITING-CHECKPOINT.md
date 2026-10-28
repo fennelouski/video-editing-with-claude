@@ -1,95 +1,103 @@
-# Handwriting workflow checkpoint — resumed 2026-10-26 05:24 UTC
+# Handwriting workflow checkpoint — 2026-10-28
 
-## Current resumption
+## Current authorized window
 
-Nathan explicitly resumed the same task at 05:10 UTC. The old reset/model hold below
-is historical and superseded by that authorization. No model switch or completed
-descendant restart occurred. All three original workers remain completed.
+Nathan resumed this existing task for the October 28 reset window. Stop at the
+first confirmed reset relay or **2026-10-28 07:00:00 UTC**, whichever arrives first.
+The root's specific model and fast-mode controls are not exposed by this task;
+no model switch or fast-mode claim was made. The three original workers completed
+and have not been restarted. No descendants are active.
 
-The isolated branch is now rebased onto protected script-first candidate
-`5e51f785fcc807db8c93889097f3170636d4be4c`, handwriting commit `6256093`.
-Only additive Package.swift conflict was resolved; the candidate/main stayed unchanged.
-Script and Sounds feature files match the protected candidate. Current additional
-source refinements are saved but not yet committed: keyed-ink restore correction,
-portable export originals/ink/quality, publication-claim integrity checks, unified
-UI/agent generation request schema and source-verified CLI style use. Five Python
-protocol tests pass, and diff whitespace checks pass.
+All native jobs require Studio coordinator `01a16f34-bab5-762e-84cf-ebcf549af015`
+clearance. All owned test/capture jobs are terminal. Final focused validation and actual
+640/1280 offscreen pixel inspection passed; integration handoff is ready. No app launch,
+foreground, audio, live media project, public deployment or store action occurred.
 
-**Actual remaining blocker: PENDING Studio START.** Coordinator
-`01a16f34-bab5-762e-84cf-ebcf549af015` explicitly records HOLD_A440_RECLAIM_PRIORITY.
-No native compiler, render, app/foreground, or audio operation has started or remains
-running. The request was delivered, not denied. No new security permissions requested.
+## Source ownership and newer app preservation
 
-Prepared exact bounded test invocation (run only after fresh coordinator START):
+Worktree: `/Users/nathanfennel/Documents/Codex/2026-10-25/task-9/clauto-handwriting`
+Branch: `codex/handwriting-workflow`
 
-```
-python3 .artifacts/handwriting/run_bounded.py --seconds 350 --label focused -- /usr/bin/swift test --jobs 2 -Xswiftc -j2 --filter HandwritingTests
-```
+Rebased only this isolated branch onto newest protected candidate
+`f57e6bf3fc663b97011ee5d29a008fb44d6a8a9f`. The candidate/main stayed unchanged.
+Commits so far: `e4548ee` feature, `ed0de4e` publication/request refinements.
+Further source fixes below are included in the final validation/handoff commit.
 
-The supervisor uses task-local caches/output and a new owned process group with a
-350-second watchdog; its log/receipt are under `.artifacts/handwriting`. Tests include
-a 12-frame synthetic 320×240 ProRes/decoded-alpha proof and unapproved real French
-artwork PNGs. Native tests are still authored/unrun, not passed. Do not duplicate a
-whole-app build: 3D owner `01a171a9-7924-7609-ac7a-850152a9e0dc` agreed to be sole final
-integration writer and run the combined existing-app build after the final feature
-commit. This task owns focused handwriting tests/headless export/UI evidence.
+Resolved additive conflicts in EditorStore, CreativeStudioView and Package.swift.
+Retained newer identity/chat/storage/project discovery, Templates/title cards,
+ConnectedScriptWriter, Script and Sounds source/dependency entries and exit saves.
+3D owner `01a171a9-7924-7609-ac7a-850152a9e0dc` remains sole eventual integration
+writer and will run one combined existing-app build after final handoff. No shared
+graphics renderer or registries were edited by handwriting.
 
-Current cutoff: 07:00 UTC if parent relays a new reset announcement, otherwise
-08:00 UTC. Parent checks reset evidence; do not invent usage or reset status.
+## Implemented
 
----
+- Native exact-text/locale request and import provider boundary, truthful AI/fixture
+  provenance, original SHA, immutable revisions and explicit rejection/regeneration.
+- Supplied-alpha or light/dark paper extraction, erase/restore keyed ink cleanup,
+  deterministic bounded skeleton suggestions, editable drawn/coordinate paths,
+  order/direction/onset/duration/pause/overlap/easing/width, preview and replay.
+- Approval requires explicit like, spelling/diacritic and alpha checks, reviewer,
+  comments and use contexts, complete mask coverage and no boundary ink.
+- Several immutable approved style presets, source-bound discovery, no draft learning.
+  Agent recipe import drops approval claims. CLI requests do not claim live generation.
+- Original/ink/quality/editable document plus real ProRes 4444 and independent FCPXML.
+  Every timestamp is exact 1001/24000; moves hold on two frames; decoded alpha proof.
+- Request/document schemas, stdlib agent CLI, examples and docs/HANDWRITING.md.
 
-## Historical October 25 checkpoint
+## October 28 fixes
 
-Isolated branch: `codex/handwriting-workflow`, base `a0260bd`.
-Worktree: `/Users/nathanfennel/Documents/Codex/2026-10-25/task-9/clauto-handwriting`.
-Source and all new files are saved; no commit, merge, app launch, public release or live project edit.
+- Approved-style discovery verifies publication claims, original bytes and admission
+  in the saved revision index. CLI rejects linked internal paths and malformed JSON.
+- Undo/redo synchronizes the exact-text, locale and provenance fields with the restored
+  draft and clears stale export display. Original saved revisions remain immutable.
+- Saved recipes now pin `clauto-handwriting-mask-1`; unknown renderer versions refuse.
+- Native pixel review found a missing visible review-comment label and wide control
+  rows. The current view adds the label and adaptive control grids for narrow panes.
 
-## Implemented, awaiting native verification
+## Actual verification so far
 
-- New native model, pixel renderer, immutable repository, alpha-movie export service,
-  controller and themed Handwriting view; additive CreativeStudio/EditorStore navigation
-  and Package.swift source entries only. Shared graphic renderer/registries unchanged.
-- Exact UTF-8 text/locale and original SHA provenance; paper key/alpha cleanup;
-  ink-skeleton mask approximation; editable path order/direction/timing/pause/overlap/
-  easing/width and drawn corrections; preview/replay; rejection/regeneration and revisions.
-- Explicit likes plus approval checks/comments/contexts; only saved approved presets
-  enter native discovery; source-bound recipe JSON drops imported review claims.
-- ProRes 4444 + independent FCPXML layer export implementation uses existing movie
-  verifier. Deterministic source frames; codec bitstream identity not promised.
-- `scripts/handwriting.py`, schema, example request, docs and actual built-in imagegen
-  French artwork with prompt/receipt; artwork remains UNAPPROVED.
+- Eight Python protocol tests PASS. Exact Unicode, source-verified style reuse,
+  tampered original rejection, unindexed/linked source refusal, malformed JSON and
+  exclusive request writes are exercised. Example request SHA matches exact text.
+- First sandboxed native attempt exited before compilation (nice/setpriority and
+  SwiftPM manifest sandbox blocked). Scoped normal exec review admitted the retry;
+  no sandbox/security setting or compiler sandbox-disable flag was changed.
+- Native core compiled. One own Swift Testing assertion compile error was corrected.
+- **10/10 focused native tests PASS** on the pre-final-layout/version source at
+  06:19:47 UTC; 55.121 seconds including compile, tests 11.654 seconds. Evidence:
+  `.artifacts/handwriting/focused-oct28-fixed.log` and matching receipt.
+- Actual 12-frame 320×240 ProRes 4444 decoded every frame with exact timestamps,
+  endpoint alpha error 0; FCPXML lane 1 and originals verified. Saved below
+  `.artifacts/handwriting/pixels/clauto-handwriting-test-7B9A46D0-3594-4E70-B8EC-469FFA17022C/`.
+- Actual built-in generated French artwork produced 92 paths/496 frames, 222288 ink
+  pixels, 221820 partial-alpha pixels, **727 unrevealed pixels**, zero boundary ink.
+  Agent inspected original, mid-reveal and final pixels. It remains UNAPPROVED,
+  and the coverage guard correctly blocks acceptance/export until correction.
+- Actual HandwritingStudioView and current theme/design/icon sources compiled and
+  captured offscreen at 1280px. PNGs inspected; disabled approval/export and coverage
+  warning visible. No window or foreground activation. Evidence and source hashes:
+  `.artifacts/handwriting/ui/`, plus `ui-oct28.log`/receipt (49.338 seconds).
+- **Final 10/10 native tests PASS**, including persisted renderer version and rejection
+  of unknown versions, in `.artifacts/handwriting/final-oct28.log` (11.710 seconds).
+  That combined sequence later stopped on the harness's ideal-width assertion,
+  after tests and UI compilation passed. It did not establish actual overflow.
+- **Final offscreen UI capture PASS** at 1280 and 640 actual pixels. The separate
+  UI-only run completed at 06:38:20 UTC in 12.106 seconds; all six captures inspected.
+  Actual bounds are 640; ideal/fitting width is 1250. Pixel review confirms controls
+  wrap, fields/labels remain reachable, warnings and disabled actions are visible.
+  Logs/receipt: `ui-final-oct28*`; current source hashes and capture proof in `ui/`.
+- Added handwriting cache eviction beside existing studio cache eviction when the
+  newer storage workflow adopts a copied project. This additive EditorStore line
+  awaits the combined app compile; core/view tests exclude EditorStore.
 
-## Verified so far
+## Limits and outstanding work
 
-- Existing Katie Seasoning source/progression pixels and generation/path provenance inspected.
-- Four Python protocol tests PASS (`python3 -m unittest discover -s tests -p test_handwriting_protocol.py -v`).
-- `git diff --check` PASS.
-- New generated pixels visually show the French label; no native render/extraction/export QA yet.
+A raster-mask graph is an approximation, not recorded/reconstructed pen telemetry.
+The French sample needs mask/path correction and human spelling/edge/style approval;
+no real user approval or reusable production preset has been fabricated. No embedded
+live AI connection exists: supported agent image tooling produces an actual asset,
+then the app imports it with provenance. No OCR or scientific signoff is automated.
 
-## Pending / model pause hold
-
-Nathan's 06:19 instruction pauses all Astra work. Exact runtime model is not exposed
-by this task's tools. System text identifies GPT-6 only; collaboration status has no
-model field. No model override was used: all three workers inherited this task's model.
-All three (engine, UI, tests) completed and own no running operations. There are no
-native compiler/render processes from this task to stop. Known Astra review owner
-was not contacted after pause.
-
-The attempted report to parent thread `01a16eb3-a02d-7595-9c4e-7382339a7025`
-returned `Some requested entity was not found: thread not found` (not delivered).
-Studio coordinator was successfully told HOLD the handwriting compile queue until
-parent verifies task `01a171ad-7609-72f2-97bc-cef1d74110ef` actual model is non-Astra.
-No model switch was performed. If it is Astra, resume only under parent's verified
-future Tibo/reset/usage condition; today's reset is not a resume trigger.
-
-Native build/tests and offscreen UI capture remain PENDING, not passed or denied.
-Nine meaningful Swift tests are authored. Resume with a coordinated bounded build:
-`swift test --jobs 2 --filter HandwritingTests`, task-local cache/outputs and watchdog.
-Use `CLAUTO_HANDWRITING_QA_OUTPUT` and `CLAUTO_HANDWRITING_ARTWORK` to preserve actual
-sample reveal/quality evidence. Then compile the native View integration and inspect
-fresh offscreen pixels; the regular app must not launch or touch live media state.
-
-Follow up any compiler/alpha/coverage failures before merge. A masked graph traversal
-is not guaranteed to look like authentic writing. Acceptance requires actual rendered
-pixel review, including diacritics, edge quality and any unrevealed-ink diagnostics.
+The final feature range is ready for the 3D integration owner. Full integrated Clauto Video build, interactive foreground
+QA and Final Cut import remain separate/unverified until their owning tasks report.
