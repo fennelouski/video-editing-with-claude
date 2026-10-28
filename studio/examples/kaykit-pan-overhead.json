@@ -20,8 +20,7 @@
     "meshSHA256": "45ec9be003b900032c5e193d1a21ba69b10aa8e058afafef19690acbdec8e6a8"
   },
   "assumptions": [
-    "Illustrative object study; geometry and motion are not a physical simulation.",
-    "Not to scale. No cooking temperature, chemical mechanism or coating thickness is asserted."
+    "Form study only; not to scale."
   ],
-  "reviewNotes": "Review actual output pixels before placing this graphic in Katie’s video. Real scanned art and handwriting remain separate editable scene layers."
+  "reviewNotes": "Review actual output pixels before placing this graphic in Katie’s video. Illustrative geometry and motion are not a physical simulation; no cooking temperature, chemical mechanism or coating thickness is asserted. Real scanned art and handwriting remain separate editable scene layers."
 }

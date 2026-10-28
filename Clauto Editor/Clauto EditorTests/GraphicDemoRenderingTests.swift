@@ -44,10 +44,10 @@ import Testing
     @Test func faintShadowKeepsWarmColorThroughGPUAndOverlayComposition() async throws {
         let color = GraphicColor(r: 74.0/255,g: 60.0/255,b: 46.0/255,a: 0.021)
         let triangle = GraphicPrimitiveGPU.triangle(.init(0,0),.init(64,0),.init(0,64),color: color)
-        let raster = try await GraphicMetalRenderer().render([triangle],width: 64,height: 64)
-        let scene = GraphicScene(kind: .titleCard,width: 64,height: 64,frameCount: 2)
+        let raster = try await GraphicMetalRenderer().render([triangle],width: 320,height: 240)
+        let scene = GraphicScene(kind: .titleCard,width: 320,height: 240,frameCount: 2)
         let composed = try GraphicFrameCompositor.composite(raster,frame: .init(primitives: [],annotations: []),scene: scene,index: 0,assets: .init())
-        let i = (12*64+12)*4
+        let i = (12*320+12)*4
         #expect(composed.rgba==raster.rgba)
         for (channel,expected) in [74,60,46].enumerated() { #expect(abs(Int(composed.rgba[i+channel])-expected)<=1) }
         #expect((4...6).contains(Int(composed.rgba[i+3])))
