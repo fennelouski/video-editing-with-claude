@@ -63,15 +63,15 @@ struct GraphicDemoFrameBuilder: Sendable {
         let dx = noise(step,3)*1.5*width/1920,dy = noise(step,4)*1.5*height/1080
         func project(_ p: SIMD3<Double>) -> SIMD2<Float> { .init(Float(width*0.5+p.x*fit+dx),Float(height*0.405-p.y*fit+dy)) }
         let transformed = points.map { Self.rotate($0,yaw: yaw,pitch: pitch) }
-        let light = simd_normalize(SIMD3<Double>(-0.55,0.85,0.9))
+        let light = simd_normalize(SIMD3<Double>(-0.45,1.2,0.6))
         // A convex projected footprint is a deliberately bounded contact shadow.
         // Nested translucent silhouettes soften the edge without a texture asset.
-        let shadow = Self.hull(points.map { p -> SIMD2<Double> in
+        let shadow = Self.rounded(Self.hull(points.map { p -> SIMD2<Double> in
             let above = p.y-ground
             let floor = SIMD3(p.x+above*0.32,ground,p.z-above*0.22)
             let p = Self.rotate(floor,yaw: yaw,pitch: pitch)
             return .init(p.x,p.y)
-        })
+        }))
         var shapes: [GraphicPrimitiveGPU] = []
         if shadow.count>=3 {
             let center = shadow.reduce(SIMD2<Double>.zero,+)/Double(shadow.count)
@@ -95,12 +95,27 @@ struct GraphicDemoFrameBuilder: Sendable {
             let face = item.element,p = transformed[face[0]],q = transformed[face[1]],r = transformed[face[2]]
             var n = simd_normalize(simd_cross(q-p,r-p));if n.z<0 { n = -n }
             let key = max(0,simd_dot(n,light)),fill = max(0,simd_dot(n,simd_normalize(SIMD3<Double>(0.8,0.2,0.9))))
-            let shade = rig.light == .warmSoft ? 0.48+0.44*key+0.08*fill:0.32+0.61*key+0.07*fill
+            let shade = rig.light == .warmSoft ? 0.42+0.60*key+0.08*fill:0.32+0.61*key+0.07*fill
             let color = GraphicColor(r: min(0.94,base.x*shade*1.035),g: base.y*shade,b: base.z*shade*0.965,a: mesh.color.a)
             func depth(_ p: SIMD3<Double>) -> Float { Float(0.5-p.z*0.4/extent) }
             shapes.append(.triangle(project(p),project(q),project(r),color: color,depth: .init(depth(p),depth(q),depth(r))))
         }
         return shapes
+    }
+    /// Two bounded corner-cut passes soften the analytic contact footprint while
+    /// preserving its location and overall projection beneath the model.
+    private static func rounded(_ input: [SIMD2<Double>]) -> [SIMD2<Double>] {
+        guard input.count>=3 else { return input }
+        var polygon = input
+        for _ in 0..<2 {
+            var next: [SIMD2<Double>] = [];next.reserveCapacity(polygon.count*2)
+            for i in polygon.indices {
+                let a = polygon[i],b = polygon[(i+1)%polygon.count]
+                next += [a*0.75+b*0.25,a*0.25+b*0.75]
+            }
+            polygon = next
+        }
+        return polygon
     }
     private static func hull(_ input: [SIMD2<Double>]) -> [SIMD2<Double>] {
         let sorted = input.sorted { $0.x == $1.x ? $0.y<$1.y:$0.x<$1.x }

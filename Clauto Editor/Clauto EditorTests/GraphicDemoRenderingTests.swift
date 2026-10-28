@@ -41,6 +41,29 @@ import Testing
         let b = try await renderer.render([shadow,blue,red],width: 64,height: 64)
         #expect(a.rgba==b.rgba)
     }
+    @Test func faintShadowKeepsWarmColorThroughGPUAndOverlayComposition() async throws {
+        let color = GraphicColor(r: 74.0/255,g: 60.0/255,b: 46.0/255,a: 0.021)
+        let triangle = GraphicPrimitiveGPU.triangle(.init(0,0),.init(64,0),.init(0,64),color: color)
+        let raster = try await GraphicMetalRenderer().render([triangle],width: 64,height: 64)
+        let scene = GraphicScene(kind: .titleCard,width: 64,height: 64,frameCount: 2)
+        let composed = try GraphicFrameCompositor.composite(raster,frame: .init(primitives: [],annotations: []),scene: scene,index: 0,assets: .init())
+        let i = (12*64+12)*4
+        #expect(composed.rgba==raster.rgba)
+        for (channel,expected) in [74,60,46].enumerated() { #expect(abs(Int(composed.rgba[i+channel])-expected)<=1) }
+        #expect((4...6).contains(Int(composed.rgba[i+3])))
+    }
+    private func overBackground(_ image: CutoutRaster,_ rgb: [UInt8]) -> CutoutRaster {
+        var bytes = image.rgba
+        bytes.withUnsafeMutableBytes { memory in
+            let pixels = memory.bindMemory(to: UInt8.self)
+            for i in stride(from: 0,to: pixels.count,by: 4) {
+                let alpha = Int(pixels[i+3])
+                for channel in 0..<3 { pixels[i+channel] = UInt8((Int(pixels[i+channel])*alpha+Int(rgb[channel])*(255-alpha)+127)/255) }
+                pixels[i+3] = 255
+            }
+        }
+        return .init(width: image.width,height: image.height,rgba: bytes)
+    }
     /// Optional real library proof. The environment opts into disposable output;
     /// regular tests remain self-contained and never discover private projects.
     @MainActor @Test func preparedLibraryPanRendersAndExportsThroughExistingVerifiedContract() async throws {
@@ -67,6 +90,13 @@ import Testing
             let name = String(format: "after-%04d.png",frame)
             try png.write(to: root.appendingPathComponent(name),options: .withoutOverwriting)
             hashes[name] = TranscriptSourceMap.sha(png)
+            if frame==0 {
+                for (suffix,color) in [("oat",[UInt8(232),223,200]),("contrast",[UInt8(64),89,100])] {
+                    let displayed = try CutoutImageIO.png(overBackground(raster,color)),name = "after-0000-on-"+suffix+".png"
+                    try displayed.write(to: root.appendingPathComponent(name),options: .withoutOverwriting)
+                    hashes[name] = TranscriptSourceMap.sha(displayed)
+                }
+            }
         }
         var legacy = scene;legacy.demoRig = nil;legacy.demoProvenance = nil
         try CutoutImageIO.png(await GraphicSceneRenderer().render(legacy,frame: 0)).write(to: root.appendingPathComponent("same-model-legacy-rig.png"),options: .withoutOverwriting)
