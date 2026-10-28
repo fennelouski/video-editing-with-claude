@@ -23,6 +23,13 @@ class HandwritingProtocolTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 H.request("Seasoning", "en", {"review": review})
 
+    def test_standalone_style_cannot_bypass_saved_project_verification(self):
+        with tempfile.TemporaryDirectory() as folder:
+            style = Path(folder) / "style.json"
+            style.write_text(json.dumps({"review": {"status": "approved", "liked": True}}))
+            self.assertEqual(H.main(["request", "--text", "Seasoning", "--locale", "en", "--approved-style", str(style), "--out", str(Path(folder) / "request.json")]), 2)
+            self.assertFalse((Path(folder) / "request.json").exists())
+
     def test_exclusive_request_write_preserves_existing_file(self):
         with tempfile.TemporaryDirectory() as folder:
             output = Path(folder) / "request.json"

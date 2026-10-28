@@ -1,4 +1,45 @@
-# Handwriting workflow checkpoint — 2026-10-25 06:20 UTC
+# Handwriting workflow checkpoint — resumed 2026-10-26 05:24 UTC
+
+## Current resumption
+
+Nathan explicitly resumed the same task at 05:10 UTC. The old reset/model hold below
+is historical and superseded by that authorization. No model switch or completed
+descendant restart occurred. All three original workers remain completed.
+
+The isolated branch is now rebased onto protected script-first candidate
+`5e51f785fcc807db8c93889097f3170636d4be4c`, handwriting commit `6256093`.
+Only additive Package.swift conflict was resolved; the candidate/main stayed unchanged.
+Script and Sounds feature files match the protected candidate. Current additional
+source refinements are saved but not yet committed: keyed-ink restore correction,
+portable export originals/ink/quality, publication-claim integrity checks, unified
+UI/agent generation request schema and source-verified CLI style use. Five Python
+protocol tests pass, and diff whitespace checks pass.
+
+**Actual remaining blocker: PENDING Studio START.** Coordinator
+`01a16f34-bab5-762e-84cf-ebcf549af015` explicitly records HOLD_A440_RECLAIM_PRIORITY.
+No native compiler, render, app/foreground, or audio operation has started or remains
+running. The request was delivered, not denied. No new security permissions requested.
+
+Prepared exact bounded test invocation (run only after fresh coordinator START):
+
+```
+python3 .artifacts/handwriting/run_bounded.py --seconds 350 --label focused -- /usr/bin/swift test --jobs 2 -Xswiftc -j2 --filter HandwritingTests
+```
+
+The supervisor uses task-local caches/output and a new owned process group with a
+350-second watchdog; its log/receipt are under `.artifacts/handwriting`. Tests include
+a 12-frame synthetic 320×240 ProRes/decoded-alpha proof and unapproved real French
+artwork PNGs. Native tests are still authored/unrun, not passed. Do not duplicate a
+whole-app build: 3D owner `01a171a9-7924-7609-ac7a-850152a9e0dc` agreed to be sole final
+integration writer and run the combined existing-app build after the final feature
+commit. This task owns focused handwriting tests/headless export/UI evidence.
+
+Current cutoff: 07:00 UTC if parent relays a new reset announcement, otherwise
+08:00 UTC. Parent checks reset evidence; do not invent usage or reset status.
+
+---
+
+## Historical October 25 checkpoint
 
 Isolated branch: `codex/handwriting-workflow`, base `a0260bd`.
 Worktree: `/Users/nathanfennel/Documents/Codex/2026-10-25/task-9/clauto-handwriting`.

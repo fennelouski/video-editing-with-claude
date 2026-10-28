@@ -6,6 +6,12 @@ actor HandwritingRepository {
     private struct Entry: Codable { let assetID: UUID; let revisionID: UUID }
     private struct Catalog: Codable { var schemaVersion = 1; let projectID: UUID; var entries: [Entry] = [] }
     private struct StyleCatalog: Codable { var schemaVersion = 1; let projectID: UUID; var ids: [UUID] = [] }
+    private struct PublicationClaim: Decodable { let schemaVersion: Int;let destination: String;let files: [String:String] }
+    private func verifyClaim(_ folder: SourceRenderDirectory,id: UUID,files: [String:Data]) throws {
+        let claim = try CreativeAssetFiles.decode(folder.read("creative-claim.json",limit: 16384),as: PublicationClaim.self)
+        guard claim.schemaVersion == 1,claim.destination == id.uuidString,
+              files.allSatisfy({ claim.files[$0.key] == TranscriptSourceMap.sha($0.value) }) else { throw CutoutFailure.changedSource }
+    }
     private func parent(_ lease: ProjectMutationLease) throws -> SourceRenderDirectory {
         try lease.root.child("assets",create: true).child("handwriting",create: true)
     }
@@ -18,8 +24,10 @@ actor HandwritingRepository {
         return value
     }
     private func read(_ folder: SourceRenderDirectory,projectID: UUID,assetID: UUID,revisionID: UUID) throws -> (HandwritingDocument,Data) {
-        let document = try CreativeAssetFiles.decode(folder.read("document.json",limit: 2*1024*1024),as: HandwritingDocument.self)
+        let documentBytes = try folder.read("document.json",limit: 2*1024*1024)
+        let document = try CreativeAssetFiles.decode(documentBytes,as: HandwritingDocument.self)
         let original = try folder.read("original.image",limit: CutoutImageIO.sourceLimit)
+        try verifyClaim(folder,id: revisionID,files: ["document.json":documentBytes,"original.image":original])
         guard document.projectID == projectID,document.id == assetID,document.revisionID == revisionID,
               document.provenance.sourceSHA256 == TranscriptSourceMap.sha(original) else { throw CutoutFailure.changedSource }
         let source = try CutoutImageIO.decode(original).raster
@@ -104,7 +112,9 @@ actor HandwritingRepository {
         if index.ids.isEmpty { return [] }
         let root = try parent(lease).child("styles")
         return try index.ids.map { id in
-            let preset = try CreativeAssetFiles.decode(root.child(id.uuidString).read("style.json",limit: 2*1024*1024),as: HandwritingStylePreset.self)
+            let folder = try root.child(id.uuidString),bytes = try folder.read("style.json",limit: 2*1024*1024)
+            try verifyClaim(folder,id: id,files: ["style.json":bytes])
+            let preset = try CreativeAssetFiles.decode(bytes,as: HandwritingStylePreset.self)
             guard preset.id == id else { throw ProjectFailure.invalidProject }
             try validateStyle(preset,lease: lease,projectID: project.id);return preset
         }

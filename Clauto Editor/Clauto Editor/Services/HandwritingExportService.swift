@@ -156,6 +156,9 @@ actor HandwritingExportService {
         metadata.width = max(320,(ink.width+1)/2*2);metadata.height = max(240,(ink.height+1)/2*2)
         metadata.frameCount = document.recipe.frameCount
         let folder = try await repository.prepareExport(project,document: document,id: id)
+        try folder.writeNew(original,name: "original.image")
+        try folder.writeNew(CutoutImageIO.png(ink),name: "ink.png")
+        try folder.writeNew(CreativeAssetFiles.encoder().encode(quality),name: "quality.json")
         let output = try await encoder.export(metadata,ink: ink,recipe: document.recipe,to: folder)
         let proof = try await verifier.verify(folder,scene: metadata,output: output)
         try folder.writeNew(GraphicFinalCutXML.make(scene: metadata,label: document.exactText,movie: output.movieURL),name: "timeline.fcpxml")

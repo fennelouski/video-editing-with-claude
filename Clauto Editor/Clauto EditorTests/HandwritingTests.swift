@@ -61,6 +61,8 @@ import FoundationXML
         let bytes = try CreativeAssetFiles.encoder().encode(value)
         let decoded = try CreativeAssetFiles.decode(bytes,as: HandwritingDocument.self)
         #expect(Array(decoded.exactText.utf8) == Array(value.exactText.utf8))
+        var normalized = value;normalized.exactText = value.exactText.precomposedStringWithCanonicalMapping
+        #expect(normalized != value)
         #expect(decoded.locale == "fr-FR" && decoded.review.status == .draft)
         #expect(!decoded.review.liked && !decoded.review.spellingChecked && !decoded.review.alphaEdgesChecked)
         var incomplete = value.review;incomplete.status = .approved
@@ -104,6 +106,9 @@ import FoundationXML
             #expect(abs(Int(alpha(output,30,18))-128)<=1)
             let edge = (18*64+30)*4
             #expect(output.rgba[edge] == 74 && output.rgba[edge+1] == 60 && output.rgba[edge+2] == 46)
+            keyed.extraction.cleanup = [.init(mode: .restore,radiusPixels: 3,points: [.init(x: 0.05,y: 0.05)])]
+            let restoredPaper = try renderer.extract(source: .init(width: 64,height: 40,rgba: Data(opaque)),recipe: keyed)
+            #expect(alpha(restoredPaper,3,2) == 0)
         }
         var erased = sourceRecipe
         erased.extraction.cleanup = [.init(mode: .erase,radiusPixels: 4,points: [.init(x: 30.0/63,y: 20.0/39)])]
@@ -188,6 +193,9 @@ import FoundationXML
         #expect(loaded.0 == draft && loaded.1 == original)
         var uncovered = approved(draft);uncovered.id = UUID();uncovered.revisionID = UUID();uncovered.recipe.strokes = []
         await #expect(throws: (any Error).self) { _ = try await repository.save(project,document: uncovered,original: original) }
+        var tampered = draft;tampered.review.comments = "Changed outside immutable publication."
+        try CreativeAssetFiles.encoder().encode(tampered).write(to: folder.appendingPathComponent("document.json"),options: .atomic)
+        await #expect(throws: (any Error).self) { _ = try await repository.load(project,assetID: draft.id,revisionID: draft.revisionID) }
     }
 
     @Test func alphaMovieActuallyDecodesEveryExactTimestampAndXMLKeepsSeparateLayer() async throws {
@@ -229,6 +237,7 @@ import FoundationXML
         }
         #expect(reader.status == .completed && count == 12 && hasClear && hasInk)
         #expect(FileManager.default.fileExists(atPath: result.folderURL.appendingPathComponent("COMPLETE.txt").path))
+        #expect(try Data(contentsOf: result.folderURL.appendingPathComponent("original.image")) == original)
         let exportID = try #require(UUID(uuidString: result.folderURL.lastPathComponent))
         await #expect(throws: (any Error).self) { _ = try await HandwritingExportService().export(project,document: value,original: original,id: exportID) }
         var draft = value;draft.review.invalidateApproval()

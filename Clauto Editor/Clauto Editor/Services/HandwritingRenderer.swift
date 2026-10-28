@@ -22,6 +22,9 @@ struct HandwritingRenderer: Sendable {
                 result[offset] = extraction.inkRed; result[offset + 1] = extraction.inkGreen; result[offset + 2] = extraction.inkBlue
             }
         }
+        // Restore means recover keyed source ink, not turn opaque paper into
+        // new solid lettering when correcting an erased edge.
+        let originalInkMask = mask
         var work = 0
         for stroke in extraction.cleanup {
             let points = stroke.points.map { point($0, width: width, height: height) }
@@ -29,7 +32,7 @@ struct HandwritingRenderer: Sendable {
                 try Task.checkCancellation()
                 try visitCapsule(a: index == 0 ? points[index] : points[index - 1], b: points[index], radius: stroke.radiusPixels,
                                  width: width, height: height, work: &work) { position, coverage in
-                    if stroke.mode == .restore { mask[position] = max(mask[position], UInt8((Double(pixels[position * 4 + 3]) * coverage).rounded())) }
+                    if stroke.mode == .restore { mask[position] = max(mask[position], UInt8((Double(originalInkMask[position]) * coverage).rounded())) }
                     else { mask[position] = UInt8((Double(mask[position]) * (1 - coverage)).rounded()) }
                 }
             }
