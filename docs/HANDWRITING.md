@@ -69,7 +69,7 @@ Run the stdlib-only boundary without a media pipeline or credentials:
 ```sh
 python3 scripts/handwriting.py styles '/path/to/Clauto project'
 python3 scripts/handwriting.py request --text 'Crème brûlée' --locale fr --out request.json
-python3 scripts/handwriting.py request --text 'Seasoning' --locale en --approved-style style.json --out request.json
+python3 scripts/handwriting.py request --text 'Seasoning' --locale en --project '/path/to/Clauto project' --approved-style style.json --out request.json
 ```
 
 `styles` checks the approved source revision, original image digest and contextual

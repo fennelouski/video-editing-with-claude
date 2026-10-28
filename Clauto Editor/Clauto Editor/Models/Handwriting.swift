@@ -5,6 +5,24 @@ enum HandwritingFailure: LocalizedError {
     var errorDescription: String? { switch self { case .invalid(let message): return message } }
 }
 
+struct HandwritingGenerationRequest: Codable, Equatable, Sendable {
+    var schemaVersion = 1
+    var kind = "clauto.handwriting.generation-request"
+    var requestID: String
+    var exactText: String
+    var exactTextUTF8SHA256: String
+    var locale: String
+    var prompt: String
+    var requestedProvider = "Available user-authorized image generation tool"
+    var transparentBackground = true
+    var status = "awaitingProvider"
+    var approval = "draft"
+    var sourceStyleID: String?
+    var providerBoundary = "Use available built-in imagegen skill, then import the actual result in Clauto. No live provider is embedded in the app."
+    var capability = HandwritingRecipe.capability
+    var nextAction = "Generate with an available supported tool; preserve original and receipt, then import with provider/model/requestID. Human spelling and alpha-edge approval required."
+}
+
 struct HandwritingProvenance: Codable, Equatable, Sendable {
     enum Kind: String, Codable, CaseIterable, Sendable { case imported, aiGenerated, fixture }
     var kind: Kind = .imported

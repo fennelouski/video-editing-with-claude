@@ -31,6 +31,7 @@ import Observation
     var model = "Not supplied"
     var requestID = ""
     var generationPrompt = ""
+    private var generationStyleID: String?
     var selectedStrokeID: UUID?
     var canvasMode = CanvasMode.path
     var brushRadius = 12.0
@@ -70,8 +71,8 @@ import Observation
         guard !exactText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,!locale.isEmpty,exactText.utf8.count <= 4096 else { issue = "Enter the exact text and locale before preparing an artwork request.";return nil }
         let quoted = (try? String(data: JSONEncoder().encode(exactText),encoding: .utf8)) ?? exactText
         generationPrompt = "Create exactly this handwritten text: \(quoted). Locale: \(locale). Preserve every letter, space, punctuation mark and diacritic. \(artDirection) Isolated ink on a transparent background with real alpha, generous clear margins. No paper, hand, pen, border, decoration, watermark or additional text."
-        let request: [String:Any] = ["schemaVersion":1,"kind":"clauto.handwriting.generation-request","requestID":UUID().uuidString,"exactText":exactText,"exactTextUTF8SHA256":TranscriptSourceMap.sha(Data(exactText.utf8)),"locale":locale,"prompt":generationPrompt,"requestedProvider":"Available user-authorized image generation tool; no live provider is connected in this app","transparentBackground":true,"nextAction":"Generate using an available supported tool, preserve original and receipt, then import the resulting image with provider/model/requestID. Human spelling and alpha-edge approval required."]
-        do { let data = try JSONSerialization.data(withJSONObject: request,options: [.prettyPrinted,.sortedKeys]);requestID = request["requestID"] as? String ?? "";notice = "Artwork request prepared. Generate with an available supported image tool, then import its result and provenance.";return data }
+        let request = HandwritingGenerationRequest(requestID: UUID().uuidString,exactText: exactText,exactTextUTF8SHA256: TranscriptSourceMap.sha(Data(exactText.utf8)),locale: locale,prompt: generationPrompt,sourceStyleID: generationStyleID)
+        do { let data = try CreativeAssetFiles.encoder().encode(request);requestID = request.requestID;notice = "Artwork request prepared. Generate with an available supported image tool, then import its result and provenance.";return data }
         catch { issue = error.localizedDescription;return nil }
     }
     func importImage(_ url: URL,regeneration: Bool = false) {
@@ -212,6 +213,7 @@ import Observation
         }
     }
     func applyStyle(_ style: HandwritingStylePreset) {
+        generationStyleID = style.id.uuidString
         guard document != nil else { artDirection = style.review.comments;generationPrompt = style.provenance.prompt;notice = "Approved style notes loaded for your next generation request: \(style.review.contexts.joined(separator: ", ")).";return }
         change { value in
             // Paths depend on the exact source pixels. Reuse timing/ink choices;
