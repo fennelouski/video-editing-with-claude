@@ -89,6 +89,11 @@ sheet under `CLAUDE.md` and the active style guide.
 
 ## Current library and evidence
 
+The [verified pan form-study comparison](DEMO_STUDIO_PROOF.md) retains native
+images, a 41-test result, exact frame/movie hashes and independent pixel review.
+The KayKit asset now has native import/export and bounded visual evidence; the
+legacy conceptual-section asset remains structurally validated only.
+
 | Asset ID | Materialized contents | Rights declaration | Verification state at registration |
 | --- | --- | --- | --- |
 | `kaykit-pan-a` | Original `pan_A.gltf`, `.bin`, atlas PNG, license; adapted geometry JSON (289 vertices, 310 triangles). | Creator's retained CC0 license. Kay Lousberg. | Pinned download/dependency hashes and decoded geometry structure verified. Native import and visual review initially pending; consult current model metadata and task review evidence. |

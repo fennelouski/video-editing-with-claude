@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "fe26095",
+  "preparedRequestID": "E5022A18-A577-5492-AAD8-29C5BDF4F72F",
+  "revisionID": "1191A9F5-6AE5-4600-A112-47041B2A101B",
+  "producer": "Clauto Metal graphics 3 · precise matte alpha",
+  "nativeTests": {
+    "passed": 41,
+    "failed": 0,
+    "suites": 6,
+    "receipt": {
+      "sourceUnchanged": true,
+      "ownedProcessGroupAbsent": true,
+      "command": [
+        "/usr/bin/swift",
+        "test",
+        "--package-path",
+        "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/clauto-studio",
+        "--scratch-path",
+        "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/native-build",
+        "--cache-path",
+        "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/swift-cache",
+        "--config-path",
+        "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/swift-config",
+        "--security-path",
+        "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/swift-security",
+        "--disable-keychain",
+        "--disable-netrc",
+        "--jobs",
+        "2",
+        "-Xswiftc",
+        "-j2",
+        "--filter",
+        "Graphic(Demo|Studio|Integration|Composition|SavedCutRender)"
+      ],
+      "pid": 27600,
+      "exit": 0,
+      "stopReason": null,
+      "joined": true,
+      "elapsedSeconds": 110.10214970796369,
+      "endedUTC": "2026-10-28T06:29:59.913880+00:00",
+      "actualNice": 15,
+      "hardCutoffUTC": "2026-10-28T07:00:00+00:00"
+    }
+  },
+  "movieProof": {
+    "codec": "ap4h",
+    "decodedEveryFrame": true,
+    "durationScale": 24000,
+    "durationValue": 96096,
+    "frameCount": 96,
+    "height": 1080,
+    "maximumEndpointAlphaError": 0,
+    "movie": {
+      "byteCount": 32312135,
+      "sha256": "361231403ccab4077dc6f8cb2962295269a8917e2cfe6b71592368a05682b03c"
+    },
+    "width": 1920
+  },
+  "frameSHA256": {
+    "after-0000-on-contrast.png": "281cf60128852239f370d0836142e8750e7b181c228bfc90a39586189b6cb1a1",
+    "after-0000-on-oat.png": "31fe2cdb8da0b4a9e013785c759a6d57fc8b4fb8e02c3a1b6b255aeb288f2606",
+    "after-0000.png": "1decc5a560f68ebf4b3a905504eed86e08a4a617f0b9efc98221f6cf2d51b40a",
+    "after-0024.png": "bb7bce4e4612802ae24dc3baf02576046c06bfa324d52f59b0e3814111addbf9",
+    "after-0048.png": "dc5b34ffc80f2104f61418782999741df6584b9aa516aac6e17ac5ec2e743b77",
+    "after-0072.png": "a23a399846117eeb9f9f239a5a0933f47bce18eb9131f369c26f382a602092ed",
+    "after-0094.png": "9177bd9a5a0be68ee6bebef61eebd1a8e7e1c58aa2f45b6b9fde9b6bee25fe9a",
+    "after-0095.png": "9177bd9a5a0be68ee6bebef61eebd1a8e7e1c58aa2f45b6b9fde9b6bee25fe9a",
+    "template-hero.png": "dc5b34ffc80f2104f61418782999741df6584b9aa516aac6e17ac5ec2e743b77",
+    "template-inspection.png": "bf8fcf9a04fed4f49a534a06db27ef9e506b89335c79ad66de1bf82efedff41d",
+    "template-overhead.png": "63649d9dd9f9f725bd2a1086662398653c7d5cb763371409e773bc4f9f16c624"
+  },
+  "retainedImages": {
+    "same-model-legacy-rig.png": {
+      "sha256": "79169916ca0d5aa7c364a3e6560c5ad85af190e234ffd8966688a2c19ce79b3c",
+      "byteCount": 69595
+    },
+    "after-0000-on-oat.png": {
+      "sha256": "31fe2cdb8da0b4a9e013785c759a6d57fc8b4fb8e02c3a1b6b255aeb288f2606",
+      "byteCount": 105768
+    },
+    "after-0000-on-contrast.png": {
+      "sha256": "281cf60128852239f370d0836142e8750e7b181c228bfc90a39586189b6cb1a1",
+      "byteCount": 99820
+    },
+    "template-hero.png": {
+      "sha256": "dc5b34ffc80f2104f61418782999741df6584b9aa516aac6e17ac5ec2e743b77",
+      "byteCount": 104767
+    },
+    "template-inspection.png": {
+      "sha256": "bf8fcf9a04fed4f49a534a06db27ef9e506b89335c79ad66de1bf82efedff41d",
+      "byteCount": 103559
+    },
+    "template-overhead.png": {
+      "sha256": "63649d9dd9f9f725bd2a1086662398653c7d5cb763371409e773bc4f9f16c624",
+      "byteCount": 98331
+    }
+  },
+  "artifactLocations": {
+    "movie": "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/native-runs/oct28-03/proof/Synthetic 3D studio proof-883AC926/assets/generated-scenes/E5022A18-A577-5492-AAD8-29C5BDF4F72F/revisions/1191A9F5-6AE5-4600-A112-47041B2A101B/animation.mov",
+    "revisionID": "1191A9F5-6AE5-4600-A112-47041B2A101B",
+    "sceneID": "E5022A18-A577-5492-AAD8-29C5BDF4F72F",
+    "timeline": "/Users/nathanfennel/Documents/Codex/2026-10-25/task-8/native-runs/oct28-03/proof/Synthetic 3D studio proof-883AC926/assets/generated-scenes/E5022A18-A577-5492-AAD8-29C5BDF4F72F/revisions/1191A9F5-6AE5-4600-A112-47041B2A101B/timeline.fcpxml"
+  },
+  "review": {
+    "status": "form-study-stills-passed",
+    "reviewerTask": "01a171a2-8a2f-75a8-8aff-79ba4da9b0dc",
+    "report": "/Users/nathanfennel/Documents/Codex/2026-10-25/task-4/THREED-PIXEL-REVIEW-2026-10-28.md",
+    "scope": "Framing at motion extremes, three camera templates, shadow and straight-alpha edges over oat and contrast, concise readable caveat. Not approval of a scientific explanation or final Katie video."
+  },
+  "limits": [
+    "Deterministic PNG bytes verified on this host, not across GPU/OS versions.",
+    "Native controller/export and saved-cut composition verified; product GUI and Final Cut application import not exercised.",
+    "Studio supports one static mesh and native overlays; component pixels in each exported graphic movie are flattened.",
+    "Handwriting integration and full existing-app compilation pending at this evidence snapshot."
+  ]
+}

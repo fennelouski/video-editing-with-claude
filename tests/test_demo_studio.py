@@ -23,14 +23,21 @@ class DemoStudioTests(unittest.TestCase):
 
 
 
-    def test_discovery_reports_evidence_without_claiming_render_acceptance(self):
+    def test_discovery_reports_recorded_evidence_separately_from_preparation(self):
         result = D.discover()
         assert result["frameRate"] == "24000/1001" and result["stepFrames"] == 2
         assert {m["assetID"] for m in result["models"]} == {"kaykit-pan-a", "legacy-pan-layer"}
         pan = next(m for m in result["models"] if m["assetID"]=="kaykit-pan-a")
         assert (pan["vertices"], pan["triangles"], pan["rightsStatus"]) == (289, 310, "cc0")
-        assert pan["verification"]["nativeImportVerified"] is False
-        assert pan["verification"]["visualReview"] == "pending"
+        assert pan["verification"]["nativeImportVerified"] is True
+        assert pan["verification"]["visualReview"] == "form-study-stills-passed"
+        evidence = json.loads((D.STUDIO.parent/pan["verification"]["evidence"]).read_text())
+        assert evidence["movieProof"]["decodedEveryFrame"] is True
+        for name, record in evidence["retainedImages"].items():
+            path = D.STUDIO.parent/Path(pan["verification"]["evidence"]).parent/name
+            assert D.digest(path.read_bytes()) == record["sha256"]
+        legacy = next(m for m in result["models"] if m["assetID"]=="legacy-pan-layer")
+        assert legacy["verification"]["nativeImportVerified"] is False
 
     def test_strict_json_refuses_duplicate_or_nonfinite_values(self):
         for raw in ['{"a":1,"a":2}', '{"x":NaN}', '{"x":Infinity}']:
