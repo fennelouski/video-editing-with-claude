@@ -1,0 +1,15 @@
+test_busy_cache_fails_without_waiting_or_publication (__main__.CacheTests.test_busy_cache_fails_without_waiting_or_publication) ... ok
+test_cancellation_before_publication_cleans_snapshot (__main__.CacheTests.test_cancellation_before_publication_cleans_snapshot) ... ok
+test_cli_returns_structured_refusal_without_decoder_work (__main__.CacheTests.test_cli_returns_structured_refusal_without_decoder_work) ... ok
+test_decode_cache_reuse_preserves_original_identity (__main__.CacheTests.test_decode_cache_reuse_preserves_original_identity) ... ok
+test_failed_decoder_cleans_partial_cache (__main__.CacheTests.test_failed_decoder_cleans_partial_cache) ... ok
+test_public_adapter_refuses_unknown_or_non_ogg_asset (__main__.CacheTests.test_public_adapter_refuses_unknown_or_non_ogg_asset) ... ok
+test_symlink_cache_and_decoder_missing_fail (__main__.CacheTests.test_symlink_cache_and_decoder_missing_fail) ... ok
+test_symlinked_decoded_entry_is_refused (__main__.CacheTests.test_symlinked_decoded_entry_is_refused) ... ok
+test_tampered_pcm_is_refused (__main__.CacheTests.test_tampered_pcm_is_refused) ... ok
+test_wrong_hash_and_metadata_do_not_publish (__main__.CacheTests.test_wrong_hash_and_metadata_do_not_publish) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.826s
+
+OK

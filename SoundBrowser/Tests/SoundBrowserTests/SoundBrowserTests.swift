@@ -2,6 +2,28 @@ import XCTest
 @testable import SoundBrowserCore
 
 final class SoundBrowserTests: XCTestCase {
+    func testDecodedCacheBridgeChecksOriginalDecoderPCMAndSampleRange() throws {
+        guard let path=ProcessInfo.processInfo.environment["CLAUTO_DECODED_CACHE_FIXTURE"] else { throw XCTSkip("Requires explicit synthetic codec fixture") }
+        let root=URL(fileURLWithPath:path),cache=root.appendingPathComponent("cache")
+        let asset=try JSONDecoder().decode(SoundAsset.self,from:Data(contentsOf:root.appendingPathComponent("asset.json")))
+        let metadata=try JSONDecoder().decode([String:String].self,from:Data(contentsOf:root.appendingPathComponent("fixture.json")))
+        let key=try XCTUnwrap(metadata["cacheKey"]),decoder=try XCTUnwrap(metadata["decoderSHA256"])
+        let receiptHash=try XCTUnwrap(metadata["receiptSHA256"])
+        let original=try Data(contentsOf:root.appendingPathComponent("original.ogg"))
+        let snapshot=try DecodedSoundCache.read(asset:asset,original:original,cacheRoot:cache,cacheKey:key,expectedDecoderSHA256:decoder,expectedReceiptSHA256:receiptHash)
+        XCTAssertEqual(snapshot.originalSHA256,asset.sha256)
+        XCTAssertNotEqual(snapshot.originalSHA256,snapshot.decodedSHA256)
+        XCTAssertEqual(snapshot.envelope.peaks.count,128)
+        XCTAssertTrue(snapshot.envelope.peaks.contains {$0>0})
+        XCTAssertThrowsError(try DecodedSoundCache.read(asset:asset,original:Data(),cacheRoot:cache,cacheKey:key,expectedDecoderSHA256:decoder,expectedReceiptSHA256:receiptHash))
+        XCTAssertThrowsError(try DecodedSoundCache.read(asset:asset,original:original,cacheRoot:cache,cacheKey:key,expectedDecoderSHA256:String(repeating:"0",count:64),expectedReceiptSHA256:receiptHash))
+        XCTAssertThrowsError(try DecodedSoundCache.read(asset:asset,original:original,cacheRoot:cache,cacheKey:"../escape",expectedDecoderSHA256:decoder,expectedReceiptSHA256:receiptHash))
+        XCTAssertThrowsError(try DecodedSoundCache.read(asset:asset,original:original,cacheRoot:cache,cacheKey:key,expectedDecoderSHA256:decoder,expectedReceiptSHA256:String(repeating:"0",count:64)))
+        let copy=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.copyItem(at:cache,to:copy);defer { try? FileManager.default.removeItem(at:copy) }
+        try Data("tampered".utf8).write(to:copy.appendingPathComponent(key+"/decoded.wav"))
+        XCTAssertThrowsError(try DecodedSoundCache.read(asset:asset,original:original,cacheRoot:copy,cacheKey:key,expectedDecoderSHA256:decoder,expectedReceiptSHA256:receiptHash))
+    }
     func fixture() throws -> (SoundCatalog, URL) {
         let c = try SoundCatalog.bundled()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("clauto-sound-test-"+UUID().uuidString)

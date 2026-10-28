@@ -35,7 +35,7 @@
     "SoundBrowser/Sources/SoundBrowserUI/SoundBrowserView.swift": "7ef64af578a78117cfb787c1243f4d32d330fd043d5a8361f05f5b8af227810e",
     "SoundBrowser/Sources/SoundBrowserUI/SoundLibraryPicker.swift": "8a8006518dcfe7bb79fa50c3d19b48b089e6e388780be8b702596af609c3b6fd",
     "SoundBrowser/Sources/SoundBrowserUI/SoundResultTable.swift": "f8131a8756f8fa6cc8ba414ddfd78c6d0a276bcaa4c40b50a08b17c69a8fae56",
-    "SoundBrowser/Tests/SoundBrowserTests/SoundBrowserTests.swift": "d39b9eae30c228fbef109846998b42762b8c1c315f3d2309d862b34a95eeac69",
+    "SoundBrowser/Tests/SoundBrowserTests/SoundBrowserTests.swift": "1753a97291b799daa567913020c145fd263124fd5788c1c7494e47318d397635",
     "SoundBrowser/Tests/SoundBrowserTests/SoundReplacementTests.swift": "3b3093e60f78a0778cec31b3b4c9ba7ac38f4e24416ddc935762d1d007d8f0da",
     "SoundBrowser/Tools/build-local.sh": "b6d56d4aa35b208d40c7d9ef4220996c2e89d0f3378d3a0cb890b81a2dc4a8e2",
     "SoundBrowser/Tools/capture-local.sh": "d5078046b8ed7057e92138860206efb43e66d2e158a7b76dc059755613f5b6e1",
@@ -43,6 +43,10 @@
     "SoundBrowser/Tools/verify-local.sh": "4c5b038bf61baa276e93f4852e00b43f2086b638eb497fe9214405232d689070",
     "scripts/sound_timeline_edit.py": "3e6abef7836c4dee6f48540748e6871f899cd453450b9d95a0a9e7fe7f2ebbef",
     "scripts/timeline_derivatives.py": "12196cf9aafae64bf46aaaf86d4f9df3a9a22aa3101cdd9a00d39dfee1aa10a3",
-    "SoundBrowser/Tools/probe-native-audio.swift": "443f964eaaf3736acb026e8f6b3f5f5885aca76eca0e3a3479aa562a92ce3375"
+    "SoundBrowser/Tools/probe-native-audio.swift": "443f964eaaf3736acb026e8f6b3f5f5885aca76eca0e3a3479aa562a92ce3375",
+    "SoundBrowser/Integration/decoded_sound_cache.py": "f139519fa4d63d7c10375ee4ae59ee31ba88a263f1a0e2069e22f11de9c1bc28",
+    "SoundBrowser/Integration/test_decoded_sound_cache.py": "b0aa31714365826d527a7300b1bfa8db56558fbdb7c64625a06aca02022a1599",
+    "SoundBrowser/Integration/make_decoded_cache_fixture.py": "8fe68b6ce4d8764b3380ac75a5de385e467d782afab9474ce8e80185d8126681",
+    "SoundBrowser/Sources/SoundBrowserCore/DecodedSoundCache.swift": "e96be7cbe744795ea8d3afd5eaa08ef1825073365570369b25f9c7a0d1471330"
   }
 }

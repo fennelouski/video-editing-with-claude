@@ -109,3 +109,10 @@ and initial captures are historical standalone v2 evidence. Remaining acceptance
 human audio/output quality, spoken VoiceOver, expanded text sizing, external
 volume remounts, Ogg decode, animated-envelope rendering, Final Cut import and
 saved-version promotion.
+
+## Opt-in decoded cache development
+
+The bounded Ogg preparation adapter and Swift cache reader are implemented and
+tested separately; native Ogg availability remains disabled. See
+`Evidence/DECODED_CACHE_REVIEW.md` for the exact boundary, tests and integration
+requirements. No decoder installation, automatic preparation or playback occurs.
