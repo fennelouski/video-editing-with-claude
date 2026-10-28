@@ -67,6 +67,9 @@ public enum LibraryFiles {
         do {
             let data = try read(root: root, path: asset.relativePath, limit: asset.bytes)
             guard data.count == asset.bytes, digest(data) == asset.sha256 else { return .init(.hashMismatch) }
+            guard asset.format == "wav" else {
+                return .init(.unsupported, message: "This catalog format is not supported for local preview or selection. The original file has been verified and remains unchanged.")
+            }
             let wav = try WaveEnvelope.decode(data)
             guard abs(wav.duration - asset.duration) < 0.01, wav.sampleRate == asset.sampleRate, wav.channels == asset.channels else {
                 return .init(.unsupported, message: "Decoded format differs from the pinned catalog.")

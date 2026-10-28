@@ -1,0 +1,49 @@
+Building for debugging...
+[Using on-disk description]
+[2 / 17] SoundBrowserCore
+[4 / 19] SoundBrowserCore
+[9 / 20] SoundBrowserCore
+[13 / 18] SoundBrowserTests-product
+[15 / 20] SoundBrowserTests-product
+[19 / 22] SoundBrowserTests-product
+[21 / 25] SoundBrowserTests-product
+[24 / 24] ClautoSoundBrowser-product
+Build complete! (2.94 sec)
+Test Suite 'All tests' started at 2026-10-28 07:18:43.530.
+Test Suite 'SoundBrowserTests.xctest' started at 2026-10-28 07:18:43.532.
+Test Suite 'SoundBrowserTests' started at 2026-10-28 07:18:43.533.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testCatalogSearchUsesStableIDsTagsCategoriesAndAllWords]' passed (0.054 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testChangedOrRemovedAssetCannotBeSelectedOrAuditioned]' passed (0.195 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testMalformedAndUnsupportedEnvelopeIsNotInvented]' passed (0.000 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRealRepresentativePackageHashesDurationsAndEnvelopes]' passed (4.656 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testReferenceCannotChangeHashVersionURIOrTimebase]' passed (0.026 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testRootedReadsRejectTraversalSymlinksAndNonFiles]' passed (0.027 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testSelectionPersistenceRepeatedActionsCancelAndMissingNeverPlay]' passed (4.726 seconds).
+Test Case '-[SoundBrowserTests.SoundBrowserTests testUnsupportedCatalogFormatCannotBecomeAvailableFromWAVBytes]' started.
+Test Case '-[SoundBrowserTests.SoundBrowserTests testUnsupportedCatalogFormatCannotBecomeAvailableFromWAVBytes]' passed (0.065 seconds).
+Test Suite 'SoundBrowserTests' passed at 2026-10-28 07:18:53.283.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 9.750 (9.751) seconds
+Test Suite 'SoundReplacementTests' started at 2026-10-28 07:18:53.283.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testExternalEntitiesAndWrongTimeGridAreRefused]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testExternalEntitiesAndWrongTimeGridAreRefused]' passed (0.004 seconds).
+Test Case '-[SoundBrowserTests.SoundReplacementTests testReplacementPreservesTimingTrimGainFadesAndUndoRedo]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testReplacementPreservesTimingTrimGainFadesAndUndoRedo]' passed (0.034 seconds).
+Test Case '-[SoundBrowserTests.SoundReplacementTests testShorterReplacementIsRefusedWithoutRetimingOrMutation]' started.
+Test Case '-[SoundBrowserTests.SoundReplacementTests testShorterReplacementIsRefusedWithoutRetimingOrMutation]' passed (0.026 seconds).
+Test Suite 'SoundReplacementTests' passed at 2026-10-28 07:18:53.348.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.064 (0.064) seconds
+Test Suite 'SoundBrowserTests.xctest' passed at 2026-10-28 07:18:53.348.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 9.814 (9.815) seconds
+Test Suite 'All tests' passed at 2026-10-28 07:18:53.348.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 9.814 (9.817) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.

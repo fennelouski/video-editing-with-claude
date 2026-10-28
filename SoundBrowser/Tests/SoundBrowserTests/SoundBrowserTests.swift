@@ -62,6 +62,18 @@ final class SoundBrowserTests: XCTestCase {
     func testMalformedAndUnsupportedEnvelopeIsNotInvented() throws {
         for bytes in [Data(),Data("OggS".utf8),Data(repeating:0,count:64)] { XCTAssertThrowsError(try WaveEnvelope.decode(bytes)) }
     }
+    func testUnsupportedCatalogFormatCannotBecomeAvailableFromWAVBytes() throws {
+        let catalog=try SoundCatalog.bundled(),root=try representativeRoot()
+        let original=try XCTUnwrap(catalog.asset("BSB-2278"))
+        var object=try XCTUnwrap(JSONSerialization.jsonObject(with:JSONEncoder().encode(original)) as? [String:Any])
+        object["format"]="ogg"
+        let mislabeled=try JSONDecoder().decode(SoundAsset.self,from:JSONSerialization.data(withJSONObject:object))
+        let result=LibraryFiles.inspect(asset:mislabeled,root:root)
+        XCTAssertEqual(result.state,.unsupported)
+        XCTAssertTrue(result.envelope.isEmpty)
+        XCTAssertTrue(result.message.contains("verified"))
+        XCTAssertEqual(LibraryFiles.inspect(asset:original,root:root).state,.available)
+    }
     func testRealRepresentativePackageHashesDurationsAndEnvelopes() throws {
         let c = try SoundCatalog.bundled(), root = try representativeRoot()
         let assets = c.assets.filter { $0.packageID == "clauto-sfx-crowd-cartoon-v2" }

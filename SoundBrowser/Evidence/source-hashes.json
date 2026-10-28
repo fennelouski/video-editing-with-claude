@@ -21,7 +21,7 @@
     "SoundBrowser/Sources/ClautoSoundBrowser/ClautoSoundBrowserApp.swift": "ff1d6937e184c45a198f2fa0d065eac5fc4e77913b815e33b0550d66334387f6",
     "SoundBrowser/Sources/SoundBrowserCore/BrowserStore.swift": "acbe46575ce69db93847a756470f4c9c4a01ee34990c59a0ae707a9c9a3aa5f7",
     "SoundBrowser/Sources/SoundBrowserCore/Catalog.swift": "25bc55c09f42d5c42c24ed7f5b55dbf05bd8d539212603084f1c63b0a9a60cb9",
-    "SoundBrowser/Sources/SoundBrowserCore/LibraryFiles.swift": "6d6cc1a48b3a2b6ba733a34c02b64de5760639b434b32b8831842b0434860733",
+    "SoundBrowser/Sources/SoundBrowserCore/LibraryFiles.swift": "ed96a6b9900aa0276e0867bbdb5227eba0e9ef6f91717fc7cb004ce1f47eeccd",
     "SoundBrowser/Sources/SoundBrowserCore/Playback.swift": "7e4fd2c1799280f614e86ecfcaf52ca7c0b9bd7761d24e66d095fa66bce84e00",
     "SoundBrowser/Sources/SoundBrowserCore/Resources/catalog.json": "169d8a73d8464f3435806436e8707126120f08590b0182692ce82c80f8c18e00",
     "SoundBrowser/Sources/SoundBrowserCore/Resources/licenses/BigSoundBank-license-2026-10-25-v3.txt": "1061884a0492c4da435097d0068030a2b1cb28bfc1268913b8a4fc714e23b1de",
@@ -35,13 +35,14 @@
     "SoundBrowser/Sources/SoundBrowserUI/SoundBrowserView.swift": "7ef64af578a78117cfb787c1243f4d32d330fd043d5a8361f05f5b8af227810e",
     "SoundBrowser/Sources/SoundBrowserUI/SoundLibraryPicker.swift": "8a8006518dcfe7bb79fa50c3d19b48b089e6e388780be8b702596af609c3b6fd",
     "SoundBrowser/Sources/SoundBrowserUI/SoundResultTable.swift": "f8131a8756f8fa6cc8ba414ddfd78c6d0a276bcaa4c40b50a08b17c69a8fae56",
-    "SoundBrowser/Tests/SoundBrowserTests/SoundBrowserTests.swift": "7c89d0d6e02c71db7eaeb2384e50a95dd9b7e3bc833c3cc46ced66fcf59159d9",
+    "SoundBrowser/Tests/SoundBrowserTests/SoundBrowserTests.swift": "d39b9eae30c228fbef109846998b42762b8c1c315f3d2309d862b34a95eeac69",
     "SoundBrowser/Tests/SoundBrowserTests/SoundReplacementTests.swift": "3b3093e60f78a0778cec31b3b4c9ba7ac38f4e24416ddc935762d1d007d8f0da",
     "SoundBrowser/Tools/build-local.sh": "b6d56d4aa35b208d40c7d9ef4220996c2e89d0f3378d3a0cb890b81a2dc4a8e2",
     "SoundBrowser/Tools/capture-local.sh": "d5078046b8ed7057e92138860206efb43e66d2e158a7b76dc059755613f5b6e1",
     "SoundBrowser/Tools/update-catalog.py": "2373f702c3f7045f531f550a547285b90cc3aa1e7e773231dc862b6ca9fef19c",
     "SoundBrowser/Tools/verify-local.sh": "4c5b038bf61baa276e93f4852e00b43f2086b638eb497fe9214405232d689070",
     "scripts/sound_timeline_edit.py": "3e6abef7836c4dee6f48540748e6871f899cd453450b9d95a0a9e7fe7f2ebbef",
-    "scripts/timeline_derivatives.py": "12196cf9aafae64bf46aaaf86d4f9df3a9a22aa3101cdd9a00d39dfee1aa10a3"
+    "scripts/timeline_derivatives.py": "12196cf9aafae64bf46aaaf86d4f9df3a9a22aa3101cdd9a00d39dfee1aa10a3",
+    "SoundBrowser/Tools/probe-native-audio.swift": "443f964eaaf3736acb026e8f6b3f5f5885aca76eca0e3a3479aa562a92ce3375"
   }
 }

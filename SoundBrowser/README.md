@@ -93,7 +93,7 @@ reviewed releases, not automatic load/reconnect actions.
 `Clauto Editor/Clauto Editor.xcodeproj`, scheme `Clauto Editor`, Debug, signing
 disabled, using workspace-local derived data. Neither build installs/deploys.
 
-`Tools/verify-local.sh /absolute/package/root`: 10 package tests.
+`Tools/verify-local.sh /absolute/package/root`: 11 package tests.
 `Integration/test_sound_timeline_adapter.py`: 6 engine-fixture tests with
 `CLAUTO_SFX_TEST_ROOT` and installed FFmpeg, without audio output.
 Root SwiftPM `SoundTimelineControllerTests`: 3 native controller fixture tests,
