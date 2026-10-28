@@ -45,7 +45,7 @@ import Testing
         font.updateMapping(mapping) { $0.character = "S" };font.trace(mapping);try await wait { font.busy==nil }
         font.compileFont();try await wait { font.busy==nil }
         let compiled = try #require(font.exported)
-        var scene = GraphicScene.preset(.object);scene.width = 640;scene.height = 360;scene.frameCount = 12
+        var scene = GraphicScene.preset(.object);scene.demoRig = nil;scene.width = 640;scene.height = 360;scene.frameCount = 12
         scene.object!.color = .init(r: 0.1,g: 0.8,b: 0.2)
         scene.imageLayers = [.init(cutoutID: cut.source.id,revisionID: cutout.revision.id,imageSHA256: TranscriptSourceMap.sha(try Data(contentsOf: cutout.pngURL)),transform: .init(x: 0.2,y: 0.25,width: 0.2,height: 0.2))]
         let reference = GraphicFontReference(fontID: compiled.revision.fontID,revisionID: compiled.revision.id,ttfSHA256: compiled.revision.ttfSHA256)

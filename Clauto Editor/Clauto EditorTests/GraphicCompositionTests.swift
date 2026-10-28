@@ -14,7 +14,7 @@ import Testing
         return (root,try await ProjectRepository().create(name: "Synthetic graphic composition",root: root,engine: engine))
     }
     private func exported(_ project: Project) async throws -> GraphicExportResult {
-        let repo = GraphicStudioRepository();var scene = GraphicScene.preset(.object)
+        let repo = GraphicStudioRepository();var scene = GraphicScene.preset(.object);scene.demoRig = nil
         scene.width = 640;scene.height = 360;scene.frameCount = 4;scene.object!.color = .init(r: 0.9,g: 0.1,b: 0.1)
         let saved = try await repo.create(project,id: UUID(),label: "Synthetic red graphic",scene: scene)
         return try await GraphicSceneExportService(repository: repo).export(project,snapshot: saved) { _,_ in }
