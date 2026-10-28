@@ -68,7 +68,7 @@ import Observation
     }
     func report(_ message: String) { issue = message }
     func prepareGenerationRequest() -> Data? {
-        guard !exactText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,!locale.isEmpty,exactText.utf8.count <= 4096 else { issue = "Enter the exact text and locale before preparing an artwork request.";return nil }
+        guard !exactText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,!locale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,locale.utf8.count <= 128,!locale.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),exactText.utf8.count <= 4096 else { issue = "Enter the exact text and locale before preparing an artwork request.";return nil }
         let quoted = (try? String(data: JSONEncoder().encode(exactText),encoding: .utf8)) ?? exactText
         generationPrompt = "Create exactly this handwritten text: \(quoted). Locale: \(locale). Preserve every letter, space, punctuation mark and diacritic. \(artDirection) Isolated ink on a transparent background with real alpha, generous clear margins. No paper, hand, pen, border, decoration, watermark or additional text."
         let request = HandwritingGenerationRequest(requestID: UUID().uuidString,exactText: exactText,exactTextUTF8SHA256: TranscriptSourceMap.sha(Data(exactText.utf8)),locale: locale,prompt: generationPrompt,sourceStyleID: generationStyleID)
@@ -102,7 +102,7 @@ import Observation
             let (value,bytes) = try await owner.repository.load(owner.project,assetID: chosen.id,revisionID: chosen.revisionID)
             let decoded = try await owner.detached { try CutoutImageIO.decode(bytes) }
             try Task.checkCancellation();owner.stopPlayback();owner.document = value;owner.saved = value;owner.original = bytes;owner.source = decoded.raster
-            owner.exactText = value.exactText;owner.locale = value.locale;owner.sourceKind = value.provenance.kind;owner.provider = value.provenance.provider;owner.model = value.provenance.model;owner.requestID = value.provenance.requestID;owner.generationPrompt = value.generationPrompt
+            owner.syncFields(from: value)
             owner.undo = [];owner.redo = [];owner.exported = nil;owner.savedURL = nil;owner.editNumber += 1;owner.selectedStrokeID = value.recipe.strokes.first?.id;owner.previewFrame = 0;owner.refreshPixels()
         }
     }
@@ -171,8 +171,24 @@ import Observation
         guard let document else { return nil }
         do { return try CreativeAssetFiles.encoder().encode(document) } catch { issue = error.localizedDescription;return nil }
     }
-    func undoChange() { guard busy == nil,let previous = undo.popLast(),let current = document else { return };redo.append(current);var next = previous;next.review.invalidateApproval();next.revisionID = UUID();next.parentRevisionID = saved?.revisionID;document = next;editNumber += 1;stopPlayback();previewFrame = min(previewFrame,max(0,next.recipe.frameCount-1));refreshPixels() }
-    func redoChange() { guard busy == nil,let next = redo.popLast(),let current = document else { return };undo.append(current);var restored = next;restored.review.invalidateApproval();restored.revisionID = UUID();restored.parentRevisionID = saved?.revisionID;document = restored;editNumber += 1;stopPlayback();previewFrame = min(previewFrame,max(0,restored.recipe.frameCount-1));refreshPixels() }
+    private func syncFields(from value: HandwritingDocument) {
+        exactText = value.exactText;locale = value.locale;sourceKind = value.provenance.kind
+        provider = value.provenance.provider;model = value.provenance.model
+        requestID = value.provenance.requestID;generationPrompt = value.generationPrompt
+    }
+    private func restoreDraft(_ value: HandwritingDocument) {
+        var next = value;next.review.invalidateApproval();next.revisionID = UUID();next.parentRevisionID = saved?.revisionID
+        document = next;syncFields(from: next);editNumber += 1;exported = nil;exportAttempt = nil
+        stopPlayback();previewFrame = min(previewFrame,max(0,next.recipe.frameCount-1));refreshPixels()
+    }
+    func undoChange() {
+        guard busy == nil,let previous = undo.popLast(),let current = document else { return }
+        redo.append(current);restoreDraft(previous)
+    }
+    func redoChange() {
+        guard busy == nil,let next = redo.popLast(),let current = document else { return }
+        undo.append(current);restoreDraft(next)
+    }
     func approve() {
         guard canApprove else { issue = "Review exact spelling and diacritics, clean alpha edges and complete path coverage; add your name, reasons and suitable contexts.";return }
         change({ $0.review.status = .approved },visual: false)

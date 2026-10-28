@@ -21,12 +21,15 @@ def load(path: Path, limit=2 * 1024 * 1024):
                 raise ValueError(f"Repeated JSON field: {key}")
             result[key] = value
         return result
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=pairs,
-                      parse_constant=lambda x: (_ for _ in ()).throw(ValueError(f"Nonfinite JSON: {x}")))
+    value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=pairs,
+                       parse_constant=lambda x: (_ for _ in ()).throw(ValueError(f"Nonfinite JSON: {x}")))
+    if not isinstance(value, dict):
+        raise ValueError(f"Choose a JSON object: {path}")
+    return value
 
 
 def approved(review):
-    return (review.get("status") == "approved" and
+    return (isinstance(review, dict) and review.get("status") == "approved" and
             all(review.get(k) is True for k in ("liked", "spellingChecked", "alphaEdgesChecked")) and
             all(isinstance(review.get(k), str) and review[k].strip() for k in ("reviewer", "comments")) and
             isinstance(review.get("contexts"), list) and bool(review["contexts"]) and
@@ -34,6 +37,8 @@ def approved(review):
 
 
 def uuid_leaf(value):
+    if not isinstance(value, str):
+        raise ValueError("Use canonical UUID identifiers.")
     parsed = uuid.UUID(value)
     if str(parsed).upper() != value.upper():
         raise ValueError("Use canonical UUID identifiers.")
@@ -44,6 +49,8 @@ def verify_claim(folder, ident, names):
     claim = load(folder / "creative-claim.json", 16384)
     if claim.get("schemaVersion") != 1 or claim.get("destination") != uuid_leaf(ident):
         raise ValueError("The saved handwriting publication claim differs.")
+    if not isinstance(claim.get("files"), dict):
+        raise ValueError("The saved handwriting publication claim is invalid.")
     for name in names:
         path = folder / name
         if path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
@@ -52,29 +59,43 @@ def verify_claim(folder, ident, names):
             raise ValueError(f"The saved handwriting file changed: {name}")
 
 
+def project_child(project: Path, *leaves):
+    path = project
+    for leaf in leaves:
+        path = path / leaf
+        if path.is_symlink():
+            raise ValueError("Saved handwriting discovery does not follow linked project paths.")
+    return path
+
+
 def discover(project: Path):
     project = project.resolve(strict=True)
     manifest = load(project / "clauto-project.json", 8 * 1024 * 1024)
-    index_path = project / ".clauto" / "handwriting-styles-index.json"
+    index_path = project_child(project, ".clauto", "handwriting-styles-index.json")
     if not index_path.exists():
         return []
     index = load(index_path)
     if index.get("schemaVersion") != 1 or index.get("projectID") != manifest.get("id"):
         raise ValueError("The style index does not belong to this project.")
     ids = index.get("ids", [])
-    if len(ids) > 128 or len(set(ids)) != len(ids):
+    if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids) or len(ids) > 128 or len(set(ids)) != len(ids):
         raise ValueError("The approved-style index is invalid.")
-    root = project / "assets" / "handwriting"
+    if not ids:
+        return []
+    catalog = load(project_child(project, ".clauto", "handwriting-index.json"))
+    entries = catalog.get("entries")
+    if catalog.get("schemaVersion") != 1 or catalog.get("projectID") != manifest.get("id") or not isinstance(entries, list) or len(entries) > 2048 or not all(isinstance(x, dict) for x in entries):
+        raise ValueError("The saved handwriting revision index is invalid.")
     result = []
     for ident in ids:
-        style_root = root / "styles" / uuid_leaf(ident)
+        style_root = project_child(project, "assets", "handwriting", "styles", uuid_leaf(ident))
         verify_claim(style_root, ident, ["style.json"])
         preset = load(style_root / "style.json")
         if preset.get("id") != ident or not approved(preset.get("review", {})):
             raise ValueError("An indexed style is not explicitly approved; repair it in Clauto.")
-        source_root = root / uuid_leaf(preset["sourceAssetID"]) / uuid_leaf(preset["sourceRevisionID"])
-        if not source_root.resolve(strict=True).is_relative_to(project):
-            raise ValueError("A style source escapes its project.")
+        if not any(entry.get("assetID") == preset["sourceAssetID"] and entry.get("revisionID") == preset["sourceRevisionID"] for entry in entries):
+            raise ValueError("The style source is not an admitted saved handwriting revision.")
+        source_root = project_child(project, "assets", "handwriting", uuid_leaf(preset["sourceAssetID"]), uuid_leaf(preset["sourceRevisionID"]))
         source = load(source_root / "document.json")
         verify_claim(source_root, preset["sourceRevisionID"], ["document.json", "original.image"])
         if source.get("projectID") != manifest.get("id") or source.get("revisionID") != preset["sourceRevisionID"] or source.get("id") != preset["sourceAssetID"]:
@@ -92,7 +113,7 @@ def discover(project: Path):
 
 
 def request(text, locale, style=None):
-    if not text.strip() or len(text.encode("utf-8")) > 4096 or not locale or len(locale.encode("utf-8")) > 128:
+    if not text.strip() or len(text.encode("utf-8")) > 4096 or not locale.strip() or len(locale.encode("utf-8")) > 128 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in locale):
         raise ValueError("Supply exact text up to 4 KiB and its locale up to 128 bytes.")
     if style is not None and not approved(style.get("review", {})):
         raise ValueError("Generation can reference only an explicitly approved style.")

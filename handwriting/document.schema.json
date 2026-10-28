@@ -278,13 +278,17 @@
           "minimum": 2,
           "maximum": 2400,
           "multipleOf": 2
+        },
+        "rendererVersion": {
+          "const": "clauto-handwriting-mask-1"
         }
       },
       "required": [
         "schemaVersion",
         "extraction",
         "strokes",
-        "frameCount"
+        "frameCount",
+        "rendererVersion"
       ]
     },
     "review": {

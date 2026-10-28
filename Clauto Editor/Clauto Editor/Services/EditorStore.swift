@@ -176,6 +176,7 @@ final class EditorStore {
               !scriptWorkspaces.hasPendingWork else { throw ProjectFailure.invalidProject }
         try scriptWorkspaces.remove(projectID: project.id)
         transcriptReviews.removeValue(forKey: project.id);voiceReviews.removeValue(forKey: project.id);frameComments.removeValue(forKey: project.id)
+        handwritingStudios.removeValue(forKey: project.id)
         graphicStudios.removeValue(forKey: project.id);fontStudios.removeValue(forKey: project.id);cutoutStudios.removeValue(forKey: project.id);liveConversations.removeValue(forKey: project.id)
         runs.removeValue(forKey: project.id);cutVersions.removeValue(forKey: project.id);currentCuts.removeValue(forKey: project.id)
         restorationID = UUID();selectionGeneration &+= 1
