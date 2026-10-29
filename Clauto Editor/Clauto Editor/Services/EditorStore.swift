@@ -215,7 +215,13 @@ final class EditorStore {
     init(defaults: UserDefaults = .standard,storageService: StorageWorkspaceService = .init()) {
         self.storageService = storageService
         let env = ProcessInfo.processInfo.environment
-        let preferences = env["CLAUTO_DEFAULTS_SUITE"].flatMap { UserDefaults(suiteName: $0) } ?? defaults
+        let preferences: UserDefaults
+        if let suite = env["CLAUTO_DEFAULTS_SUITE"] {
+            guard !suite.isEmpty, let requested = UserDefaults(suiteName: suite) else {
+                fatalError("The requested private preferences are unavailable; refusing to use normal preferences.")
+            }
+            preferences = requested
+        } else { preferences = defaults }
         self.defaults = preferences
         if let bytes = preferences.data(forKey: "ClautoProjectGroups"),let groups = try? JSONDecoder().decode([ProjectLibraryGroup].self,from: bytes),(try? ProjectLibraryGroup.validate(groups)) != nil { libraryGroups = groups }
         playbackPreferences = ReviewPlaybackPreferences(defaults: preferences)

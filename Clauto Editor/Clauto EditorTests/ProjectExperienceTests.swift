@@ -123,6 +123,26 @@ struct ProjectExperienceTests {
 
 #if !canImport(ClautoCore)
 @MainActor @Suite(.serialized) struct ProjectExperienceNativeTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CLAUTO_DEFAULTS_SUITE"] != nil && ProcessInfo.processInfo.environment["CLAUTO_COVERS_ROOT"] != nil, "Requires the explicit private-profile test host"))
+    func privateProfileUsesOnlyItsRequestedPreferencesAndRoots() throws {
+        let env = ProcessInfo.processInfo.environment
+        let suite = try #require(env["CLAUTO_DEFAULTS_SUITE"])
+        #expect(suite.hasPrefix("ClautoVideo.NativeRegression."))
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        let otherSuite = UUID().uuidString,other = try #require(UserDefaults(suiteName: otherSuite))
+        defer { other.removePersistentDomain(forName: otherSuite) }
+        let key = "ClautoSelectedProjectTab",original = UserDefaults.standard.string(forKey: key),previous = preferences.string(forKey: key)
+        defer { if let previous { preferences.set(previous,forKey: key) } else { preferences.removeObject(forKey: key) } }
+        let store = EditorStore(defaults: other)
+        store.rememberProjectTab("Studio")
+        #expect(preferences.string(forKey: key) == "Studio" && other.string(forKey: key) == nil)
+        #expect(UserDefaults.standard.string(forKey: key) == original)
+        #expect(store.projectRoot.path == env["CLAUTO_PROJECTS_ROOT"] && store.engineRoot.path == env["CLAUTO_ENGINE_ROOT"])
+        let covers = try #require(env["CLAUTO_COVERS_ROOT"])
+        #expect(ProjectCoverRepository().root.path == covers)
+        let explicit = URL(fileURLWithPath: covers).appendingPathComponent("explicit-test-root")
+        #expect(ProjectCoverRepository(root: explicit).root == explicit)
+    }
     @Test func renamedAppPreservesItsExistingBundleAndExecutableIdentity() {
         #expect(Bundle.main.bundleIdentifier == "com.nathanfennel.Clauto-Editor")
         #expect(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String == "Clauto Video")

@@ -24,7 +24,15 @@ struct ProjectCoverPack: Codable,Sendable {
 }
 actor ProjectCoverRepository {
     let root: URL
-    init(root: URL = FileManager.default.urls(for: .applicationSupportDirectory,in: .userDomainMask)[0].appendingPathComponent("Clauto Editor/Project Covers")) { self.root = root }
+    init(root: URL? = nil) {
+        if let root { self.root = root }
+        else if let path = ProcessInfo.processInfo.environment["CLAUTO_COVERS_ROOT"] {
+            guard path.hasPrefix("/") else { fatalError("The requested cover folder must be an absolute path.") }
+            self.root = URL(fileURLWithPath: path,isDirectory: true)
+        } else {
+            self.root = FileManager.default.urls(for: .applicationSupportDirectory,in: .userDomainMask)[0].appendingPathComponent("Clauto Editor/Project Covers")
+        }
+    }
     func save(_ source: URL,projectID: UUID,generator: String,prompt: String,expectedSHA256: String? = nil) throws -> ProjectCoverRecord {
         guard !generator.isEmpty,generator.utf8.count <= 200,prompt.utf8.count <= 8000 else { throw ProjectFailure.invalidProject }
         let access = source.startAccessingSecurityScopedResource();defer { if access { source.stopAccessingSecurityScopedResource() } }
