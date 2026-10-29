@@ -9,6 +9,12 @@ struct SoundTimelineEditorView: View {
     @State private var workspaceOwner = UUID()
     @Environment(\.dismiss) private var dismiss
     init(store:EditorStore,project:Project,version:CutVersion) { self.store=store;_controller=State(initialValue:SoundTimelineController(project:project,version:version)) }
+    private var replacementAction: ((SoundSelectionReference) -> Void)? {
+        guard controller.selectedCue != nil else { return nil }
+        return { (reference: SoundSelectionReference) in
+            controller.replace(reference)
+        }
+    }
     var body: some View {
         VStack(spacing:0) {
             HStack {
@@ -59,7 +65,7 @@ struct SoundTimelineEditorView: View {
             }.buttonStyle(.bordered).tint(ClautoDesign.ink).padding(14)
             Divider()
             if let browser=controller.browser {
-                SoundBrowserView(store:browser,selectionActionTitle:controller.selectedCue == nil ? nil:"Replace selected sound",onSelection:controller.selectedCue == nil ? nil:controller.replace)
+                SoundBrowserView(store:browser,selectionActionTitle:controller.selectedCue == nil ? nil:"Replace selected sound",onSelection:replacementAction)
             } else { ContentUnavailableView("Sound catalog unavailable",systemImage:"waveform.slash") }
         }.background(Color(nsColor:.windowBackgroundColor)).frame(minWidth:1100,minHeight:780).task { await controller.load() }
             .interactiveDismissDisabled(controller.unsaved)
