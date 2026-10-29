@@ -39,8 +39,9 @@ import Observation
     init(project: Project,version: CutVersion,url: URL,store: EditorStore,ownerID: UUID) {
         self.ownerID = ownerID
         self.project = project; self.version = version; self.url = url; self.store = store
-        openingMovie = try? ReviewMovieOpeningIdentity.capture(url: url,project: project)
-        player = openingMovie == nil ? AVPlayer():AVPlayer(url: url); control.player = player;control.transportEnabled = false
+        let opening = try? ReviewMovieOpeningIdentity.capture(url: url,project: project)
+        openingMovie = opening
+        player = opening == nil ? AVPlayer():AVPlayer(url: url); control.player = player;control.transportEnabled = false
         if openingMovie == nil { issue = "Preview unavailable. Reconnect its drive, then Retry preview." }
         control.onSeekRequested = { [weak self] in self?.record(.seekRequested) }
         control.onSeekCompleted = { [weak self] completed in self?.record(completed ? .seekCompleted : .unavailable) }
