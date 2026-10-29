@@ -5,16 +5,26 @@ struct ScriptWorkspaceView: View {
     @Bindable var store: EditorStore
     let project: Project
     let router: ReviewWindowRouter
+    @State private var documentPreview: ProjectAssetPreview?
     var body: some View {
         let controller = store.scriptWorkspace(for: project)
-        ScriptWorkspaceContent(controller: controller, openTranscript: { router.tab = "Transcript" }, openCut: {
+        ScriptWorkspaceContent(controller: controller, documents: project.manifest.files.filter { $0.displayedGroup == .scripts }, openDocument: { file in
+            documentPreview = .init(id: file.id, title: file.name, url: project.folder.appendingPathComponent(file.relativePath))
+        }, openTranscript: { router.tab = "Transcript" }, openCut: {
             controller.requestedAssemblyID = controller.assemblies.last?.id; router.tab = "Cut"
         }).task { await controller.load() }
+            .sheet(item: $documentPreview) { ProjectAssetPreviewView(item: $0) }
+            .onChange(of: controller.session?.state.reviewInProgress) {
+                if controller.session?.state.reviewInProgress == true { documentPreview = nil }
+            }
+            .onChange(of: project.id) { documentPreview = nil }
     }
 }
 
 private struct ScriptWorkspaceContent: View {
     @Bindable var controller: ScriptWorkspaceController
+    let documents: [ProjectFile]
+    let openDocument: (ProjectFile) -> Void
     let openTranscript: () -> Void
     let openCut: () -> Void
     @State private var page = "Sources"
@@ -53,7 +63,9 @@ private struct ScriptWorkspaceContent: View {
                 }.padding(.horizontal, 22).padding(.bottom, 12).accessibilityIdentifier("scriptPackageSaved")
             }
             ClautoRule()
-            if let session {
+            if !mustCompare, page == "Documents" {
+                ScrollView { documentList.padding(22) }.scrollIndicators(.visible)
+            } else if let session {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         if mustCompare || page == "Compare" { comparison(session) }
@@ -82,6 +94,7 @@ private struct ScriptWorkspaceContent: View {
             }
             .onAppear {
                 if let id = controller.requestedVersionID { selectedVersion = id; page = "Write"; controller.requestedVersionID = nil }
+                else if !documents.isEmpty { page = "Documents" }
             }
             .sheet(isPresented: $newVersion) {
                 ScriptNewVersionSheet(failure: controller.failure) { title, provenance, data in
@@ -121,7 +134,7 @@ private struct ScriptWorkspaceContent: View {
             Text("Read every source → write independent versions → compare blind → approve → prepare a separate assembly.")
                 .font(ClautoDesign.caption).fixedSize(horizontal: false, vertical: true)
             HStack {
-                ClautoSegments(selection: $page, options: [("Sources", .files), ("Write", .brief), ("Compare", .cut)])
+                ClautoSegments(selection: $page, options: [("Documents", .files), ("Sources", .files), ("Write", .brief), ("Compare", .cut)])
                     .disabled(mustCompare).accessibilityIdentifier("scriptWorkspacePages")
                 Spacer()
                 if !mustCompare {
@@ -135,6 +148,22 @@ private struct ScriptWorkspaceContent: View {
                     .font(ClautoDesign.caption).accessibilityIdentifier("scriptCoverageStatus")
             }
         }
+    }
+
+    private var documentList: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Project script documents").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Read attached scripts, finished-cut transcripts and edit outlines. Opening a document does not approve it or complete source review. Transcript uncertainty and the document's own status still apply.")
+                .font(ClautoDesign.caption).fixedSize(horizontal: false, vertical: true)
+            if documents.isEmpty {
+                Text("Add a script or edit outline to Scripts in Files to read it here.").foregroundStyle(ClautoDesign.quiet)
+            }
+            ForEach(documents) { file in
+                Button { openDocument(file) } label: {
+                    Label(file.name, systemImage: "doc.text").frame(maxWidth: .infinity, alignment: .leading)
+                }.accessibilityLabel("Read " + file.name).accessibilityIdentifier("scriptDocument-" + file.id.uuidString)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("scriptDocuments")
     }
 
     @ViewBuilder private func sourceReview(_ session: ScriptWorkspaceSession) -> some View {

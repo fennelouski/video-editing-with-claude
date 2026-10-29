@@ -60,6 +60,16 @@ struct ProjectManifest: Codable, Identifiable, Sendable {
     var mutationRevision: Int64? = nil
     var storageLayout: ProjectStorageLayout? = nil
     var outputResolution: ExportResolution { exportResolution ?? .fullHD }
+    /// An explicitly imported review can expose its sole movie before a native
+    /// cut exists. Multiple footage choices require selection; never guess the
+    /// latest movie from a filename, date, or directory order.
+    var unassembledReviewMovie: ProjectFile? {
+        guard importedReviewOnly == true else { return nil }
+        let footage = files.filter { $0.displayedGroup == .footage }
+        guard footage.count == 1, let movie = footage.first,
+              ["mp4", "mov", "m4v"].contains(URL(fileURLWithPath: movie.name).pathExtension.lowercased()) else { return nil }
+        return movie
+    }
 }
 
 struct CreativeReference: Codable, Identifiable, Equatable, Sendable {

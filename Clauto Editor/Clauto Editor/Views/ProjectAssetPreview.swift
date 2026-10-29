@@ -22,6 +22,20 @@ struct ProjectAssetPreviewView: View {
         }.frame(minWidth: 760,minHeight: 560)
     }
 }
+
+/// Passive original-rate playback only. It never registers a frame-feedback
+/// target, approves an edit, generates media or autostarts audio.
+struct ProjectMovieSourcePreview: View {
+    let item: ProjectAssetPreview
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(item.title).font(.headline).textSelection(.enabled)
+            Text("Source movie preview. Timeline editing and frame feedback become available with a saved cut. The movie keeps its original timing and audio.")
+                .font(.caption).fixedSize(horizontal: false, vertical: true)
+            NativeProjectAssetPreview(url: item.url).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.padding(18).accessibilityIdentifier("projectMoviePreview")
+    }
+}
 private struct NativeProjectAssetPreview: NSViewRepresentable {
     let url: URL
     func makeNSView(context: Context) -> QLPreviewView {

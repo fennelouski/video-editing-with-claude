@@ -19,6 +19,11 @@ struct ReviewWorkspace: View {
     private enum Pane: Hashable { case assets, video, feedback }
     private var versions: [CutVersion] { store.cutVersions[project.id] ?? [] }
     private var selected: CutVersion? { versions.first { $0.id == versionID } ?? store.currentCuts[project.id] ?? (store.currentCutIssues[project.id] == nil ? versions.last:nil) }
+    private var unassembledMovie: ProjectFile? {
+        guard versions.isEmpty, (store.cutVersionIssues[project.id] ?? []).isEmpty,
+              store.currentCutIssues[project.id] == nil else { return nil }
+        return project.manifest.unassembledReviewMovie
+    }
     private var scripts: ScriptWorkspaceController { store.scriptWorkspace(for: project) }
     private var selectedAssembly: ScriptAssemblyReview? {
         guard !scripts.busy, scripts.session?.state.reviewInProgress != true, scripts.failure == nil, scripts.assemblyFailure == nil else { return nil }
@@ -135,6 +140,9 @@ struct ReviewWorkspace: View {
                         ReviewVersionWorkspace(store: store,project: project,version: version,url: url,router: router,feedbackVisible: feedback,
                             rightWidth: geometry.size.width >= 1100 ? 320 : 260,focus: pane == .video ? .video : pane == .feedback ? .feedback : nil,focusGeneration: focusGeneration)
                             .id(version.id)
+                    } else if let movie = unassembledMovie {
+                        ProjectMovieSourcePreview(item: .init(id: movie.id, title: movie.name,
+                            url: project.folder.appendingPathComponent(movie.relativePath))).id(movie.id)
                     } else {
                         VStack(spacing: 18) { Image(systemName: "film").font(.largeTitle); Text("No saved version"); Button("Make a cut…") { building = true } }
                             .frame(maxWidth: .infinity,maxHeight: .infinity)

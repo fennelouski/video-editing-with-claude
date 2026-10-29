@@ -14,6 +14,18 @@ private func experienceRoot() throws -> URL {
     return root.resolvingSymlinksInPath().standardizedFileURL
 }
 struct ProjectExperienceTests {
+    @Test func passiveReviewPreviewRequiresOneExplicitReviewMovie() {
+        let movie = ProjectFile(name: "Family review.mp4", group: .footage, relativePath: "footage/a-cam/review.mp4", originalPath: "/synthetic/review.mp4", copied: true, needsRole: false)
+        var manifest = ProjectManifest(name: "Family", engineVersion: "synthetic", files: [movie])
+        #expect(manifest.unassembledReviewMovie == nil)
+        manifest.importedReviewOnly = true
+        #expect(manifest.unassembledReviewMovie?.id == movie.id)
+        var second = movie; second.id = UUID(); second.name = "Other edit.mp4"
+        manifest.files.append(second)
+        #expect(manifest.unassembledReviewMovie == nil)
+        manifest.files = [ProjectFile(name: "Unknown footage.mxf", group: .footage, relativePath: "footage/a-cam/source.mxf", originalPath: "/synthetic/source.mxf", copied: true, needsRole: false)]
+        #expect(manifest.unassembledReviewMovie == nil)
+    }
     @Test func chatIsAPersistedProjectWorkspace() {
         #expect(RecentProjectRestoration.tab("Chat") == "Chat")
         #expect(RecentProjectRestoration.tab("Files") == "Files")
