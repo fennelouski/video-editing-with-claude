@@ -36,3 +36,14 @@ The visible rename intentionally does not rename the NAS project root, Applicati
 - No storage profile was applied, migration performed, source removed, forced quit used, app installed, branch merged or public release made. Live storage-pane/connected recommendation and Sounds reinspection were deferred at that actual human takeover, rather than taking input back. Earlier sound integration and native fixture evidence remain valid. Exact storage paths still require review/confirmation, and real-source removal gates remain uncleared.
 
 Detailed immutable run receipts, the synthetic writer request/response and the fresh five-project metadata comparison are under `.artifacts/video-final-validation/RESULT.json` and its referenced run folders.
+
+## Source-only resumption — 2026-10-29
+
+The [Storage/Sounds checkpoint](STORAGE_SOUNDS_RESUME_2026-10-29.md) records new
+folder-choice/review race guards, unsaved sound quit protection and browse-only
+behavior without a selected cue. Tests are added but not executed; the running
+bundle was not changed. Live Storage/Sounds inspection and exact storage-path
+confirmation remain pending fresh coordinator admission. Pan v014 is preserved
+along with the existing v013 current pointer; the October 26 v9/7:57 entry above
+is historical, not the latest film state. Independent review findings and the
+separate 3D candidate remain queued for owner handoff.

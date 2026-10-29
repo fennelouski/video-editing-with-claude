@@ -463,3 +463,86 @@ extension StorageCacheTests {
         #expect(FileManager.default.fileExists(atPath: item.movie.path))
     }
 }
+
+/// A delayed bookmark result exercises main-actor reentrancy without blocking a
+/// filesystem probe or touching a live project. Production still uses service.grant.
+private actor HeldStorageFolderGrant {
+    let grants: [StorageRole:StorageFolderGrant]
+    private var holding = false
+    private var waiter: CheckedContinuation<StorageFolderGrant,Error>?
+    private var pendingRole: StorageRole?
+    private(set) var started = false
+    init(_ grants: [StorageRole:StorageFolderGrant]) { self.grants = grants }
+    func hold() { holding = true }
+    func resolve(_ role: StorageRole) async throws -> StorageFolderGrant {
+        guard let grant = grants[role] else { throw ProjectFailure.invalidProject }
+        guard holding else { return grant }
+        started = true;pendingRole = role
+        return try await withCheckedThrowingContinuation { waiter = $0 }
+    }
+    func finish() {
+        guard let role = pendingRole,let grant = grants[role] else { return }
+        waiter?.resume(returning: grant);waiter = nil;pendingRole = nil;holding = false
+    }
+}
+private func heldStorageGrants(_ root: URL,service: StorageWorkspaceService) async throws -> HeldStorageFolderGrant {
+    var grants: [StorageRole:StorageFolderGrant] = [:]
+    for role in StorageRole.allCases { grants[role] = try await service.grant(folder: root,role: role) }
+    return HeldStorageFolderGrant(grants)
+}
+extension StorageSetupControllerTests {
+    @Test func pendingFolderChoiceImmediatelyInvalidatesReviewAndCannotBeConfirmed() async throws {
+        let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let service = fixtureStorageService(root),gate = try await heldStorageGrants(root,service: service)
+        let controller = StorageSetupController(defaults: defaults,service: service,cache: .init(defaults: nil),advisor: UnavailableStorageAdvisor(),folderGrant: { _,role in try await gate.resolve(role) })
+        controller.workload = smallWorkload();await controller.recommend(useConnectedAI: false)
+        for role in StorageRole.allCases { await controller.choose(role: role,folder: root) }
+        await controller.review();let oldReview = try #require(controller.reviewedProfile)
+        await gate.hold()
+        let pending = Task { await controller.choose(role: .edits,folder: root) }
+        for _ in 0..<500 { if await gate.started { break };try await Task.sleep(for: .milliseconds(2)) }
+        #expect(controller.reviewedProfile == nil && controller.choosingFolderRoles == [.edits])
+        await controller.review();#expect(controller.reviewedProfile == nil)
+        #expect(await controller.confirmProfile() == nil)
+        #expect(defaults.data(forKey: "ClautoStorageProfiles") == nil)
+        await gate.finish();await pending.value
+        #expect(controller.choosingFolderRoles.isEmpty && controller.profile == nil)
+        await controller.review();#expect(controller.reviewedProfile?.id != oldReview.id)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+    @Test func delayedFolderChoiceCannotOverwriteANewerDriveChoice() async throws {
+        let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let service = fixtureStorageService(root),gate = try await heldStorageGrants(root,service: service)
+        let controller = StorageSetupController(defaults: defaults,service: service,cache: .init(defaults: nil),advisor: UnavailableStorageAdvisor(),folderGrant: { _,role in try await gate.resolve(role) })
+        controller.workload = smallWorkload();await controller.recommend(useConnectedAI: false);await gate.hold()
+        let pending = Task { await controller.choose(role: .cache,folder: root) }
+        for _ in 0..<500 { if await gate.started { break };try await Task.sleep(for: .milliseconds(2)) }
+        controller.selectVolume("new-explicit-drive-choice",role: .cache)
+        await gate.finish();await pending.value
+        #expect(controller.advice?.choices[.cache] == "new-explicit-drive-choice")
+        #expect(controller.folders[.cache] == nil && controller.choosingFolderRoles.isEmpty)
+        #expect(controller.reviewedProfile == nil && controller.profile == nil)
+        #expect(defaults.data(forKey: "ClautoStorageProfiles") == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+}
+#if !canImport(ClautoCore)
+extension StorageSetupNativeStoreTests {
+    @Test func unsavedSoundWorkspaceBlocksOrdinaryQuitUntilSavedOrExplicitlyDiscarded() async throws {
+        final class Draft { var unsaved = true }
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let store = EditorStore(defaults: defaults),owner = UUID(),draft = Draft()
+        store.registerSoundWorkspace(owner,projectID: UUID(),hasUnsaved: { draft.unsaved })
+        #expect(store.hasUnsavedSoundEdits && store.hasPendingReviewWork)
+        #expect(await store.flushReviewWorkForExit() == false)
+        #expect(store.hasUnsavedSoundEdits && draft.unsaved)
+        draft.unsaved = false
+        #expect(await store.flushReviewWorkForExit())
+        #expect(!store.hasUnsavedSoundEdits)
+        draft.unsaved = true;store.unregisterSoundWorkspace(owner)
+        #expect(!store.hasUnsavedSoundEdits)
+    }
+}
+#endif

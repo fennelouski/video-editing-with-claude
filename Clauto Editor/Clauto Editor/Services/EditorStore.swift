@@ -142,9 +142,16 @@ final class EditorStore {
         let library = ProjectCoverLibrary(defaults: defaults);projectCoverLibrary = library;return library
     }
     @ObservationIgnored private var storageOwnsWorking = false
-    @ObservationIgnored private var soundEditorProjects: [UUID:UUID] = [:]
-    func registerSoundWorkspace(_ owner: UUID,projectID: UUID) { soundEditorProjects[owner] = projectID }
+    private struct SoundWorkspace {
+        let projectID: UUID
+        let hasUnsaved: @MainActor () -> Bool
+    }
+    @ObservationIgnored private var soundEditorProjects: [UUID:SoundWorkspace] = [:]
+    func registerSoundWorkspace(_ owner: UUID,projectID: UUID,hasUnsaved: @escaping @MainActor () -> Bool = { false }) {
+        soundEditorProjects[owner] = .init(projectID: projectID,hasUnsaved: hasUnsaved)
+    }
     func unregisterSoundWorkspace(_ owner: UUID) { soundEditorProjects.removeValue(forKey: owner) }
+    var hasUnsavedSoundEdits: Bool { soundEditorProjects.values.contains { $0.hasUnsaved() } }
     var storage: StorageSetupController {
         if let storageController { return storageController }
         let controller = StorageSetupController(defaults: defaults,service: storageService,canLock: { [weak self] project in
@@ -278,7 +285,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { hasUnsavedSoundEdits || (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         let storageSaved = await storageController?.flushForExit() ?? true
@@ -302,7 +309,11 @@ final class EditorStore {
             notice = failure + " Return to its verified export to retry, or choose Keep verified export only."
             noticeTitle = "Version not saved"
         }
-        return storageSaved && transcriptsSaved && voicesSaved && failedVersionSaves.isEmpty && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
+        if hasUnsavedSoundEdits {
+            noticeTitle = "Sound replacement not saved"
+            notice = "Save the edited sound timeline or explicitly discard its changes in the Sounds window before quitting. The original cut is preserved."
+        }
+        return !hasUnsavedSoundEdits && storageSaved && transcriptsSaved && voicesSaved && failedVersionSaves.isEmpty && !presentationState.hasUnsavedBriefs && !working && exportingDerivativeProjectID==nil
     }
 
     func resumeReviewWorkAfterCancelledExit() {

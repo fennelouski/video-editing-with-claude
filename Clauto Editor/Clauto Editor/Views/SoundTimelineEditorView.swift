@@ -59,11 +59,11 @@ struct SoundTimelineEditorView: View {
             }.buttonStyle(.bordered).tint(ClautoDesign.ink).padding(14)
             Divider()
             if let browser=controller.browser {
-                SoundBrowserView(store:browser,selectionActionTitle:"Replace selected sound",onSelection:controller.replace)
+                SoundBrowserView(store:browser,selectionActionTitle:controller.selectedCue == nil ? nil:"Replace selected sound",onSelection:controller.selectedCue == nil ? nil:controller.replace)
             } else { ContentUnavailableView("Sound catalog unavailable",systemImage:"waveform.slash") }
         }.background(Color(nsColor:.windowBackgroundColor)).frame(minWidth:1100,minHeight:780).task { await controller.load() }
             .interactiveDismissDisabled(controller.unsaved)
-            .onAppear { store.registerSoundWorkspace(workspaceOwner,projectID: controller.project.id) }
+            .onAppear { store.registerSoundWorkspace(workspaceOwner,projectID: controller.project.id,hasUnsaved: { controller.unsaved }) }
             .onDisappear { controller.browser?.stop();store.unregisterSoundWorkspace(workspaceOwner) }
             .sheet(item:$reviewExport) { export in
                 VStack {

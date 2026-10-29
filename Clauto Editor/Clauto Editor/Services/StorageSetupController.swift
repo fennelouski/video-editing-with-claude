@@ -8,6 +8,7 @@ import Observation
     private(set) var folders: [StorageRole:StorageFolderGrant] = [:]
     private(set) var profile: StorageProfile?
     private(set) var reviewedProfile: StorageProfile?
+    private(set) var choosingFolderRoles: Set<StorageRole> = []
     private(set) var space: [StorageSpaceStatus] = []
     private(set) var busy = false
     private(set) var message: String?
@@ -44,13 +45,16 @@ import Observation
     @ObservationIgnored private var intakeTask: Task<([URL],[String:String]),Error>?
     @ObservationIgnored private var cacheProfileID: UUID?
     @ObservationIgnored private var formID = UUID()
+    @ObservationIgnored private var folderChoices: [StorageRole:UUID] = [:]
+    @ObservationIgnored private let folderGrant: @Sendable (URL,StorageRole) async throws -> StorageFolderGrant
     @ObservationIgnored private let canLock: @MainActor (Project) -> Bool
     @ObservationIgnored private let release: @MainActor () -> Void
     @ObservationIgnored private let protectedPaths: @MainActor () -> [URL]
     @ObservationIgnored private let activate: @MainActor (Project,StorageMigrationJournal) async throws -> Void
-    init(defaults: UserDefaults,service: StorageWorkspaceService = .init(),migration: StorageMigrationService = .init(),cache: StorageCacheService = .init(),advisor: any StorageAdvising = ConnectedStorageAdvisor(),
+    init(defaults: UserDefaults,service: StorageWorkspaceService = .init(),migration: StorageMigrationService = .init(),cache: StorageCacheService = .init(),advisor: any StorageAdvising = ConnectedStorageAdvisor(),folderGrant: (@Sendable (URL,StorageRole) async throws -> StorageFolderGrant)? = nil,
          canLock: @escaping @MainActor (Project)->Bool = { _ in false },release: @escaping @MainActor ()->Void = {},protectedPaths: @escaping @MainActor ()->[URL] = { [] },activate: @escaping @MainActor (Project,StorageMigrationJournal) async throws -> Void = { _,_ in throw ProjectFailure.invalidProject }) {
         self.defaults = defaults;self.service = service;self.migration = migration;self.cache = cache;self.advisor = advisor;self.canLock = canLock;self.release = release;self.protectedPaths = protectedPaths;self.activate = activate
+        self.folderGrant = folderGrant ?? { try await service.grant(folder: $0,role: $1) }
         if let bytes = defaults.data(forKey: "ClautoStorageProfiles"),let records = try? JSONDecoder().decode([StorageProfile].self,from: bytes) {
             histories = records.filter { (try? $0.validate()) != nil }
             profile = histories.first { $0.id.uuidString == defaults.string(forKey: "ClautoActiveStorageProfile") }
@@ -76,11 +80,13 @@ import Observation
         access = retained
     }
     func selectVolume(_ id: String,role: StorageRole) {
+        folderChoices.removeValue(forKey: role);choosingFolderRoles.remove(role)
         advice?.choices[role] = id;folders.removeValue(forKey: role);reviewedProfile = nil;formID = UUID()
     }
     func reuseBase(from role: StorageRole) {
         guard let base = folders[role] else { return }
         for other in StorageRole.allCases where advice?.choices[other] == base.volumeID {
+            folderChoices.removeValue(forKey: other);choosingFolderRoles.remove(other)
             var grant = base;grant.components = ["Clauto Video",other.folderName];grant.managedRootID = nil;grant.managedIdentity = nil;folders[other] = grant
         }
         reviewedProfile = nil;formID = UUID()
@@ -102,6 +108,7 @@ import Observation
     func recommend(useConnectedAI: Bool = true) async {
         guard !busy else { return }
         busy = true;defer { busy = false };reviewedProfile = nil;formID = UUID()
+        folderChoices = [:];choosingFolderRoles = []
         await perform { [self] in
         do {
             volumes = try await service.volumes()
@@ -119,26 +126,38 @@ import Observation
     }
     func choose(role: StorageRole,folder: URL) async {
         guard !busy else { return }
+        let choice = UUID();folderChoices[role] = choice;choosingFolderRoles.insert(role)
+        // Invalidate consent before awaiting bookmark/volume resolution, not
+        // only when a potentially delayed answer comes back.
+        reviewedProfile = nil;formID = UUID()
+        defer {
+            if folderChoices[role] == choice { folderChoices.removeValue(forKey: role);choosingFolderRoles.remove(role) }
+        }
         do {
-            let grant = try await service.grant(folder: folder,role: role)
+            let grant = try await folderGrant(folder,role)
+            guard folderChoices[role] == choice else { return }
             folders[role] = grant;advice?.choices[role] = grant.volumeID;reviewedProfile = nil;formID = UUID();error = nil
             if !volumes.contains(where: { $0.id == grant.volumeID }) { volumes.append(try StorageVolumeProbe.observe(folder)) }
-        } catch { self.error = error.localizedDescription }
+        } catch { if folderChoices[role] == choice { self.error = error.localizedDescription } }
     }
     func review() async {
         guard !busy,let advice else { return }
+        guard choosingFolderRoles.isEmpty else { error = "Wait for the selected folders to finish checking before reviewing locations.";return }
+        let revision = formID
         do {
-            let draft = StorageProfile(id: formID,confirmed: Date(),workload: workload,advice: advice,folders: folders)
+            let draft = StorageProfile(id: revision,confirmed: Date(),workload: workload,advice: advice,folders: folders)
             try draft.validate()
             try await service.validatePlan(draft)
+            guard formID == revision,choosingFolderRoles.isEmpty else { return }
             // Monitoring resolves existing bookmarks; no folder is created here.
             let status = await service.monitor(draft)
+            guard formID == revision,choosingFolderRoles.isEmpty else { return }
             guard status.allSatisfy({ $0.issue == nil }) else { throw WorkflowFailure.invalid("Reconnect offline folders or resolve the reserve warnings before confirming.") }
             reviewedProfile = draft;error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if formID == revision { self.error = error.localizedDescription } }
     }
     func confirmProfile() async -> URL? {
-        guard !busy,let reviewedProfile,reviewedProfile.id == formID else { error = "Review the exact folder proposal first.";return nil }
+        guard !busy,choosingFolderRoles.isEmpty,let reviewedProfile,reviewedProfile.id == formID else { error = "Review the exact folder proposal first.";return nil }
         busy = true;defer { busy = false }
         do {
             let paths = try await service.prepare(reviewedProfile)

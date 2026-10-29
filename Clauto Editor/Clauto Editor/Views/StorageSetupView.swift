@@ -76,7 +76,7 @@ struct StorageSetupView: View {
             }
             ForEach(StorageRole.allCases) { role in StorageLocationRow(storage: storage,role: role) }
             HStack {
-                Button("Review proposed locations") { Task { await storage.review() } }.disabled(storage.busy).accessibilityIdentifier("reviewStorageLocations")
+                Button("Review proposed locations") { Task { await storage.review() } }.disabled(storage.busy || !storage.choosingFolderRoles.isEmpty).accessibilityIdentifier("reviewStorageLocations")
                 Spacer()
                 if storage.reviewedProfile != nil {
                     Button("Confirm for future projects") { Task { if let root = await storage.confirmProfile() { store.setFolders(projects: root) } } }
@@ -223,6 +223,7 @@ private struct StorageLocationRow: View {
                     Text(volume.performance.label+". "+volume.performance.explanation).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                 }
                 Text(storage.folders[role]?.displayPath ?? "Choose an accessible base folder. Proposed child folders are created only after confirmation.").font(ClautoDesign.caption).textSelection(.enabled)
+                if storage.choosingFolderRoles.contains(role) { Text("Checking selected folder…").font(ClautoDesign.caption).accessibilityIdentifier("checkingStorageFolder-"+role.rawValue) }
                 if storage.folders[role] != nil { Button("Use this base for the other roles on this drive") { storage.reuseBase(from: role) }.font(ClautoDesign.caption) }
             }.padding(8)
         }.disabled(storage.busy)
