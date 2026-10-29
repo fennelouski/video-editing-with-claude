@@ -185,6 +185,17 @@ extension ProjectExperienceNativeTests {
         let encoder = JSONEncoder();encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(version).write(to: base.appendingPathComponent("clauto-version.json"))
         try encoder.encode(version.id).write(to: f.project.folder.appendingPathComponent("cuts/current.json"))
+        let target = try await WorkflowRepository().voiceReviewTarget(version,project: f.project)
+        let request = FrameCommentRequest(id: UUID(),target: target,frame: try .capture(.init(value: 0,timescale: 24000),duration: target.duration))
+        let frozen = try await ReviewFrameCaptureService().capture(request,project: f.project)
+        let savedFrame = try await FrameCommentRepository(project: f.project).save(frame: frozen,text: "Saved frame feedback",annotations: [])
+        let voiceRepository = try VoiceReviewRepository(project: f.project)
+        let registered = try await voiceRepository.register(target)
+        let savedVoice = try await voiceRepository.addTyped(text: "Saved voice history",action: .protect,anchor: .init(targetID: registered.id,seconds: 0,endSeconds: 0.5))
+        let savedNoteID = try #require(savedVoice.notes.first?.id)
+        var savedDraft = VoiceTypedDraft(versionID: version.id)
+        savedDraft.text = "Keep this unfinished feedback";savedDraft.start = "0.25";savedDraft.target = registered
+        _ = try await voiceRepository.saveTypedDraft(savedDraft,expected: nil)
         // A malformed peer must not prevent this independently verified review.
         let bad = f.project.folder.appendingPathComponent("cuts/v002")
         try FileManager.default.createDirectory(at: bad,withIntermediateDirectories: false)
@@ -192,19 +203,41 @@ extension ProjectExperienceNativeTests {
         let held = f.root.appendingPathComponent("held-original.mp4");try FileManager.default.moveItem(at: movie,to: held)
         let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
         let store = EditorStore(defaults: defaults),router = ReviewWindowRouter();router.store = store;router.intendedVersionID = version.id
+        let provider = MockVoiceProvider(),voice = try VoiceReviewController(project: f.project,provider: provider,defaults: defaults)
+        store.voiceReviews[f.project.id] = voice
+        let composer = voice.typedComposer(for: version.id)
         let chat = store.liveConversation(for: f.project);await chat.load();chat.edit("Keep this unsent project draft")
         let session = store.reviewPlayer(project: f.project,version: version,url: movie,ownerID: router.id),player = session.player
         defer { session.dispose();store.reviewPlayers.removeValue(forKey: session.id) }
         session.attach(to: router)
         for _ in 0..<500 { if session.canRetryPreview { break };try await Task.sleep(for: .milliseconds(2)) }
         #expect(session.issue != nil && !session.ready)
+        #expect(store.frameComments[f.project.id] == nil && voice.document.notes.isEmpty && composer.text.isEmpty)
         try FileManager.default.moveItem(at: held,to: movie)
         session.retryPreview();session.retryPreview() // the in-flight retry owns one session
-        for _ in 0..<1000 { if session.ready { break };try await Task.sleep(for: .milliseconds(2)) }
+        for _ in 0..<1000 { if session.ready && !session.checkingPreview { break };try await Task.sleep(for: .milliseconds(2)) }
         #expect(session.ready && session.issue == nil && session.endpoint?.target.preview.sha256 == movieSHA)
+        let comments = try #require(store.frameComments[f.project.id])
+        #expect(comments.comments.contains { $0.id == savedFrame.id && $0.text == "Saved frame feedback" })
+        #expect(session.voice === voice && voice.document.notes.contains { $0.id == savedNoteID && $0.text == "Saved voice history" })
+        #expect(voice.typedComposer(for: version.id) === composer && composer.text == savedDraft.text && composer.start == savedDraft.start)
+        #expect(!voice.isAttached(to: session.id) && voice.target == nil && !voice.active && !session.bindingVoice)
+        #expect(await provider.starts == 0)
+        #expect(await provider.microphoneRequests == 0)
+        #expect(await provider.speechRequests == 0)
         #expect(session.player === player && store.reviewPlayers.count == 1 && !session.playing)
         #expect(store.reviewPlayer(project: f.project,version: version,url: movie,ownerID: router.id) === session)
         #expect(chat.draft.text == "Keep this unsent project draft")
+        session.selectForVoice() // Only this explicit action may bind the recovered movie.
+        for _ in 0..<1000 { if voice.isAttached(to: session.id) && !session.bindingVoice { break };try await Task.sleep(for: .milliseconds(2)) }
+        #expect(voice.isAttached(to: session.id) && voice.target?.preview.sha256 == movieSHA && !voice.active)
+        #expect(await provider.starts == 0)
+        #expect(await provider.microphoneRequests == 0)
+        #expect(await provider.speechRequests == 0)
+        session.leaveWorkspace();session.attach(to: router) // Revisit takes the cached-endpoint path.
+        #expect(store.frameComments[f.project.id] === comments && session.voice === voice && !voice.isAttached(to: session.id))
+        #expect(comments.comments.contains { $0.id == savedFrame.id } && voice.document.notes.contains { $0.id == savedNoteID })
+        #expect(composer.text == savedDraft.text && chat.draft.text == "Keep this unsent project draft")
         try Data("different bytes at the same path".utf8).write(to: movie)
         session.issue = "Synthetic disconnected preview"
         for _ in 0..<1000 { if session.canRetryPreview { break };try await Task.sleep(for: .milliseconds(2)) }

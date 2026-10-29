@@ -79,11 +79,16 @@ import Observation
                 self.control.transportEnabled = self.issue == nil
                 self.endpoint = .init(id: self.id,project: self.project,target: target,driver: self.control)
                 if let endpoint = self.endpoint, self.workspaceVisible || self.presentation.detached { self.router?.register(endpoint); if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
-                await store.frameComment(for: self.project).load()
-                await store.voiceReview(for: self.project)?.load()
-                // Voice binding is explicit (Use this video); a background load cannot retarget capture.
+                await self.loadFeedback(using: store)
             } catch { self.issue = error.localizedDescription;self.ready = false }
         }
+    }
+    private func loadFeedback(using store: EditorStore) async {
+        guard !disposed, !Task.isCancelled else { return }
+        await store.frameComment(for: project).load()
+        guard !disposed, !Task.isCancelled else { return }
+        await store.voiceReview(for: project)?.load()
+        // Loading saved feedback never selects this video or starts capture.
     }
     var canRetryPreview: Bool {
         !disposed && !ownerClosed && !checkingPreview && !bindingVoice && preparing == nil && binding == nil && issue != nil && router?.editor == nil && voice?.active != true && voice?.mode != .finishing && !presentation.ownsExternalSurface
@@ -115,6 +120,7 @@ import Observation
                 self.control.transportEnabled = true
                 if let endpoint = self.endpoint,self.workspaceVisible { self.router?.register(endpoint);if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
                 self.refresh()
+                await self.loadFeedback(using: store)
             } catch { self.issue = error.localizedDescription;self.ready = false }
         }
     }
