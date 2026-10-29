@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "label": "Pan Seasoning — existing conceptual section",
+  "width": 1920,
+  "height": 1080,
+  "frameCount": 96,
+  "rig": {
+    "template": "inspection",
+    "action": "hold",
+    "yawRadians": 0.6,
+    "pitchRadians": 0.45,
+    "sweepRadians": 1.2,
+    "seed": 307,
+    "stepFrames": 2,
+    "material": "walnutIron",
+    "light": "warmSoft"
+  },
+  "model": {
+    "assetID": "legacy-pan-layer",
+    "meshSHA256": "a5da2d63444697f2eab47e40eccce17dd60ef7a503e30e29ed8a027e40123602"
+  },
+  "assumptions": [
+    "Illustrative object study; geometry and motion are not a physical simulation.",
+    "Not to scale. No cooking temperature, chemical mechanism or coating thickness is asserted."
+  ],
+  "reviewNotes": "Review actual output pixels before placing this graphic in Katie’s video. Real scanned art and handwriting remain separate editable scene layers."
+}

@@ -31,7 +31,9 @@ enum GraphicFrameCompositor {
         var pixels = Data(count: width*height*4)
         try pixels.withUnsafeMutableBytes { memory in
             guard let context = CGContext(data: memory.baseAddress,width: width,height: height,bitsPerComponent: 8,bytesPerRow: width*4,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue|CGImageAlphaInfo.premultipliedLast.rawValue) else { throw CutoutFailure.invalidImage }
-            context.setBlendMode(.copy);context.draw(try CutoutImageIO.image(raster),in: .init(x: 0,y: 0,width: width,height: height));context.setBlendMode(.normal)
+            // Draw overlays separately, preserving the base straight-alpha RGB
+            // instead of quantizing a faint shadow through an 8-bit context again.
+            context.setBlendMode(.normal)
             for layer in scene.imageLayers where layer.transform.active(index) {
                 guard let image = assets.images[layer.id] else { throw CutoutFailure.changedSource }
                 let t = layer.transform;context.saveGState();context.setAlpha(t.opacity)
@@ -69,12 +71,21 @@ enum GraphicFrameCompositor {
             try draw(footer,font: footerFont,color: .init(r: 0.1,g: 0.15,b: 0.12),in: box.insetBy(dx: 6,dy: 4),context: context,exactFont: true,requireFullText: true)
             }
         }
-        pixels.withUnsafeMutableBytes { memory in
-            let values = memory.bindMemory(to: UInt8.self)
+        raster.rgba.withUnsafeBytes { source in pixels.withUnsafeMutableBytes { memory in
+            let base = source.bindMemory(to: UInt8.self),values = memory.bindMemory(to: UInt8.self)
             for i in stride(from: 0,to: values.count,by: 4) {
-                let a = Int(values[i+3]);if a>0 && a<255 { for channel in 0..<3 { values[i+channel] = UInt8(min(255,(Int(values[i+channel])*255+a/2)/a)) } }
+                let overlayAlpha = Int(values[i+3])
+                if overlayAlpha==0 {
+                    values[i] = base[i];values[i+1] = base[i+1];values[i+2] = base[i+2];values[i+3] = base[i+3]
+                } else if overlayAlpha<255 {
+                    let a = Double(overlayAlpha)/255,b = Double(base[i+3])/255*(1-a),alpha = a+b
+                    for channel in 0..<3 {
+                        values[i+channel] = UInt8(min(255,max(0,((Double(values[i+channel])+Double(base[i+channel])*b)/alpha).rounded())))
+                    }
+                    values[i+3] = UInt8(min(255,(alpha*255).rounded()))
+                }
             }
-        }
+        } }
         try Task.checkCancellation();return .init(width: width,height: height,rgba: pixels)
     }
     private static func draw(_ text: String,font: CTFont,color: GraphicColor,in box: CGRect,context: CGContext,exactFont: Bool = false,requireFullText: Bool = false) throws {

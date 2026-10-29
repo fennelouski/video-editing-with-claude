@@ -36,7 +36,7 @@ private final class GraphicGPUWorker: @unchecked Sendable {
         let depth = MTLDepthStencilDescriptor();depth.depthCompareFunction = .lessEqual;depth.isDepthWriteEnabled = true
         guard let depthState = device.makeDepthStencilState(descriptor: depth) else { throw ProjectFailure.invalidProject };self.depthState = depthState
         let color = triangles.colorAttachments[0]!
-        color.pixelFormat = .rgba8Unorm;color.isBlendingEnabled = true
+        color.pixelFormat = .rgba16Float;color.isBlendingEnabled = true
         color.sourceRGBBlendFactor = .one;color.sourceAlphaBlendFactor = .one
         color.destinationRGBBlendFactor = .oneMinusSourceAlpha;color.destinationAlphaBlendFactor = .oneMinusSourceAlpha
         trianglePipeline = try device.makeRenderPipelineState(descriptor: triangles)
@@ -44,18 +44,21 @@ private final class GraphicGPUWorker: @unchecked Sendable {
     func render(_ primitives: [GraphicPrimitiveGPU],width: Int,height: Int,job: FrameBlockingJob<CutoutRaster>) throws -> CutoutRaster {
         try job.checkCancellation()
         guard MemoryLayout<GraphicPrimitiveGPU>.stride==64,width>=1,height>=1,width<=7680,height<=7680,width*height<=8_388_608,
-              primitives.count<=256,primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
-        let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,width: width,height: height,mipmapped: false)
+              primitives.count<=160_000,(primitives.count<=256 || primitives.allSatisfy({ $0.tags.x==2 })),primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
+        let triangles = !primitives.isEmpty && primitives.allSatisfy { $0.tags.x==2 }
+        // Accumulate translucent edges at half-float precision. Eight-bit
+        // premultiplication turns a warm low-alpha shadow into colored fringes.
+        let pixelFormat: MTLPixelFormat = triangles ? .rgba16Float:.rgba8Unorm
+        let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: pixelFormat,width: width,height: height,mipmapped: false)
         description.storageMode = .shared; description.usage = [.shaderWrite,.shaderRead,.renderTarget]
         let values = primitives.isEmpty ? [GraphicPrimitiveGPU(a: .zero,b: .zero,color: .zero,tags: .zero)]:primitives
         let buffer = values.withUnsafeBytes { device.makeBuffer(bytes: $0.baseAddress!,length: $0.count,options: .storageModeShared) }
         guard let buffer,let texture = device.makeTexture(descriptor: description),let command = queue.makeCommandBuffer() else { throw WorkflowFailure.invalid("The GPU could not allocate this scene. Choose a smaller canvas and retry.") }
-        let triangles = !primitives.isEmpty && primitives.allSatisfy { $0.tags.x==2 }
         if triangles {
             let pass = MTLRenderPassDescriptor(),attachment = pass.colorAttachments[0]!
             attachment.loadAction = .clear;attachment.clearColor = MTLClearColor(red: 0,green: 0,blue: 0,alpha: 0)
             if triangleSamples>1 {
-                let multisample = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,width: width,height: height,mipmapped: false)
+                let multisample = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: pixelFormat,width: width,height: height,mipmapped: false)
                 multisample.textureType = .type2DMultisample;multisample.sampleCount = triangleSamples;multisample.storageMode = .private;multisample.usage = .renderTarget
                 guard let target = device.makeTexture(descriptor: multisample) else { throw ProjectFailure.invalidProject }
                 attachment.texture = target;attachment.resolveTexture = texture;attachment.storeAction = .multisampleResolve
@@ -68,9 +71,20 @@ private final class GraphicGPUWorker: @unchecked Sendable {
             guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { throw ProjectFailure.invalidProject }
             var dimensions = SIMD2<UInt32>(UInt32(width),UInt32(height))
             encoder.setRenderPipelineState(trianglePipeline)
-            if primitives.allSatisfy({ $0.color.w>=0.999 }) { encoder.setDepthStencilState(depthState) }
+
             encoder.setVertexBuffer(buffer,offset: 0,index: 0);encoder.setVertexBytes(&dimensions,length: MemoryLayout<SIMD2<UInt32>>.stride,index: 1)
-            encoder.drawPrimitives(type: .triangle,vertexStart: 0,vertexCount: primitives.count*3);encoder.endEncoding()
+            // Analytic shadows precede geometry. Opaque depth belongs to each
+            // contiguous run; a translucent shadow must not disable mesh depth.
+            var start = 0
+            while start<primitives.count {
+                let opaque = primitives[start].color.w>=0.999 && primitives[start].tags.z==1
+                var end = start+1
+                while end<primitives.count && (primitives[end].color.w>=0.999 && primitives[end].tags.z==1)==opaque { end += 1 }
+                encoder.setDepthStencilState(opaque ? depthState:nil)
+                encoder.drawPrimitives(type: .triangle,vertexStart: start*3,vertexCount: (end-start)*3)
+                start = end
+            }
+            encoder.endEncoding()
         } else {
             guard let encoder = command.makeComputeCommandEncoder() else { throw ProjectFailure.invalidProject }
             var count = UInt32(primitives.count)
@@ -81,14 +95,21 @@ private final class GraphicGPUWorker: @unchecked Sendable {
         try job.checkCancellation();command.commit();command.waitUntilCompleted();try job.checkCancellation()
         guard command.status == .completed,command.error == nil else { throw WorkflowFailure.invalid("The GPU could not finish this frame. The previous exported scene remains available.") }
         var bytes = Data(count: width*height*4)
-        bytes.withUnsafeMutableBytes { texture.getBytes($0.baseAddress!,bytesPerRow: width*4,from: MTLRegionMake2D(0,0,width,height),mipmapLevel: 0) }
         if triangles {
-            bytes.withUnsafeMutableBytes { memory in
-                let pixels = memory.bindMemory(to: UInt8.self)
+            var linear = Data(count: width*height*8)
+            linear.withUnsafeMutableBytes { texture.getBytes($0.baseAddress!,bytesPerRow: width*8,from: MTLRegionMake2D(0,0,width,height),mipmapLevel: 0) }
+            linear.withUnsafeBytes { input in bytes.withUnsafeMutableBytes { output in
+                let values = input.bindMemory(to: Float16.self),pixels = output.bindMemory(to: UInt8.self)
                 for i in stride(from: 0,to: pixels.count,by: 4) {
-                    let alpha = Int(pixels[i+3]);if alpha>0 && alpha<255 { for channel in 0..<3 { pixels[i+channel] = UInt8(min(255,(Int(pixels[i+channel])*255+alpha/2)/alpha)) } }
+                    let alpha = Float(values[i+3])
+                    pixels[i+3] = UInt8(min(255,max(0,(alpha*255).rounded())))
+                    if alpha>0 {
+                        for channel in 0..<3 { pixels[i+channel] = UInt8(min(255,max(0,(Float(values[i+channel])/alpha*255).rounded()))) }
+                    }
                 }
-            }
+            } }
+        } else {
+            bytes.withUnsafeMutableBytes { texture.getBytes($0.baseAddress!,bytesPerRow: width*4,from: MTLRegionMake2D(0,0,width,height),mipmapLevel: 0) }
         }
         try job.checkCancellation();return .init(width: width,height: height,rgba: bytes)
     }
@@ -187,14 +208,14 @@ final class GraphicBlockingExecutor: @unchecked Sendable {
     }
 }
 actor GraphicMetalRenderer {
-    static let implementationVersion = "Clauto Metal graphics 1"
+    static let implementationVersion = "Clauto Metal graphics 3 · precise matte alpha"
     static var shaderSHA256: String { TranscriptSourceMap.sha(Data(GraphicGPUWorker.shader.utf8)) }
     private static let executor = GraphicBlockingExecutor(label: "com.clauto.graphics-gpu")
     private var worker: GraphicGPUWorker?
     func render(_ primitives: [GraphicPrimitiveGPU],width: Int,height: Int) async throws -> CutoutRaster {
         try Task.checkCancellation()
         guard MemoryLayout<GraphicPrimitiveGPU>.stride==64,width>=1,height>=1,width<=7680,height<=7680,width*height<=8_388_608,
-              primitives.count<=256,primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
+              primitives.count<=160_000,(primitives.count<=256 || primitives.allSatisfy({ $0.tags.x==2 })),primitives.allSatisfy(\.valid) else { throw ProjectFailure.invalidProject }
         let selected: GraphicGPUWorker
         if let worker { selected = worker }
         else {

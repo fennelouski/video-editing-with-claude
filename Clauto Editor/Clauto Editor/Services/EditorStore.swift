@@ -70,6 +70,11 @@ final class EditorStore {
     func scriptWorkspace(for project: Project) -> ScriptWorkspaceController { scriptWorkspaces.controller(for: project) }
     var voiceReviews: [UUID: VoiceReviewController] = [:]
     var frameComments: [UUID: FrameCommentController] = [:]
+    var handwritingStudios: [UUID: HandwritingStudioController] = [:]
+    func handwritingStudio(for project: Project) -> HandwritingStudioController {
+        if let current = handwritingStudios[project.id] { return current }
+        let next = HandwritingStudioController(project: project); handwritingStudios[project.id] = next; return next
+    }
     var graphicStudios: [UUID: GraphicStudioController] = [:]
     func graphicStudio(for project: Project) -> GraphicStudioController {
         if let current = graphicStudios[project.id] { return current }
@@ -158,31 +163,47 @@ final class EditorStore {
     var storage: StorageSetupController {
         if let storageController { return storageController }
         let controller = StorageSetupController(defaults: defaults,service: storageService,canLock: { [weak self] project in
-            guard let self,self.soundEditorProjects.isEmpty,self.runningProjectID == nil,!self.checking,!self.hasPendingReviewWork,!self.scriptWorkspaces.hasPendingWork,
-                  !self.reviewPlayers.values.contains(where: { $0.project.id == project.id }),
-                  self.projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
-            self.working = true;self.storageOwnsWorking = true;return true
+            self?.beginStorageWork(project) ?? false
         },release: { [weak self] in
-            guard let self,self.storageOwnsWorking else { return };self.storageOwnsWorking = false;self.working = false
+            self?.releaseStorageWork()
         },protectedPaths: { [weak self] in self?.protectedStoragePaths ?? [] },activate: { [weak self] project,journal in
             guard let self else { throw ProjectFailure.invalidProject };try await self.adoptStorageCopy(project,journal: journal)
         })
         storageController = controller;return controller
+    }
+    func beginStorageWork(_ project: Project) -> Bool {
+        guard soundEditorProjects.isEmpty,runningProjectID == nil,!checking,!hasPendingReviewWork,!scriptWorkspaces.hasPendingWork,
+              !reviewPlayers.values.contains(where: { $0.project.id == project.id }),
+              projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
+        working = true;storageOwnsWorking = true;return true
+    }
+    func releaseStorageWork() {
+        guard storageOwnsWorking else { return };storageOwnsWorking = false;working = false
     }
     private var protectedStoragePaths: [URL] {
         [Bundle.main.bundleURL,engineRoot]+projects.flatMap { project in
             [project.folder]+project.manifest.files.flatMap { [URL(fileURLWithPath: $0.originalPath),project.folder.appendingPathComponent($0.relativePath)] }
         }
     }
-    private func adoptStorageCopy(_ project: Project,journal: StorageMigrationJournal) async throws {
+    func adoptStorageCopy(_ project: Project,journal: StorageMigrationJournal) async throws {
         guard storageOwnsWorking,project.id == journal.plan.projectID,
               [.activated,.rolledBack].contains(journal.state),
               project.folder == (journal.state == .activated ? journal.destination:journal.plan.source),
               !scriptWorkspaces.hasPendingWork else { throw ProjectFailure.invalidProject }
+        guard soundEditorProjects.isEmpty,!reviewPlayers.values.contains(where: { $0.project.id == project.id }) else {
+            throw WorkflowFailure.invalid("Close review players for this project and all Sounds windows before switching its storage. Their drafts remain open.")
+        }
+        // Settings can await copy verification while the main window edits this draft.
+        // Recheck on the main actor before any controller eviction or root change.
+        guard handwritingStudios[project.id]?.hasPendingWork != true else {
+            throw WorkflowFailure.invalid("Save handwriting changes before switching this project's storage.")
+        }
         try scriptWorkspaces.remove(projectID: project.id)
         transcriptReviews.removeValue(forKey: project.id);voiceReviews.removeValue(forKey: project.id);frameComments.removeValue(forKey: project.id)
+        handwritingStudios.removeValue(forKey: project.id)
         graphicStudios.removeValue(forKey: project.id);fontStudios.removeValue(forKey: project.id);cutoutStudios.removeValue(forKey: project.id);liveConversations.removeValue(forKey: project.id)
         runs.removeValue(forKey: project.id);cutVersions.removeValue(forKey: project.id);currentCuts.removeValue(forKey: project.id)
+        cutVersionIssues.removeValue(forKey: project.id);currentCutIssues.removeValue(forKey: project.id);verifiedImportedCutIDs.removeValue(forKey: project.id)
         restorationID = UUID();selectionGeneration &+= 1
         projects.removeAll { $0.id == project.id };update(project)
         projectBookmarks.removeAll { $0.projectID == project.id }
@@ -288,7 +309,7 @@ final class EditorStore {
         } catch { notice = error.localizedDescription }
     }
 
-    var hasPendingReviewWork: Bool { hasUnsavedSoundEdits || (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
+    var hasPendingReviewWork: Bool { hasUnsavedSoundEdits || (storageController?.busy ?? false) || scriptWorkspaces.hasPendingWork || !failedVersionSaves.isEmpty || workspaceSetup.busy || handwritingStudios.values.contains(where: \.hasPendingWork) || graphicStudios.values.contains(where: \.hasPendingWork) || fontStudios.values.contains(where: \.hasPendingWork) || cutoutStudios.values.contains(where: \.hasPendingWork) || liveConversations.values.contains(where: \.hasPendingWork) || working || exportingDerivativeProjectID != nil || presentationState.hasUnsavedBriefs || hasPendingTranscriptSaves || voiceReviews.values.contains(where: \.hasPendingWork) || frameComments.values.contains(where: \.hasPendingWork) }
 
     func flushReviewWorkForExit() async -> Bool {
         let storageSaved = await storageController?.flushForExit() ?? true
@@ -301,6 +322,7 @@ final class EditorStore {
         for task in Array(saves.values) { await task.value }
         var voicesSaved = true
         if !(await scriptWorkspaces.flushForExit()) { voicesSaved = false }
+        for controller in handwritingStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in graphicStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in fontStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }
         for controller in cutoutStudios.values { if !(await controller.flushForExit()) { voicesSaved = false } }

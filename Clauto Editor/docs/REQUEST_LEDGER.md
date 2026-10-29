@@ -53,3 +53,9 @@ records the seven bounded recovery/Commands/focus/target/label fixes. Its five
 new tests and the earlier Storage/Sounds cases remain unexecuted. A separate
 isolated union with e08c41b (3D plus handwriting) must be frozen before requesting
 any combined build; neither source lane nor the running bundle is replaced.
+
+The [combined source candidate](COMBINED_SOURCE_2026-10-29.md) now reconciles that
+app lane with e08c41b in a separate worktree, retaining both source histories and
+the late-storage draft guards. Static file/source-list checks pass; compilation,
+all new tests and actual UI acceptance remain pending fresh admission. No older
+frozen build request is valid for this new source.

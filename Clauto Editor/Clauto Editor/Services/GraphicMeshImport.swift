@@ -12,7 +12,7 @@ enum GraphicMeshImport {
             let content = line.split(separator: "#",maxSplits: 1,omittingEmptySubsequences: false)[0],parts = content.split(whereSeparator: \.isWhitespace)
             guard let kind = parts.first else { continue }
             if kind == "v" {
-                guard parts.count==4,vertices.count<512,let x = Double(parts[1]),let y = Double(parts[2]),let z = Double(parts[3]) else { throw WorkflowFailure.invalid("OBJ vertices need three finite coordinates; this editor supports at most 512 vertices.") }
+                guard parts.count==4,vertices.count<20_000,let x = Double(parts[1]),let y = Double(parts[2]),let z = Double(parts[3]) else { throw WorkflowFailure.invalid("OBJ vertices need three finite coordinates; this editor supports at most 20,000 vertices.") }
                 let v = GraphicVector(x: x,y: y,z: z);guard v.finite else { throw ProjectFailure.invalidProject };vertices.append(v)
             } else if kind == "f" {
                 guard (4...17).contains(parts.count) else { throw WorkflowFailure.invalid("OBJ faces need 3–16 vertex indices.") }
@@ -34,7 +34,7 @@ enum GraphicMeshImport {
                     }
                 }
                 for i in 1..<(indices.count-1) { triangles.append([indices[0],indices[i],indices[i+1]]) }
-                guard triangles.count<=128 else { throw WorkflowFailure.invalid("Choose a mesh with at most 128 triangulated faces.") }
+                guard triangles.count<=40_000 else { throw WorkflowFailure.invalid("Choose a mesh with at most 40,000 triangulated faces.") }
             } else if kind == "o" || kind == "g" || kind == "s" { continue }
             else { throw WorkflowFailure.invalid("This OBJ uses unsupported statement \(kind). Export vertex-only geometry without materials or external references.") }
         }

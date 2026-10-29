@@ -1,0 +1,151 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u001f]+$"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 320,
+      "maximum": 7680
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 240,
+      "maximum": 7680
+    },
+    "frameCount": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 2880,
+      "multipleOf": 2
+    },
+    "rig": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": [
+            "hero",
+            "inspection",
+            "overhead"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "turntable",
+            "rock",
+            "reveal"
+          ]
+        },
+        "yawRadians": {
+          "type": "number",
+          "minimum": -6.283185307179586,
+          "maximum": 6.283185307179586
+        },
+        "pitchRadians": {
+          "type": "number",
+          "minimum": -1.5707963267948966,
+          "maximum": 1.5707963267948966
+        },
+        "sweepRadians": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 6.283185307179586
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "stepFrames": {
+          "const": 2
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "sageClay",
+            "oatCard",
+            "walnutIron"
+          ]
+        },
+        "light": {
+          "type": "string",
+          "enum": [
+            "warmSoft",
+            "raking"
+          ]
+        }
+      },
+      "required": [
+        "template",
+        "action",
+        "yawRadians",
+        "pitchRadians",
+        "sweepRadians",
+        "seed",
+        "stepFrames",
+        "material",
+        "light"
+      ],
+      "additionalProperties": false
+    },
+    "assumptions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 2048,
+        "minLength": 1
+      }
+    },
+    "reviewNotes": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "assetID": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]{0,99}$"
+        },
+        "meshSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "assetID",
+        "meshSHA256"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "label",
+    "width",
+    "height",
+    "frameCount",
+    "rig",
+    "assumptions",
+    "reviewNotes",
+    "model"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clauto.local/schemas/demo-request-v1.json",
+  "title": "Clauto reusable demo request v1",
+  "description": "Offline model-reference request. Python validation additionally enforces UTF-8 byte limits, finite numbers, source hashes and width*height <=8388608. No network or render is performed."
+}

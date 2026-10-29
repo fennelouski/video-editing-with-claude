@@ -30,6 +30,12 @@ Violating any of these is a bug, no matter how much better the code looks.
 1. **Nothing is generated.** No AI b-roll, no generated imagery, no procedural textures, no
    synthesised paper grain. Every pixel of texture came from her scanner or her camera. Missing
    assets **block the render** and produce a build sheet. See `style_guide.md` [S-001].
+   **Scoped user-authorized exception (2026-10-25):** handwritten text artwork may be
+   generated with available authorized tools in the native Handwriting studio. Preserve
+   exact text/locale, original pixels and provider provenance; require explicit spelling,
+   alpha-edge and style approval. Only approved saved presets inform future style reuse.
+   Read `docs/HANDWRITING.md` and `handwriting/document.schema.json`. This exception does
+   not authorize generated b-roll/textures or remote uploads of private source material.
 2. **Nothing is flattened.** The pipeline hands Final Cut Pro an FCPXML and stops. Every graphic
    stays independently movable, retimeable, deletable. Anything burned in is a decision the
    editor can no longer change. See [S-006].
@@ -93,6 +99,12 @@ stages 1–5  ─────►  FINAL CUT PRO  ─────►  stage 6
 ---
 
 ## Conventions
+
+- **Reusable illustrative 3D demos.** Read `docs/DEMO_STUDIO.md` and run
+  `python3 scripts/demo_studio.py discover` before authoring a new demo. Reuse
+  the versioned rig/schema/library; prepare a validated request for native
+  Studio → Graphics import. Preserve rights evidence, scientific qualifications
+  and real scanned artwork. The app's live Claude chat remains text-only.
 
 - **Source time vs timeline time.** Stage 3 anchors cues to the transcript (source time). Stage 2
   removes ~30% of that source. Anything positioned on the timeline — graphics, markers, chapters,

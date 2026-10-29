@@ -17,9 +17,11 @@ struct GraphicBuiltFrame: Sendable {
 struct GraphicFrameBuilder: Sendable {
     let scene: GraphicScene
     private var simulation: GraphicParticleSimulation?
+    private var demo: GraphicDemoFrameBuilder?
     init(_ scene: GraphicScene) throws {
         try scene.validate();self.scene = scene
         if let particles = scene.particles { simulation = try .init(particles) }
+        if scene.demoRig != nil { demo = try .init(scene: scene) }
     }
     mutating func frame(_ index: Int) throws -> GraphicBuiltFrame {
         try Task.checkCancellation();guard (0..<scene.frameCount).contains(index) else { throw ProjectFailure.invalidProject }
@@ -91,6 +93,7 @@ struct GraphicFrameBuilder: Sendable {
             }
             labels.append(.init(text: "Conserved typed atoms · illustrative rearrangement, not a reaction path",x: box.x,y: box.y+box.h+height*0.025,size: height*0.025))
         case .object:
+            if let demo { shapes = try demo.frame(index);break }
             let model = try required(scene.object),center = model.center
             let centered = model.vertices.map { GraphicVector(x: $0.x-center.x,y: $0.y-center.y,z: $0.z-center.z) }
             let extent = max(0.001,centered.map { sqrt($0.x*$0.x+$0.y*$0.y+$0.z*$0.z) }.max() ?? 1),zoom = 2.4/extent
@@ -115,7 +118,7 @@ struct GraphicFrameBuilder: Sendable {
             let e = point(equilibrium.quantity,equilibrium.price);shapes.append(circle(e.x,e.y,max(4,width*0.007),.sage))
             labels += [.init(text: String(format: "Q* = %.3g · P* = %.3g",equilibrium.quantity,equilibrium.price),x: box.x+box.w*0.4,y: box.y,size: height*0.035),.init(text: "Quantity → · Price ↑ · green supply / oat demand",x: box.x,y: box.y+box.h+height*0.025,size: height*0.025)]
         }
-        guard shapes.count<=256,shapes.allSatisfy(\.valid),labels.count<=100 else { throw WorkflowFailure.invalid("This scene exceeds the bounded graphics renderer. Reduce its displayed elements.") }
+        guard shapes.count<=160_000,(shapes.count<=256 || shapes.allSatisfy({ $0.tags.x==2 })),shapes.allSatisfy(\.valid),labels.count<=100 else { throw WorkflowFailure.invalid("This scene exceeds the bounded graphics renderer. Reduce its displayed elements.") }
         return .init(primitives: shapes,annotations: labels)
     }
     private func required<T>(_ value: T?) throws -> T { guard let value else { throw ProjectFailure.invalidProject };return value }

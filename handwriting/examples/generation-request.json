@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "clauto.handwriting.generation-request",
+  "requestID": "BA2F10E7-74A4-4114-A2B7-B0E4C878C1BE",
+  "exactText": "Crème brûlée",
+  "exactTextUTF8SHA256": "364046a7365569d1d81df151c65c3c3ab4153c1e173f98e5835a9f3fc63eeb41",
+  "locale": "fr",
+  "prompt": "Create isolated readable handwritten raster ink. Text verbatim (fr): \"Crème brûlée\". Preserve every letter, case, space, line break and diacritic. Use warm walnut charcoal felt-tip handwriting on genuine transparent alpha. Ample margins; no cropped ink, background, pen, hand, border or additional words.",
+  "providerBoundary": "Use available built-in imagegen skill, then import the actual result in Clauto. No live provider is embedded in the app.",
+  "requestedProvider": "Available user-authorized image generation tool",
+  "transparentBackground": true,
+  "sourceStyleID": null,
+  "status": "awaitingProvider",
+  "approval": "draft",
+  "nextAction": "Generate with an available supported tool; preserve original and receipt, then import with provider/model/requestID. Human spelling and alpha-edge approval required.",
+  "capability": "Editable raster mask reveal approximation; not recorded or reconstructed pen strokes"
+}

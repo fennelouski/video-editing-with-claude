@@ -14,6 +14,11 @@ struct GraphicStudioView: View {
                         ClautoChoice(title: "Start with",selection: $kind,options: GraphicScene.Kind.allCases.map { ($0,$0.title) })
                         ClautoAction("Create graphic",icon: .add,kind: .primary) { controller.create(kind: kind,label: newName) }.disabled(controller.hasPendingWork)
                     }
+                    ClautoAction("Import prepared 3D demo",icon: .folder) {
+                        let panel = NSOpenPanel();panel.canChooseDirectories = false;panel.allowsMultipleSelection = false;panel.allowedContentTypes = [.json]
+                        panel.begin { if $0 == .OK,let url = panel.url { controller.importDemo(url) } }
+                    }.disabled(controller.hasPendingWork)
+                    Text("Prepared demos carry their model, camera, lighting, motion and recorded source/license information. Import creates a separate saved scene; earlier edits stay available.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
                     if !controller.scenes.isEmpty {
                         ClautoChoice(title: "Saved scenes",selection: Binding(get: { controller.draft?.id ?? controller.scenes[0].id },set: controller.open),options: controller.scenes.map { ($0.id,$0.label+" · "+$0.kind.title) }).disabled(controller.hasPendingWork)
                         if controller.draft == nil { ClautoAction("Open scene") { controller.open(controller.scenes[0].id) } }
@@ -85,6 +90,35 @@ struct GraphicStudioView: View {
 private extension GraphicScene.Kind {
     var title: String { switch self { case .titleCard:"Title & caption";case .particles:"Particle physics";case .molecule:"Molecule";case .atom:"Atom illustration";case .reaction:"Reaction diagram";case .object:"3D object";case .market:"Supply & demand" } }
 }
+private struct GraphicDemoControls: View {
+    @Bindable var controller: GraphicStudioController
+    let scene: GraphicScene
+    var body: some View {
+        if let rig = scene.demoRig {
+            VStack(alignment: .leading,spacing: 12) {
+                HStack {
+                    ClautoChoice(title: "Studio template",selection: Binding(get: { rig.template },set: { controller.applyDemoTemplate($0,sceneID: scene.id) }),options: GraphicDemoRig.Template.allCases.map { ($0,$0.title) })
+                    ClautoChoice(title: "Motion",selection: Binding(get: { rig.action },set: { action in update { $0.action = action } }),options: GraphicDemoRig.Action.allCases.map { ($0,$0.title) })
+                }
+                HStack {
+                    ClautoChoice(title: "Matte material",selection: Binding(get: { rig.material },set: { material in update { $0.material = material } }),options: GraphicDemoRig.Material.allCases.map { ($0,$0.title) })
+                    ClautoChoice(title: "Lighting",selection: Binding(get: { rig.light },set: { light in update { $0.light = light } }),options: GraphicDemoRig.Light.allCases.map { ($0,$0.title) })
+                }
+                HStack {
+                    GraphicNumberField(title: "Camera yaw · radians",value: rig.yawRadians) { value in update { $0.yawRadians = value } }
+                    GraphicNumberField(title: "Camera pitch · radians",value: rig.pitchRadians) { value in update { $0.pitchRadians = value } }
+                    GraphicNumberField(title: "Motion sweep · radians",value: rig.sweepRadians) { value in update { $0.sweepRadians = value } }
+                }
+                Text("Motion steps every second frame at 23.976 fps. Matte colors use Sage & Oat; add photographed or scanned artwork as separate layers. These illustrative surfaces contain no generated texture.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+            }
+        }
+    }
+    private func update(_ work: @escaping (inout GraphicDemoRig) -> Void) {
+        controller.changeScene(scene.id,kind: .object) { draft in
+            guard var rig = draft.scene.demoRig else { return };work(&rig);draft.scene.demoRig = rig
+        }
+    }
+}
 private struct GraphicNumberField: View {
     let title: String
     let value: Double
@@ -129,10 +163,18 @@ private struct GraphicModelControls: View {
             }
             if let model = scene.object {
                 HStack { ClautoAction("Import OBJ geometry",icon: .folder) { let panel = NSOpenPanel();panel.canChooseDirectories = false;panel.allowsMultipleSelection = false;panel.allowedContentTypes = [UTType(filenameExtension: "obj") ?? .data];panel.begin { if $0 == .OK,let url = panel.url { controller.importOBJ(url,sceneID: scene.id) } } };ClautoAction("Use cube") { controller.useCube(sceneID: scene.id) } }
-                Text(controller.draft?.objectSource?.name ?? "Parametric cube").font(ClautoDesign.caption)
+                Text(controller.draft?.objectSource?.name ?? scene.demoProvenance?.name ?? "Parametric cube").font(ClautoDesign.caption)
                 Text("\(model.vertices.count) vertices · \(model.triangles.count) triangles. Vertex-only, planar convex OBJ faces; no external materials or textures.").font(ClautoDesign.caption)
-                number("Spin · radians / second",model.spinRadiansPerSecond) { $0.object!.spinRadiansPerSecond = $1 }
-                GraphicColorPicker(title: "Object color",value: model.color) { value in controller.changeScene(scene.id,kind: scene.kind) { $0.scene.object!.color = value } }
+                if scene.demoRig != nil { GraphicDemoControls(controller: controller,scene: scene) }
+                else {
+                    ClautoAction("Use craft studio") { controller.applyDemoTemplate(.hero,sceneID: scene.id) }
+                    number("Spin · radians / second",model.spinRadiansPerSecond) { $0.object!.spinRadiansPerSecond = $1 }
+                    GraphicColorPicker(title: "Object color",value: model.color) { value in controller.changeScene(scene.id,kind: scene.kind) { $0.scene.object!.color = value } }
+                }
+                if let provenance = scene.demoProvenance {
+                    Text("\(provenance.name) · \(provenance.creator)").font(ClautoDesign.caption)
+                    Text("Recorded license: \(provenance.license) · \(provenance.rightsStatus.rawValue). Source and license declarations remain with each exported scene; review before publication.").font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet).textSelection(.enabled)
+                }
             }
             if let model = scene.molecule {
                 number("Spin · radians / second",model.spinRadiansPerSecond) { $0.molecule!.spinRadiansPerSecond = $1 }

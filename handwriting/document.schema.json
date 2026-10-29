@@ -1,0 +1,363 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revisionID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "parentRevisionID": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "projectID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "exactText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "imported",
+            "aiGenerated",
+            "fixture"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "requestID": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "sourceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sourceSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "model",
+        "prompt",
+        "requestID",
+        "sourceName",
+        "sourceSHA256"
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "extraction": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "sourceAlpha",
+                "lightPaper",
+                "darkPaper"
+              ]
+            },
+            "threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.95
+            },
+            "softness": {
+              "type": "number",
+              "minimum": 0.001,
+              "maximum": 1
+            },
+            "inkRed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "inkGreen": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "inkBlue": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "cleanup": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "mode": {
+                    "enum": [
+                      "restore",
+                      "erase"
+                    ]
+                  },
+                  "radiusPixels": {
+                    "type": "number"
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "maxItems": 1024
+                  }
+                },
+                "required": [
+                  "id",
+                  "mode",
+                  "radiusPixels",
+                  "points"
+                ]
+              },
+              "maxItems": 256
+            }
+          },
+          "required": [
+            "mode",
+            "threshold",
+            "softness",
+            "inkRed",
+            "inkGreen",
+            "inkBlue",
+            "cleanup"
+          ]
+        },
+        "strokes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ]
+                },
+                "maxItems": 4096
+              },
+              "startFrame": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2400,
+                "multipleOf": 2
+              },
+              "durationFrames": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 2400,
+                "multipleOf": 2
+              },
+              "pauseAfterFrames": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2400,
+                "multipleOf": 2
+              },
+              "reverse": {
+                "type": "boolean"
+              },
+              "easing": {
+                "enum": [
+                  "linear",
+                  "easeInOut"
+                ]
+              },
+              "maskWidthPixels": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 16384
+              }
+            },
+            "required": [
+              "id",
+              "points",
+              "startFrame",
+              "durationFrames",
+              "pauseAfterFrames",
+              "reverse",
+              "easing",
+              "maskWidthPixels"
+            ]
+          },
+          "maxItems": 512
+        },
+        "frameCount": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2400,
+          "multipleOf": 2
+        },
+        "rendererVersion": {
+          "const": "clauto-handwriting-mask-1"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "extraction",
+        "strokes",
+        "frameCount",
+        "rendererVersion"
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "approved",
+            "rejected"
+          ]
+        },
+        "liked": {
+          "type": "boolean"
+        },
+        "spellingChecked": {
+          "type": "boolean"
+        },
+        "alphaEdgesChecked": {
+          "type": "boolean"
+        },
+        "reviewer": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "comments": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "status",
+        "liked",
+        "spellingChecked",
+        "alphaEdgesChecked",
+        "reviewer",
+        "comments",
+        "contexts"
+      ]
+    },
+    "generationPrompt": {
+      "type": "string",
+      "maxLength": 16384
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "revisionID",
+    "projectID",
+    "exactText",
+    "locale",
+    "provenance",
+    "recipe",
+    "review",
+    "generationPrompt"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clauto://handwriting/document-v1",
+  "title": "Clauto editable handwriting document",
+  "description": "Native validation additionally enforces byte limits, source digest, exact text/locale binding, timing within frameCount, review checks, image geometry and pixel coverage. Imported approval claims are discarded by native UI."
+}

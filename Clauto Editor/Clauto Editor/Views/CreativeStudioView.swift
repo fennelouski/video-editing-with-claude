@@ -7,7 +7,7 @@ struct CreativeStudioView: View {
     var body: some View {
         VStack(alignment: .leading,spacing: 0) {
             HStack {
-                ClautoChoice(title: "Creative studio",selection: $section,options: [("Templates","Templates"),("Cutouts","Cutouts"),("Fonts","Fonts"),("Graphics","Graphics")])
+                ClautoChoice(title: "Creative studio",selection: $section,options: [("Templates","Templates"),("Cutouts","Cutouts"),("Fonts","Fonts"),("Graphics","Graphics"),("Handwriting","Handwriting")])
                 Spacer()
             }.padding(.horizontal,28).padding(.vertical,14)
             ClautoRule()
@@ -42,6 +42,7 @@ struct CreativeStudioView: View {
                     }.padding(28)
                 }
             }
+            else if section == "Handwriting" { HandwritingStudioView(controller: store.handwritingStudio(for: project)) }
             else if section == "Graphics" { GraphicStudioView(controller: store.graphicStudio(for: project)) }
             else if section == "Fonts" { FontStudioView(controller: store.fontStudio(for: project)) }
             else { CutoutStudioView(controller: store.cutoutStudio(for: project)) }
