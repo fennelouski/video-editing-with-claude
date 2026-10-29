@@ -5,6 +5,7 @@ import Testing
 #else
 @testable import Clauto_Editor
 import AppKit
+import AVFoundation
 import SwiftUI
 #endif
 
@@ -200,6 +201,60 @@ struct ProjectExperienceTests {
 #endif
 
 #if !canImport(ClautoCore)
+@MainActor @Suite(.serialized) struct ReviewPlayerReadinessNativeTests {
+    @Test func warmPreviewPublishesReadinessAndCachedAttachReconcilesWithoutPlaybackOrCapture() async throws {
+        let f = try await FrameReviewFixture.make();defer { try? FileManager.default.removeItem(at: f.root) }
+        let base = f.project.folder.appendingPathComponent("cuts/v001"),movie = base.appendingPathComponent("exports/review.mp4")
+        let movieSHA = TranscriptSourceMap.sha(try Data(contentsOf: movie))
+        let xml = Data(ReviewMovieImportService.flatReviewXML(movie: movie,frames: 36,width: 160,height: 90).utf8)
+        try xml.write(to: base.appendingPathComponent("exports/cut.fcpxml"))
+        try JSONSerialization.data(withJSONObject: ["saved_sha256":TranscriptSourceMap.sha(xml)]).write(to: base.appendingPathComponent("exports/cut.snapshot.json"))
+        let receipt = try JSONSerialization.data(withJSONObject: ["sha256":movieSHA,"technical_checks_passed":true])
+        try receipt.write(to: base.appendingPathComponent("inputs/original-verification.json"))
+        var version = CutVersion(number: 1,label: "Synthetic warm review",engineVersion: "synthetic",runID: UUID(),artifacts: ["exports/review.mp4","exports/cut.fcpxml","exports/cut.snapshot.json","plan/cut.plan.json","inputs/import-binding.json"],approvedPlanHash: f.target.approvedPlanSHA256,briefHash: f.target.approvedBriefSHA256,approvedScript: "inputs/script/approved.md")
+        version.id = f.target.versionID
+        try JSONSerialization.data(withJSONObject: ["scope":"review_existing_movie_only","projectID":f.project.id.uuidString,"versionID":version.id.uuidString,"movieSHA256":movieSHA,"verificationReceiptSHA256":TranscriptSourceMap.sha(receipt)]).write(to: base.appendingPathComponent("inputs/import-binding.json"))
+        let encoder = JSONEncoder();encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(version).write(to: base.appendingPathComponent("clauto-version.json"))
+        try encoder.encode(version.id).write(to: f.project.folder.appendingPathComponent("cuts/current.json"))
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let store = EditorStore(defaults: defaults),router = ReviewWindowRouter();router.store = store;router.intendedVersionID = version.id
+        let provider = MockVoiceProvider(),voice = try VoiceReviewController(project: f.project,provider: provider,defaults: defaults)
+        store.voiceReviews[f.project.id] = voice
+        let session = store.reviewPlayer(project: f.project,version: version,url: movie,ownerID: router.id),player = session.player
+        defer { session.dispose();store.reviewPlayers.removeValue(forKey: session.id) }
+        let item = try #require(player.currentItem)
+        // Establish the previously missed ordering: item READY while identity
+        // is still absent. The player remains paused throughout this test.
+        for _ in 0..<1000 { if item.status == .readyToPlay { break };try await Task.sleep(for: .milliseconds(2)) }
+        try #require(item.status == .readyToPlay)
+        #expect(session.endpoint == nil && !session.ready && !session.control.transportEnabled)
+        session.attach(to: router)
+        for _ in 0..<1000 { if session.endpoint != nil && !session.checkingPreview { break };try await Task.sleep(for: .milliseconds(2)) }
+        let endpoint = try #require(session.endpoint)
+        #expect(session.ready && session.control.ready && endpoint.ready && session.issue == nil)
+        #expect(endpoint.target.projectID == f.project.id && endpoint.target.versionID == version.id && endpoint.target.preview.sha256 == movieSHA)
+        #expect(endpoint.target.approvedPlanSHA256 == f.target.approvedPlanSHA256 && endpoint.target.approvedScriptSHA256 == f.target.approvedScriptSHA256)
+        session.leaveWorkspace()
+        // Deliver one readiness notification while a prerequisite is absent.
+        // Clear it and reattach synchronously: no queued callback can repair
+        // stale readiness before the immediate assertion on cached attach.
+        session.issue = "Synthetic readiness prerequisite not yet reconciled"
+        item.willChangeValue(forKey: "status");item.didChangeValue(forKey: "status")
+        for _ in 0..<1000 { if !session.ready { break };try await Task.sleep(for: .milliseconds(2)) }
+        try #require(!session.ready && item.status == .readyToPlay)
+        session.issue = nil;session.attach(to: router)
+        #expect(session.ready && session.endpoint === endpoint && session.endpoint?.target == endpoint.target)
+        #expect(session.player === player && router.endpoints[session.id] === endpoint && store.reviewPlayers.count == 1)
+        #expect(player.timeControlStatus == .paused && player.rate == 0 && !session.playing)
+        #expect(voice.target == nil && !voice.isAttached(to: session.id) && !voice.active && !session.bindingVoice)
+        #expect(await provider.starts == 0)
+        #expect(await provider.microphoneRequests == 0)
+        #expect(await provider.speechRequests == 0)
+        #expect(await store.flushReviewWorkForExit())
+    }
+}
+
 extension ProjectExperienceNativeTests {
     @Test func retryMissingPreviewRequiresSavedBytesAndKeepsSessionAndDraftOwnership() async throws {
         let f = try await FrameReviewFixture.make();defer { try? FileManager.default.removeItem(at: f.root) }

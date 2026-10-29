@@ -62,7 +62,10 @@ import Observation
     func attach(to router: ReviewWindowRouter) {
         guard !disposed, router.id == ownerID else { return }
         self.router = router; router.inlineEndpointID = id; workspaceVisible = true; returningToWorkspace = false
-        if let endpoint { router.register(endpoint); if router.intendedVersionID == version.id { router.select(id) }; return }
+        if let endpoint {
+            router.register(endpoint); if router.intendedVersionID == version.id { router.select(id) }
+            refresh(); return
+        }
         guard preparing == nil, let store else { return }
         checkingPreview = true
         preparing = Task { [weak self] in
@@ -79,6 +82,8 @@ import Observation
                 self.control.transportEnabled = self.issue == nil
                 self.endpoint = .init(id: self.id,project: self.project,target: target,driver: self.control)
                 if let endpoint = self.endpoint, self.workspaceVisible || self.presentation.detached { self.router?.register(endpoint); if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
+                // A paused item may already be ready, with no later KVO event.
+                self.refresh()
                 await self.loadFeedback(using: store)
             } catch { self.issue = error.localizedDescription;self.ready = false }
         }
