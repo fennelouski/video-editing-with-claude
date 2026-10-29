@@ -10,6 +10,7 @@ struct ReviewWorkspace: View {
     @State private var assets = true
     @State private var feedback = true
     @State private var building = false
+    @State private var exportingVersion: CutVersion?
     @State private var soundEditing = false
     @State private var assetPreview: ProjectAssetPreview?
     @State private var focusGeneration = UUID()
@@ -17,7 +18,7 @@ struct ReviewWorkspace: View {
     @FocusState private var pane: Pane?
     private enum Pane: Hashable { case assets, video, feedback }
     private var versions: [CutVersion] { store.cutVersions[project.id] ?? [] }
-    private var selected: CutVersion? { versions.first { $0.id == versionID } ?? store.currentCuts[project.id] ?? versions.last }
+    private var selected: CutVersion? { versions.first { $0.id == versionID } ?? store.currentCuts[project.id] ?? (store.currentCutIssues[project.id] == nil ? versions.last:nil) }
     private var scripts: ScriptWorkspaceController { store.scriptWorkspace(for: project) }
     private var selectedAssembly: ScriptAssemblyReview? {
         guard !scripts.busy, scripts.session?.state.reviewInProgress != true, scripts.failure == nil, scripts.assemblyFailure == nil else { return nil }
@@ -35,7 +36,10 @@ struct ReviewWorkspace: View {
                     Text(selectedAssembly.map { "Script assembly · \($0.record.title)" } ?? selected.map { "v\($0.number) · \($0.label)" } ?? "Review").lineLimit(1).textSelection(.enabled)
                     Spacer()
                     Button("Commands…") { router.perform(.palette,explicitControl: true) }
-                    Button("Build…") { building = true }
+                    Menu("Build / export…") {
+                        Button(store.currentCuts[project.id].map { "Project build · current v\($0.number)…" } ?? "Project build…") { building = true }
+                        if selectedAssembly == nil,let selected { Button("Export watched v\(selected.number)…") { exportingVersion = selected } }
+                    }
                     Button("Script") { router.tab = "Script" }.accessibilityIdentifier("cutOpenScript")
                     Button("Sounds…") {
                         for session in store.reviewPlayers.values where session.ownerID==router.id && session.project.id==project.id { session.control.pause() }
@@ -43,6 +47,12 @@ struct ReviewWorkspace: View {
                     }.disabled(selected == nil || selectedAssembly != nil).accessibilityIdentifier("editTimelineSounds")
                     Button { feedback.toggle() } label: { ClautoIcon(.conversation) }.accessibilityLabel("Toggle feedback").clautoHelp("Feedback")
                 }.padding(10)
+                if let issue = store.currentCutIssues[project.id] {
+                    Text(issue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled).padding(10).accessibilityIdentifier("unresolvedCurrentCut")
+                }
+                if let selected,!CutVersionPresentation(selected).restrictions.isEmpty {
+                    Text(CutVersionPresentation(selected).restrictions.joined(separator: " · ")).font(ClautoDesign.type(13,weight: .semibold)).foregroundStyle(ClautoDesign.ember).padding(8)
+                }
                 if selectedAssembly == nil,selected?.artifacts.contains("inputs/import-binding.json") == true {
                     Text("Rendered review movie · original editable source layers are not included. Source attachments are retained references, not new script or fact approval.")
                         .font(ClautoDesign.caption).frame(maxWidth: .infinity,alignment: .leading).padding(10).accessibilityIdentifier("renderedReviewNotice")
@@ -57,11 +67,30 @@ struct ReviewWorkspace: View {
                                     if let packet = await FileDialogs.files().first { await store.importVerifiedReview(packet,project: project) }
                                 } }.disabled(store.working).accessibilityIdentifier("importVerifiedReview")
                                 ForEach(versions) { version in
+                                    let display = store.versionPresentation(version,projectID: project.id)
                                     Button { assemblyID = nil; versionID = version.id } label: {
-                                        HStack { ClautoIcon(version.id == selected?.id ? .play:.version); Text("v\(version.number) · \(version.label)").frame(maxWidth: .infinity,alignment: .leading) }
+                                        VStack(alignment: .leading,spacing: 4) {
+                                            HStack {
+                                                Text("v\(version.number)").font(.caption.monospacedDigit().weight(.semibold))
+                                                if store.currentCuts[project.id]?.id == version.id { Text("Current").font(.caption2) }
+                                                if selectedAssembly == nil,version.id == selected?.id { Text("Watched").font(.caption2) }
+                                            }
+                                            Text(display.editorialLabel).lineLimit(2).frame(maxWidth: .infinity,alignment: .leading)
+                                            ForEach(display.restrictions,id: \.self) { Text($0).font(.caption.weight(.semibold)).foregroundStyle(ClautoDesign.ember).fixedSize(horizontal: false,vertical: true) }
+                                            if display.importedMovie { Text("Imported movie · source layers absent").font(.caption2).foregroundStyle(ClautoDesign.quiet) }
+                                        }.padding(.vertical,4)
                                     }.buttonStyle(ClautoInlineButtonStyle(selected: selectedAssembly == nil && version.id == selected?.id))
                                         .disabled(router.editor != nil)
+                                        .accessibilityLabel("v\(version.number) · \(display.fullLabel)")
+                                        .accessibilityValue([store.currentCuts[project.id]?.id == version.id ? "Current":"",selectedAssembly == nil && selected?.id == version.id ? "Watched":""].filter { !$0.isEmpty }.joined(separator: ", "))
+                                        .help(display.fullLabel)
                                         .accessibilityAddTraits(version.id == selected?.id ? .isSelected : [])
+                                }
+                                ForEach(store.cutVersionIssues[project.id] ?? []) { issue in
+                                    VStack(alignment: .leading,spacing: 4) {
+                                        Text(issue.folder+" · unavailable").font(.caption.weight(.semibold))
+                                        Text(issue.detail).font(.caption).textSelection(.enabled)
+                                    }.foregroundStyle(ClautoDesign.ember).accessibilityElement(children: .combine)
                                 }
                                 if scripts.busy {
                                     Text("Checking script assemblies…").font(ClautoDesign.caption)
@@ -93,6 +122,7 @@ struct ReviewWorkspace: View {
                                 }
                             }.padding(12)
                         }.focusable().focused($pane,equals: .assets).frame(width: geometry.size.width >= 1100 ? 200 : 160)
+                            .overlay(Rectangle().stroke(pane == .assets ? ClautoDesign.ink:.clear,lineWidth: 2).allowsHitTesting(false).accessibilityHidden(true))
                         Divider()
                     }
                     if let assembly = selectedAssembly {
@@ -113,25 +143,45 @@ struct ReviewWorkspace: View {
             }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { workspaceWidth = $0 }
         }.background { ClautoThemeSurface() }.textSelection(.enabled)
             .sheet(item: $assetPreview) { item in ProjectAssetPreviewView(item: item) }
-            .onAppear { if let id = router.returnVersionID { versionID = id; router.returnVersionID = nil }; router.onWorkspaceCommand = handle }
+            .onAppear { if let id = router.returnVersionID { versionID = id; router.returnVersionID = nil }; router.onWorkspaceCommand = handle;updateCommandContext() }
             .onChange(of: router.returnVersionID) { if let id = router.returnVersionID { versionID = id; router.returnVersionID = nil } }
             .onChange(of: selected?.id) {
                 // An externally selected version must never hide an owned
                 // draft. Keep its Save/Cancel route in the existing editor.
                 if let draft = router.editor?.draft,draft.request.target.versionID != selected?.id { router.inlineDrawing = false }
+                updateCommandContext()
             }
-            .onDisappear { router.onWorkspaceCommand = nil }
+            .onChange(of: selectedAssembly?.id) { updateCommandContext() }
+            .onChange(of: versions.map(\.id)) { updateCommandContext() }
+            .onDisappear { router.onWorkspaceCommand = nil;router.workspaceCapabilities = .init() }
             .task {
                 await scripts.load()
                 if let id = scripts.requestedAssemblyID { assemblyID = id; scripts.requestedAssemblyID = nil }
             }
             .sheet(isPresented: $building) {
-                VStack { HStack { Text("Build and export").font(.title2); Spacer(); Button("Done") { building = false }.keyboardShortcut(.cancelAction) }.padding(); CutView(store: store,playbackRouter: router,showPlayers: false) }
+                VStack {
+                    HStack { Text("Project build and current-cut export").font(.title2); Spacer(); Button("Done") { building = false }.keyboardShortcut(.cancelAction) }.padding()
+                    if let selected { Text("Watched review: v\(selected.number). This workspace uses the project's current cut shown below.").font(.caption).padding(.horizontal) }
+                    CutView(store: store,playbackRouter: router,showPlayers: false)
+                }
                     .frame(minWidth: 780,minHeight: 640).background(ClautoDesign.paper).clautoThemeAppearance()
             }
             .sheet(isPresented:$soundEditing) {
                 if let selected { SoundTimelineEditorView(store:store,project:project,version:selected) }
             }
+            .sheet(item: $exportingVersion) { version in
+                VStack(alignment: .leading,spacing: 16) {
+                    HStack { Text("Export watched v\(version.number)").font(.title2);Spacer();Button("Done") { exportingVersion = nil }.keyboardShortcut(.cancelAction) }
+                    Text(version.label).font(.caption).textSelection(.enabled)
+                    Text("This export is pinned to the selected saved version. It does not change the current cut.").font(.caption)
+                    DerivativeView(store: store,project: project,version: version).id(version.id)
+                }.padding(24).frame(minWidth: 780,minHeight: 580).clautoThemeAppearance()
+            }
+    }
+    private func updateCommandContext() {
+        let rendered = selectedAssembly == nil && selected.map { $0.preferredArtifact(".preview.mp4") != nil || $0.preferredArtifact(".mp4") != nil } == true
+        let index = selectedAssembly == nil ? selected.flatMap { version in versions.firstIndex { $0.id == version.id } }:nil
+        router.workspaceCapabilities = .init(watchedVersionID: selectedAssembly == nil ? selected?.id:nil,renderedReview: rendered,previousVersion: index.map { $0 > 0 } ?? false,nextVersion: index.map { $0+1 < versions.count } ?? false)
     }
     private func handle(_ command: EditorCommand) {
         switch command {
@@ -179,7 +229,9 @@ struct ReviewVersionWorkspace: View {
                 if let notice = session.presentationNotice {
                     HStack { Text(notice).font(.caption).textSelection(.enabled); Button("Dismiss") { session.presentationNotice = nil } }.padding(8)
                 }
-                if let issue = session.issue { Text(issue).font(.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled).padding(8) }
+                if let issue = session.issue {
+                    HStack { Text(issue).font(.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled);Button("Retry preview") { session.retryPreview() }.disabled(!session.canRetryPreview).accessibilityIdentifier("retryReviewPreview") }.padding(8)
+                }
                 ReviewDrawingControls(session: session,router: router)
                 VStack(spacing: 8) {
                     ClautoSlider(value: Binding(get: { session.playhead },set: { session.control.seek(seconds: $0) }),range: 0...max(1,session.duration),label: "Review playhead").disabled(!session.ready || router.editor != nil)
@@ -229,6 +281,7 @@ struct ReviewVersionWorkspace: View {
                     }.padding(12)
                     }
                 }.focusable().focused($feedbackFocused).frame(width: rightWidth)
+                    .overlay(Rectangle().stroke(feedbackFocused ? ClautoDesign.ink:.clear,lineWidth: 2).allowsHitTesting(false).accessibilityHidden(true))
             }
         }.onAppear { router.intendedVersionID = version.id; session.attach(to: router) }.onDisappear { session.leaveWorkspace() }
             .onChange(of: focusGeneration) { if focus == .video { session.presentation.focus() }; if focus == .feedback { feedbackFocused = true } }

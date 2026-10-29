@@ -129,7 +129,7 @@ private struct ControlledLocalEditWorker: ConversationLocalEditExecuting {
         let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
         try await withCleanup(probe,controller: updates) {
             await conversation.load();conversation.edit("make it portrait at 720p")
-            #expect(await conversation.submit())
+            await conversation.reviewLocalTarget();#expect(await conversation.submit())
             try await wait { await probe.calls.count==1 }
             let call = try #require(await probe.calls.first)
             #expect(call.request.target==target && call.request.output.aspect=="9:16" && call.request.output.resolution == .hd)
@@ -146,10 +146,10 @@ private struct ControlledLocalEditWorker: ConversationLocalEditExecuting {
         let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
         try await withCleanup(probe,controller: updates) {
             await conversation.load();conversation.edit("Please make the story more interesting")
-            #expect(await conversation.submit());try await Task.sleep(for: .milliseconds(25))
+            await conversation.reviewLocalTarget();#expect(await conversation.submit());try await Task.sleep(for: .milliseconds(25))
             #expect(conversation.document?.messages.first?.localEdit==nil)
             #expect(await probe.calls.isEmpty)
-            conversation.edit("make it portrait");#expect(await conversation.submit())
+            conversation.edit("make it portrait");await conversation.reviewLocalTarget();#expect(await conversation.submit())
             try await wait { await probe.calls.count==1 };let call = try #require(await probe.calls.first)
             conversation.edit("New unsent words remain in the composer")
             try await wait { !(await probe.cancellationRequests).isEmpty }
@@ -220,7 +220,7 @@ private struct ControlledLocalEditWorker: ConversationLocalEditExecuting {
             factory: { ControlledLocalEditWorker(probe: probe) },onExport: { outputs.append($0) })
         let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
         try await withCleanup(probe,controller: updates) {
-            await conversation.load();conversation.edit("make it portrait");#expect(await conversation.submit())
+            await conversation.load();conversation.edit("make it portrait");await conversation.reviewLocalTarget();#expect(await conversation.submit())
             try await wait { await probe.calls.count==1 };let call = try #require(await probe.calls.first)
             var lease: ProjectMutationLease? = try ProjectMutationLease.acquire(project)
             try await probe.complete(call.id);try await wait { updates.savingPendingResult }
@@ -281,4 +281,25 @@ private struct ControlledLocalEditWorker: ConversationLocalEditExecuting {
         }
     }
 
+}
+
+extension ConversationLocalEditControllerTests {
+    @Test func localTargetIsShownBeforeSendAndAChangedCurrentCutRetainsTheDraft() async throws {
+        let (root,_,project,target) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        var current = target
+        let controller = LiveConversationController(project: project,clientLocator: { nil },localTarget: { current })
+        await controller.load();controller.edit("make it portrait")
+        #expect(!controller.canSend && controller.needsLocalTargetReview)
+        await controller.reviewLocalTarget()
+        #expect(controller.canSend && controller.localTargetPreview == target)
+        current = .init(projectID: project.id,versionID: UUID(),versionNumber: 3,timelineSHA256: String(repeating: "b",count: 64),engineVersion: target.engineVersion,duration: target.duration,aspect: target.aspect,resolution: target.resolution)
+        #expect(await controller.submit() == false)
+        #expect(controller.draft.text == "make it portrait" && controller.document?.messages.isEmpty == true)
+        #expect(!controller.canSend && controller.localTargetPreview == nil)
+        await controller.reviewLocalTarget()
+        #expect(controller.localTargetPreview?.versionNumber == 3 && controller.canSend)
+        #expect(await controller.submit())
+        #expect(controller.document?.messages.last?.localEdit?.target == current)
+        #expect(await controller.flushForExit())
+    }
 }

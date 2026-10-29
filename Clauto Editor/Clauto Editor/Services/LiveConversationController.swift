@@ -30,6 +30,9 @@ private actor LiveReplyReceiver {
     var error: String?
     let localUpdates: ConversationLocalEditController?
     private(set) var localEditNotice: String?
+    private(set) var localTargetPreview: ConversationLocalEditTarget?
+    private(set) var reviewingLocalTarget = false
+    @ObservationIgnored private var localPreviewDraft: LiveConversationDocument.Draft?
     @ObservationIgnored private let localTarget: (@MainActor () async throws -> ConversationLocalEditTarget)?
     @ObservationIgnored let repository: LiveConversationRepository
     @ObservationIgnored private var factory: (@Sendable () -> any ClaudeTurnTransport)?
@@ -63,7 +66,19 @@ private actor LiveReplyReceiver {
     }
     var hasPendingWork: Bool { draftDirty || draftWrite != nil || resolvingDraft || submitting || connecting || disconnecting || worker != nil || storagePending || localUpdates?.hasPendingWork == true }
     var savingDraft: Bool { draftWrite != nil }
-    var canSend: Bool { document != nil && !submitting && !resolvingDraft && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.text.utf8.count <= 16_384 && !storagePending }
+    var needsLocalTargetReview: Bool { localTarget != nil && ConversationLocalEditInterpreter.parse(draft.text) != nil }
+    var localTargetReviewed: Bool { localTargetPreview != nil && localPreviewDraft?.sameWordsAndRevision(as: draft) == true }
+    private var canSubmitDraft: Bool { document != nil && !submitting && !resolvingDraft && !reviewingLocalTarget && !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.text.utf8.count <= 16_384 && !storagePending }
+    var canSend: Bool { canSubmitDraft && (!needsLocalTargetReview || localTargetReviewed) }
+    func reviewLocalTarget() async {
+        guard needsLocalTargetReview,!submitting,!reviewingLocalTarget,let localTarget else { return }
+        let snapshot = draft;reviewingLocalTarget = true;defer { reviewingLocalTarget = false }
+        do {
+            let target = try await localTarget();try target.validate(project: project.id)
+            guard draft.sameWordsAndRevision(as: snapshot) else { return }
+            localTargetPreview = target;localPreviewDraft = snapshot;localEditNotice = nil;error = nil
+        } catch { localTargetPreview = nil;localPreviewDraft = nil;localEditNotice = "A local target could not be reviewed: "+error.localizedDescription }
+    }
     var canRetryReply: Bool {
         guard worker == nil, !storagePending, let last = document?.turns.last else { return false }
         return [.failed,.cancelled,.interrupted].contains(last.state)
@@ -88,6 +103,7 @@ private actor LiveReplyReceiver {
     func edit(_ text: String) {
         guard document != nil else { return }
         guard !text.utf8.elementsEqual(draft.text.utf8), draft.revision < 1_000_000 else { return }
+        localTargetPreview = nil;localPreviewDraft = nil
         if draft.text.isEmpty,!draftDirty,(draft.historyEpoch ?? 0) != document?.historyEpoch,let document { draft = .empty(epoch: document.historyEpoch);draftBase = document.draft }
         draft.text = text; draft.revision += 1; draft.updated = Date(); draftDirty = true
         localUpdates?.steer()
@@ -203,12 +219,18 @@ private actor LiveReplyReceiver {
         }
     }
     @discardableResult func submit() async -> Bool {
-        guard canSend else { return false }
+        guard canSubmitDraft else { return false }
         submitting = true; defer { submitting = false; kick(); schedulePacket() }
         let snapshot = draft, generation = connectionGeneration, earlier = activeTransport
         do {
             autosave?.cancel(); autosave = nil
-            let instruction = await localInstruction(for: snapshot.text)
+            let saved = try await repository.load()
+            let existing = saved.messages.first { $0.id == snapshot.submissionID && $0.text.utf8.elementsEqual(snapshot.text.utf8) }
+            // Exact acknowledged retries retain the original target, even if
+            // the project's current cut changed after that saved submission.
+            let instruction: ConversationLocalEditInstruction?
+            if let existing { instruction = existing.localEdit }
+            else { instruction = try await localInstruction(for: snapshot) }
             let committed = try await writeDraft(snapshot,mutation: .submit(instruction))
             if let attached = committed.messages.first(where: { $0.id==snapshot.submissionID })?.localEdit {
                 localEditNotice = "Local update attached to saved v\(attached.target.versionNumber). Keep steering; it starts after two quiet minutes."
@@ -239,17 +261,19 @@ private actor LiveReplyReceiver {
     }
     /// Exact local commands bind to the saved cut selected at submission. The
     /// anchor is private metadata; only the original text enters a provider turn.
-    private func localInstruction(for text: String) async -> ConversationLocalEditInstruction? {
+    private func localInstruction(for snapshot: LiveConversationDocument.Draft) async throws -> ConversationLocalEditInstruction? {
         localEditNotice = nil
+        let text = snapshot.text
         guard let patches = ConversationLocalEditInterpreter.parse(text),let localTarget else { return nil }
-        do {
-            let value = ConversationLocalEditInstruction(target: try await localTarget(),textSHA256: TranscriptSourceMap.sha(Data(text.utf8)),patches: patches)
-            try value.validate(text: text,project: project.id)
-            return value
-        } catch {
-            localEditNotice = "Your words are saved as feedback. A local update could not be attached: \(error.localizedDescription)"
-            return nil
+        guard localPreviewDraft?.sameWordsAndRevision(as: snapshot) == true,let preview = localTargetPreview else { throw WorkflowFailure.invalid("Review the current-cut target before sending this local update. Your draft is retained.") }
+        let fresh = try await localTarget()
+        guard fresh == preview else {
+            localTargetPreview = nil;localPreviewDraft = nil
+            throw WorkflowFailure.invalid("The current-cut target changed. Review its new version before sending; your draft is retained.")
         }
+        let value = ConversationLocalEditInstruction(target: preview,textSHA256: TranscriptSourceMap.sha(Data(text.utf8)),patches: patches)
+        try value.validate(text: text,project: project.id)
+        return value
     }
     func retryReply() async {
         guard canRetryReply else { return }

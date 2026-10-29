@@ -47,3 +47,9 @@ confirmation remain pending fresh coordinator admission. Pan v014 is preserved
 along with the existing v013 current pointer; the October 26 v9/7:57 entry above
 is historical, not the latest film state. Independent review findings and the
 separate 3D candidate remain queued for owner handoff.
+
+The [independent-review implementation checkpoint](REVIEW_PACKET_IMPLEMENTATION_2026-10-29.md)
+records the seven bounded recovery/Commands/focus/target/label fixes. Its five
+new tests and the earlier Storage/Sounds cases remain unexecuted. A separate
+isolated union with e08c41b (3D plus handwriting) must be frozen before requesting
+any combined build; neither source lane nor the running bundle is replaced.

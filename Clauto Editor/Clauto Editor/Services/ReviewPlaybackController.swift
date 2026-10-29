@@ -27,12 +27,13 @@ import Observation
 }
 @MainActor @Observable final class ReviewPlaybackControl: ReviewPlaybackDriving {
     @ObservationIgnored weak var player: AVPlayer?
+    var transportEnabled = true
     private(set) var seeking = false
     @ObservationIgnored private var seekID = UUID()
     @ObservationIgnored private var resumeSeekID: UUID?
     @ObservationIgnored var onSeekRequested: (() -> Void)?
     @ObservationIgnored var onSeekCompleted: ((Bool) -> Void)?
-    var ready: Bool { player?.currentItem?.status == .readyToPlay }
+    var ready: Bool { transportEnabled && player?.currentItem?.status == .readyToPlay }
     var clock: ReviewClockTime? {
         guard let time = player?.currentTime(), time.isValid, time.isNumeric, time.epoch == 0, time.timescale > 0 else { return nil }
         return .init(value: time.value,timescale: time.timescale)

@@ -17,8 +17,10 @@ import Observation
     var paletteVisible = false
     var showTimecode = false
     var onWorkspaceCommand: ((EditorCommand) -> Void)?
+    var workspaceCapabilities = ReviewWorkspaceCapabilities()
     private var paletteEndpoint: UUID?
     private var paletteProject: UUID?
+    private var paletteWatchedVersion: UUID?
     private var pendingCommand: EditorCommand?
     @ObservationIgnored private weak var paletteOriginWindow: NSWindow?
     var ownsSheetContext: Bool { paletteVisible || pendingCommand != nil || showTimecode || editor != nil }
@@ -38,10 +40,17 @@ import Observation
     func select(_ id: UUID) { if let endpoint = endpoints[id] { selectedID = id; intendedVersionID = endpoint.target.versionID } }
     var selected: ReviewPlaybackEndpoint? { selectedID.flatMap { endpoints[$0] } }
     var enabled: Bool { canPerform(.toggle) }
+    func availability(_ command: EditorCommand,forPalette: Bool = false) -> EditorCommandAvailability {
+        command.availability(in: .init(hasWindow: window != nil || selected != nil,hasProject: store?.selected != nil,
+            blocked: editor != nil || showTimecode || NSApp.modalWindow != nil || (!forPalette && (paletteVisible || window?.attachedSheet != nil)),
+            inCut: tab == "Cut",workspaceHandler: onWorkspaceCommand != nil,playerReady: selected?.ready == true,
+            renderedReview: workspaceCapabilities.renderedReview,previousVersion: workspaceCapabilities.previousVersion,nextVersion: workspaceCapabilities.nextVersion))
+    }
     func canPerform(_ command: EditorCommand, fromPalette: Bool = false) -> Bool {
         guard let key = NSApp.keyWindow, PlaybackMenuCoordinator.shared.owns(key,router: self), let store else { return false }
         if key.attachedSheet != nil || window?.attachedSheet != nil || NSApp.modalWindow != nil || editor != nil || paletteVisible || showTimecode { return false }
-        if [.comment,.draw,.timecode,.palette,.brief,.files,.transcript,.script,.review].contains(command) && window == nil { return false }
+        guard availability(command).enabled else { return false }
+        if ([.comment,.draw,.timecode,.palette].contains(command) || command.destination != nil) && window == nil { return false }
         if command.needsPlayer {
             if !fromPalette && PlaybackMenuCoordinator.isTextEditing(key.firstResponder) { return false }
             return selected?.ready == true
@@ -49,7 +58,7 @@ import Observation
         if command == .palette { return true }
         return store.selected != nil
     }
-    func choosePaletteCommand(_ command: EditorCommand) { pendingCommand = command; paletteVisible = false }
+    func choosePaletteCommand(_ command: EditorCommand) { guard availability(command,forPalette: true).enabled else { return };pendingCommand = command; paletteVisible = false }
     func finishPalette() {
         guard let command = pendingCommand else { return }
         Task { @MainActor [weak self] in
@@ -60,6 +69,7 @@ import Observation
             }
             guard self.store?.selectedID == self.paletteProject,
                   !command.needsPlayer || self.selectedID == self.paletteEndpoint,
+                  !command.workspaceAction || self.workspaceCapabilities.watchedVersionID == self.paletteWatchedVersion,
                   let origin = self.paletteOriginWindow, origin.isVisible,
                   PlaybackMenuCoordinator.shared.owns(origin,router: self) else { self.store?.notice = "The selected player changed. Open Commands again."; return }
             origin.makeKeyAndOrderFront(nil)
@@ -69,10 +79,12 @@ import Observation
     func perform(_ command: EditorCommand, explicitControl: Bool = false) {
         guard canPerform(command,fromPalette: explicitControl), let store else { return }
         if command == .palette {
-            paletteEndpoint = selectedID; paletteProject = store.selectedID; paletteOriginWindow = NSApp.keyWindow; paletteVisible = true; return
+            paletteEndpoint = selectedID; paletteProject = store.selectedID;paletteWatchedVersion = workspaceCapabilities.watchedVersionID; paletteOriginWindow = NSApp.keyWindow; paletteVisible = true; return
         }
         switch command {
         case .brief: tab = "Brief"
+        case .chat: tab = "Chat"
+        case .studio: tab = "Studio"
         case .files: tab = "Files"
         case .transcript: tab = "Transcript"
         case .script: tab = "Script"
@@ -198,6 +210,8 @@ import Observation
             case .timecode: shortcut = ("t",[.command,.option])
             case .brief,.files,.transcript,.review: shortcut = (String(command.rawValue-Command.brief.rawValue+1),[.command,.option])
             case .script: shortcut = ("5",[.command,.option])
+            case .chat: shortcut = ("6",[.command,.option])
+            case .studio: shortcut = ("7",[.command,.option])
             case .focusAssets,.focusVideo,.focusFeedback: shortcut = (String(command.rawValue-Command.focusAssets.rawValue+1),[.command,.option,.control])
             default: shortcut = ("",[])
             }

@@ -77,6 +77,38 @@ struct CutVersion: Codable, Identifiable, Sendable {
     }
 }
 
+struct CutVersionIssue: Identifiable, Sendable {
+    let folder: String
+    let detail: String
+    var id: String { folder }
+}
+struct CutVersionCatalog: Sendable {
+    let versions: [CutVersion]
+    let issues: [CutVersionIssue]
+    let verifiedImportedIDs: Set<UUID>
+}
+struct CutReviewHistory: Sendable {
+    let catalog: CutVersionCatalog
+    let current: CutVersion?
+    let currentIssue: String?
+}
+
+/// Presentation only. Saved labels, editorial restrictions and current pointers
+/// remain unchanged. Only our known suffix plus actual import provenance is compressed.
+struct CutVersionPresentation: Equatable, Sendable {
+    let fullLabel: String
+    let editorialLabel: String
+    let importedMovie: Bool
+    let restrictions: [String]
+    init(_ version: CutVersion,verifiedImport: Bool = false) {
+        fullLabel = version.label
+        importedMovie = version.artifacts.contains("inputs/import-binding.json")
+        let suffix = " · imported verified movie"
+        editorialLabel = importedMovie && verifiedImport && version.label.hasSuffix(suffix) ? String(version.label.dropLast(suffix.count)):version.label
+        restrictions = ["RESTRICTED REVIEW","held units omitted"].filter { version.label.localizedCaseInsensitiveContains($0) }
+    }
+}
+
 /// Saving a verified local export inherits its parent's approved inputs. It is
 /// not a new editorial, scientific or production approval.
 struct SavedVersionOrigin: Codable, Equatable, Sendable {
@@ -551,22 +583,52 @@ actor WorkflowRepository {
         return String(decoding: try handle.readToEnd() ?? Data(), as: UTF8.self)
     }
 
-    func versions(project: Project) throws -> [CutVersion] {
+    func versionCatalog(project: Project) throws -> CutVersionCatalog {
         let physical = try ProjectMutationLease.checkedRoot(project)
         let cuts = try physical.child("cuts")
         let root = cuts.url
-        return try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-            .filter { $0.lastPathComponent.range(of: "^v[0-9]+$", options: .regularExpression) != nil }
-            .compactMap { folder -> CutVersion? in
+        var versions: [CutVersion] = [],issues: [CutVersionIssue] = [],verifiedImportedIDs = Set<UUID>()
+        for folder in try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter({ $0.lastPathComponent.range(of: "^v[0-9]+$", options: .regularExpression) != nil }) {
+            do {
                 _ = try safe(folder.lastPathComponent, in: root)
                 let owned = try cuts.child(folder.lastPathComponent)
-                guard try CreativeAssetFiles.exists("clauto-version.json", in: owned) else { return nil }
+                guard try CreativeAssetFiles.exists("clauto-version.json", in: owned) else { throw WorkflowFailure.invalid("The saved version record is missing or incomplete.") }
                 let version = try decoder.decode(CutVersion.self, from: owned.read("clauto-version.json", limit: 1024*1024))
                 guard version.number > 0, version.folderName == folder.lastPathComponent else { throw ProjectFailure.invalidProject }
                 for artifact in version.artifacts { _ = try safe(artifact, in: folder) }
-                return version
+                versions.append(version)
+                if version.artifacts.contains("inputs/import-binding.json"),(try? savedPreviewSHA256(version,project: project)) != nil { verifiedImportedIDs.insert(version.id) }
+            } catch { issues.append(.init(folder: folder.lastPathComponent,detail: error.localizedDescription)) }
+        }
+        let duplicateIDs = Set(Dictionary(grouping: versions,by: \.id).filter { $0.value.count > 1 }.keys)
+        for version in versions where duplicateIDs.contains(version.id) {
+            issues.append(.init(folder: version.folderName,detail: "This version identity is shared by another record. Neither ambiguous record is available for review."))
+        }
+        versions.removeAll { duplicateIDs.contains($0.id) }
+        try physical.checkPath();try cuts.checkPath()
+        return .init(versions: versions.sorted { $0.number < $1.number },issues: issues.sorted { $0.folder < $1.folder },verifiedImportedIDs: verifiedImportedIDs.subtracting(duplicateIDs))
+    }
+    /// Editing/publication callers retain strict failure semantics. Only the
+    /// review history opts into independently validated records and diagnostics.
+    func versions(project: Project) throws -> [CutVersion] {
+        let catalog = try versionCatalog(project: project)
+        if let issue = catalog.issues.first { throw WorkflowFailure.invalid("\(issue.folder) is unavailable: \(issue.detail)") }
+        return catalog.versions
+    }
+    func reviewHistory(project: Project) throws -> CutReviewHistory {
+        let catalog = try versionCatalog(project: project)
+        let cuts = try ProjectMutationLease.checkedRoot(project).child("cuts")
+        do {
+            guard try CreativeAssetFiles.exists("current.json",in: cuts) else {
+                return .init(catalog: catalog,current: nil,currentIssue: catalog.versions.isEmpty && catalog.issues.isEmpty ? nil:"No current cut is selected. Choose a healthy version for review; the current pointer was not changed.")
             }
-            .sorted { $0.number < $1.number }
+            let id = try decoder.decode(UUID.self,from: cuts.read("current.json",limit: 1024))
+            guard let current = catalog.versions.first(where: { $0.id == id }) else {
+                throw WorkflowFailure.invalid("The current cut points to an unavailable version. Choose a healthy version for review; no other cut was promoted.")
+            }
+            return .init(catalog: catalog,current: current,currentIssue: nil)
+        } catch { return .init(catalog: catalog,current: nil,currentIssue: error.localizedDescription) }
     }
 
     func current(project: Project) throws -> CutVersion? {
@@ -577,6 +639,29 @@ actor WorkflowRepository {
             throw WorkflowFailure.invalid("The current version record is missing. Choose an available version to restore.")
         }
         return version
+    }
+
+    /// A missing decoder cannot establish new media identity by reopening an
+    /// arbitrary file at the same path. Recovery needs a retained saved checksum.
+    func savedPreviewSHA256(_ version: CutVersion,project: Project) throws -> String? {
+        if version.localEditOrigin != nil { return try promotionReceipt(version,project: project).savedPreviewSHA256 }
+        guard version.artifacts.contains("inputs/import-binding.json") else { return nil }
+        let folder = try ProjectMutationLease.checkedRoot(project).child("cuts").child(version.folderName)
+        let bytes = try folder.child("inputs").read("import-binding.json",limit: 1024*1024)
+        try TranscriptJSONKeys.validate(bytes)
+        let receiptBytes = try folder.child("inputs").read("original-verification.json",limit: 1024*1024)
+        try TranscriptJSONKeys.validate(receiptBytes)
+        guard let binding = try JSONSerialization.jsonObject(with: bytes) as? [String:Any],
+              binding["scope"] as? String == "review_existing_movie_only",
+              binding["projectID"] as? String == project.id.uuidString,
+              binding["versionID"] as? String == version.id.uuidString,
+              let sha = binding["movieSHA256"] as? String,TranscriptCatalog.isSHA(sha),
+              let receiptSHA = binding["verificationReceiptSHA256"] as? String,
+              let receipt = try JSONSerialization.jsonObject(with: receiptBytes) as? [String:Any],
+              receipt["sha256"] as? String == sha,
+              receipt["technical_checks_passed"] as? Bool == true,
+              TranscriptSourceMap.sha(receiptBytes) == receiptSHA else { throw ProjectFailure.invalidProject }
+        return sha
     }
 
     func restore(_ version: CutVersion, project: Project) throws {
@@ -1403,7 +1488,7 @@ actor WorkflowRepository {
         start.isFinite && start >= 0 && start <= duration && (end == nil || (end!.isFinite && end! >= start && end! <= duration))
     }
     private func feedbackTarget(_ id: UUID, project: Project) throws -> FeedbackTarget {
-        guard let version = try versions(project: project).first(where: { $0.id == id }),
+        guard let version = try versionCatalog(project: project).versions.first(where: { $0.id == id }),
               let artifact = version.artifacts.first(where: { $0.hasPrefix("exports/") && $0.hasSuffix(".fcpxml") }) else { throw ProjectFailure.invalidProject }
         let relative = "cuts/" + version.folderName + "/" + artifact
         let file = try safe(relative, in: project.folder)

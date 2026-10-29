@@ -64,7 +64,6 @@ enum ClautoButtonKind { case primary, secondary, quiet, danger }
 struct ClautoButtonStyle: ButtonStyle {
     var kind: ClautoButtonKind = .secondary
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.isFocused) private var focused
     @State private var hovering = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -72,8 +71,8 @@ struct ClautoButtonStyle: ButtonStyle {
             .foregroundStyle(enabled ? (kind == .danger ? ClautoDesign.ember : kind == .primary && enabled && !configuration.isPressed && !hovering ? ClautoDesign.onAccent : ClautoDesign.ink) : ClautoDesign.quiet)
             .padding(.horizontal, kind == .quiet ? 8 : ClautoThemeStore.shared.palette.geometry.inset+3).padding(.vertical, ClautoThemeStore.shared.palette.spacing*0.6)
             .background(background(pressed: configuration.isPressed), in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
-            .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(focused ? ClautoDesign.ink : kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: focused ? ClautoThemeStore.shared.palette.geometry.focusStroke : ClautoThemeStore.shared.palette.geometry.stroke))
-            .contentShape(Rectangle()).focusEffectDisabled()
+            .overlay(ClautoThemedShape(palette: ClautoThemeStore.shared.palette).stroke(kind == .quiet ? .clear : ClautoDesign.rule, lineWidth: ClautoThemeStore.shared.palette.geometry.stroke))
+            .contentShape(Rectangle()).focusEffectDisabled(false)
             .onHover { hovering = $0 }
     }
     private func background(pressed: Bool) -> Color {
@@ -89,13 +88,11 @@ struct ClautoInlineButtonStyle: ButtonStyle {
     var onRail = false
     var selected = false
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.isFocused) private var focused
     @State private var hovering = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(background(pressed: configuration.isPressed))
-            .overlay(Rectangle().stroke(focused ? (onRail ? ClautoDesign.citron : ClautoDesign.ink) : .clear, lineWidth: ClautoThemeStore.shared.palette.geometry.focusStroke))
-            .contentShape(Rectangle()).focusEffectDisabled()
+            .contentShape(Rectangle()).focusEffectDisabled(false)
             .opacity(enabled ? 1 : 0.65)
             .onHover { hovering = $0 }
     }

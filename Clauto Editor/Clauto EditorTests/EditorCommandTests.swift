@@ -68,3 +68,40 @@ struct EditorCommandTests {
     }
 
 }
+
+extension EditorCommandTests {
+    @Test func allWorkspacesHaveStableSearchableCommandsAndContextualAvailability() {
+        #expect(EditorCommand.script.rawValue == 26 && EditorCommand.chat.rawValue == 27 && EditorCommand.studio.rawValue == 28)
+        #expect(Set(EditorCommand.allCases.compactMap(\.destination)) == ["Brief","Chat","Files","Transcript","Script","Cut","Studio"])
+        #expect(EditorCommand.review.matches("Cut") && EditorCommand.review.matches("review"))
+        var state = EditorCommandContext(hasWindow: true)
+        for command in EditorCommand.allCases where command.destination != nil {
+            #expect(!command.availability(in: state).enabled && command.availability(in: state).reason != nil)
+        }
+        state.hasProject = true
+        for command in EditorCommand.allCases where command.destination != nil { #expect(command.availability(in: state).enabled) }
+        #expect(!EditorCommand.assetsPane.availability(in: state).enabled)
+        state.inCut = true;state.workspaceHandler = true
+        #expect(EditorCommand.assetsPane.availability(in: state).enabled)
+        #expect(!EditorCommand.focusVideo.availability(in: state).enabled && !EditorCommand.focusFeedback.availability(in: state).enabled)
+        #expect(!EditorCommand.toggle.availability(in: state).enabled)
+        state.renderedReview = true;state.playerReady = true;state.nextVersion = true
+        #expect(EditorCommand.toggle.availability(in: state).enabled && EditorCommand.focusVideo.availability(in: state).enabled)
+        #expect(!EditorCommand.previousVersion.availability(in: state).enabled && EditorCommand.nextVersion.availability(in: state).enabled)
+        state.blocked = true
+        for command in EditorCommand.allCases { #expect(!command.availability(in: state).enabled) }
+    }
+    @Test func compactVersionPresentationKeepsRestrictionsAndRequiresImportProvenance() throws {
+        let label = "RESTRICTED REVIEW · held units omitted · retained editorial wording · imported verified movie"
+        var version = CutVersion(number: 12,label: label,engineVersion: "synthetic",runID: UUID(),artifacts: ["inputs/import-binding.json"],approvedPlanHash: "fixture")
+        let encoder = JSONEncoder();encoder.outputFormatting = [.sortedKeys];let before = try encoder.encode(version)
+        let compact = CutVersionPresentation(version,verifiedImport: true)
+        #expect(compact.fullLabel == label && compact.restrictions == ["RESTRICTED REVIEW","held units omitted"])
+        #expect(!compact.editorialLabel.hasSuffix(" · imported verified movie"))
+        #expect(CutVersionPresentation(version).editorialLabel == label)
+        version.artifacts = []
+        #expect(CutVersionPresentation(version,verifiedImport: true).editorialLabel == label)
+        version.artifacts = ["inputs/import-binding.json"]
+        #expect(try encoder.encode(version) == before)
+    }
+}

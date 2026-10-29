@@ -14,10 +14,13 @@ struct EditorCommandPalette: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(EditorCommand.allCases.filter { $0 != .palette && $0.matches(query) }) { command in
+                        let availability = router.availability(command,forPalette: true)
                         Button { router.choosePaletteCommand(command) } label: {
-                            HStack { Text(command.title); Spacer(); Text(command.shortcut).font(.caption).foregroundStyle(.secondary) }
-                                .padding(10).contentShape(Rectangle())
-                        }.buttonStyle(.plain).disabled(command.needsPlayer && router.selected?.ready != true)
+                            VStack(alignment: .leading,spacing: 4) {
+                                HStack { Text(command.title); Spacer(); Text(command.shortcut).font(.caption).foregroundStyle(.secondary) }
+                                if let reason = availability.reason { Text(reason).font(.caption).foregroundStyle(.secondary) }
+                            }.padding(10).contentShape(Rectangle())
+                        }.buttonStyle(.plain).disabled(!availability.enabled).accessibilityHint(availability.reason ?? "")
                             .accessibilityIdentifier("command-\(command.rawValue)")
                     }
                 }

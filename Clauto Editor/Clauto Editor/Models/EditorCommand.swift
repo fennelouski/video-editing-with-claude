@@ -11,6 +11,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
     case detach, fullScreen, pictureInPicture
     case draw
     case script
+    case chat, studio
     var id: Int { rawValue }
     var title: String {
         switch self {
@@ -22,7 +23,7 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .brief: "Show Brief"
         case .files: "Show Files"
         case .transcript: "Show Transcript"
-        case .review: "Show Review"
+        case .review: "Show Cut"
         case .reverse: "Shuttle Reverse"
         case .stop: "Pause"
         case .play: "Shuttle Forward"
@@ -41,6 +42,8 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .pictureInPicture: "Show Native Picture in Picture Controls"
         case .draw: "Draw on Video"
         case .script: "Show Script Workspace"
+        case .chat: "Show Chat"
+        case .studio: "Show Studio"
         }
     }
     var shortcut: String {
@@ -61,6 +64,8 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         case .transcript: "⌥⌘3"
         case .review: "⌥⌘4"
         case .script: "⌥⌘5"
+        case .chat: "⌥⌘6"
+        case .studio: "⌥⌘7"
         case .focusAssets: "⌃⌥⌘1"
         case .focusVideo: "⌃⌥⌘2"
         case .focusFeedback: "⌃⌥⌘3"
@@ -68,9 +73,48 @@ enum EditorCommand: Int, CaseIterable, Identifiable, Sendable {
         }
     }
     var needsPlayer: Bool {
-        ![.palette,.brief,.files,.transcript,.script,.review,.assetsPane,.feedbackPane,.focusAssets,.focusVideo,.focusFeedback,.previousVersion,.nextVersion].contains(self)
+        ![.palette,.brief,.chat,.files,.transcript,.script,.review,.studio,.assetsPane,.feedbackPane,.focusAssets,.focusVideo,.focusFeedback,.previousVersion,.nextVersion].contains(self)
     }
-    func matches(_ query: String) -> Bool { query.isEmpty || title.localizedCaseInsensitiveContains(query) || shortcut.localizedCaseInsensitiveContains(query) }
+    var destination: String? {
+        switch self { case .brief:"Brief";case .chat:"Chat";case .files:"Files";case .transcript:"Transcript";case .script:"Script";case .review:"Cut";case .studio:"Studio";default:nil }
+    }
+    var workspaceAction: Bool { [.assetsPane,.feedbackPane,.focusAssets,.focusVideo,.focusFeedback,.previousVersion,.nextVersion].contains(self) }
+    func matches(_ query: String) -> Bool { query.isEmpty || title.localizedCaseInsensitiveContains(query) || shortcut.localizedCaseInsensitiveContains(query) || (self == .review && "review".localizedCaseInsensitiveContains(query)) }
+    func availability(in context: EditorCommandContext) -> EditorCommandAvailability {
+        func no(_ reason: String) -> EditorCommandAvailability { .init(enabled: false,reason: reason) }
+        guard context.hasWindow else { return no("Open an editor window first.") }
+        guard !context.blocked else { return no("Finish the open draft or dialog first.") }
+        if self == .palette { return .init(enabled: true,reason: nil) }
+        guard context.hasProject else { return no("Select a project first.") }
+        if destination != nil { return .init(enabled: true,reason: nil) }
+        if workspaceAction {
+            guard context.inCut && context.workspaceHandler else { return no("Open Cut to use this workspace command.") }
+            if [.focusVideo,.focusFeedback,.feedbackPane].contains(self),!context.renderedReview { return no("This view has no rendered video or feedback pane.") }
+            if self == .previousVersion,!context.previousVersion { return no("No previous available version.") }
+            if self == .nextVersion,!context.nextVersion { return no("No next available version.") }
+            return .init(enabled: true,reason: nil)
+        }
+        return context.playerReady ? .init(enabled: true,reason: nil):no("Select a verified ready player. Reconnect and retry an unavailable preview.")
+    }
+}
+
+struct EditorCommandContext: Equatable, Sendable {
+    var hasWindow = false
+    var hasProject = false
+    var blocked = false
+    var inCut = false
+    var workspaceHandler = false
+    var playerReady = false
+    var renderedReview = false
+    var previousVersion = false
+    var nextVersion = false
+}
+struct EditorCommandAvailability: Equatable, Sendable { let enabled: Bool;let reason: String? }
+struct ReviewWorkspaceCapabilities: Equatable, Sendable {
+    var watchedVersionID: UUID? = nil
+    var renderedReview = false
+    var previousVersion = false
+    var nextVersion = false
 }
 
 /// Saved previews use 24000/1001 fps. Display is 24-frame NON-DROP timecode;

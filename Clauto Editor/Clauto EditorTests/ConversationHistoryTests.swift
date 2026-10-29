@@ -234,13 +234,15 @@ private actor HistoryReplyFixture: ClaudeTurnTransport {
     @MainActor @Test func newTypingDuringOwnedRolloverStaysEditableAndSavedWithoutFalseWindowConflict() async throws {
         let (root,project) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
         let repo = LiveConversationRepository(project: project);_ = try await settle(repo,count: 128)
-        var targetRequested = false,releaseTarget = false
+        var targetRequested = false,releaseTarget = false,targetRequests = 0
         let target = ConversationLocalEditTarget(projectID: project.id,versionID: UUID(),versionNumber: 1,timelineSHA256: String(repeating: "a",count: 64),engineVersion: "synthetic",duration: 120,aspect: "16:9",resolution: .fullHD)
         let controller = LiveConversationController(project: project,clientLocator: { nil },localTarget: {
+            targetRequests += 1
+            if targetRequests == 1 { return target }
             targetRequested = true
             while !releaseTarget { try await Task.sleep(for: .milliseconds(2)) };return target
         })
-        await controller.load();controller.edit("use 720p")
+        await controller.load();controller.edit("use 720p");await controller.reviewLocalTarget()
         let sending = Task { await controller.submit() }
         for _ in 0..<1000 { if targetRequested { break };try await Task.sleep(for: .milliseconds(2)) }
         #expect(targetRequested)

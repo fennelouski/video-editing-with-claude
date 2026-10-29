@@ -24,8 +24,9 @@ struct ProjectView: View {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(store.libraryName(for: project)).font(ClautoDesign.heading).lineLimit(2).accessibilityAddTraits(.isHeader)
-                        Text(store.currentCuts[project.id].map { "Current cut v\($0.number) · \($0.label)" } ?? "Describe the cut you want to make.")
+                        Text(store.currentCuts[project.id].map { "Current cut v\($0.number) · \(store.versionPresentation($0,projectID: project.id).editorialLabel)" } ?? "Describe the cut you want to make.")
                             .font(ClautoDesign.caption).foregroundStyle(ClautoDesign.quiet)
+                            .help(store.currentCuts[project.id]?.label ?? "")
                     }
                     Spacer(minLength: 10)
                     if let group = store.libraryGroup(for: project.id) {
@@ -270,6 +271,7 @@ struct CutView: View {
                 let run = store.runs[project.id]
                 let versions = store.cutVersions[project.id] ?? []
                 VStack(alignment: .leading, spacing: 20) {
+                    if let issue = store.currentCutIssues[project.id] { Text(issue).font(ClautoDesign.caption).foregroundStyle(ClautoDesign.ember).textSelection(.enabled) }
                     if let current = store.currentCuts[project.id] {
                         ClautoRule(); Text("Current cut: v\(current.number) · \(current.label)").font(ClautoDesign.type(18, weight: .semibold))
                         if current.briefChanged(project) && project.manifest.importedReviewOnly != true {

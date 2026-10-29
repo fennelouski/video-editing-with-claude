@@ -94,6 +94,13 @@ struct LiveConversationView: View {
             if let updates = controller.localUpdates { ConversationLocalUpdatesView(controller: updates) }
             ClautoField(label: "Message",text: Binding(get: { controller.draft.text },set: controller.edit),placeholder: "What should change?",axis: .vertical)
                 .lineLimit(2...5).disabled(controller.document==nil).accessibilityIdentifier("liveConversationComposer")
+            if controller.needsLocalTargetReview {
+                HStack(alignment: .top) {
+                    Text(controller.localTargetReviewed ? "Local update target: current saved v\(controller.localTargetPreview?.versionNumber ?? 0). This target is checked again when you send.":"This is a local editing command. Review its current-cut target before sending.").font(ClautoDesign.caption).textSelection(.enabled).accessibilityIdentifier("localCommandTargetPreview")
+                    Spacer()
+                    Button(controller.reviewingLocalTarget ? "Checking target…":"Review target") { Task { await controller.reviewLocalTarget() } }.disabled(controller.reviewingLocalTarget || controller.submitting)
+                }
+            }
             HStack {
                 ClautoAction("Send",icon: .conversation,kind: .primary) { Task { _ = await controller.submit() } }
                     .disabled(!controller.canSend).accessibilityIdentifier("sendLiveConversation")

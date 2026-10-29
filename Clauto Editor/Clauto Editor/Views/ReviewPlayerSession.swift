@@ -11,18 +11,22 @@ import Observation
     let version: CutVersion
     let url: URL
     let player: AVPlayer
-    private let openingMovie: ReviewMovieOpeningIdentity?
+    private var openingMovie: ReviewMovieOpeningIdentity?
+    private var expectedMovieSHA256: String?
     let control = ReviewPlaybackControl()
     private(set) var endpoint: ReviewPlaybackEndpoint?
     private(set) var playhead = 0.0
     private(set) var ready = false
     private(set) var playing = false
     private(set) var rate = 0.0
+    private(set) var checkingPreview = false
+    private(set) var bindingVoice = false
     var issue: String?
     var presentationNotice: String?
     @ObservationIgnored weak var store: EditorStore?
     @ObservationIgnored weak var router: ReviewWindowRouter?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
+    @ObservationIgnored private var itemObservation: NSKeyValueObservation?
     @ObservationIgnored private var clockObserver: Any?
     @ObservationIgnored private var jumpObserver: NSObjectProtocol?
     private(set) var workspaceVisible = false
@@ -36,17 +40,21 @@ import Observation
         self.ownerID = ownerID
         self.project = project; self.version = version; self.url = url; self.store = store
         openingMovie = try? ReviewMovieOpeningIdentity.capture(url: url,project: project)
-        player = openingMovie == nil ? AVPlayer():AVPlayer(url: url); control.player = player
-        if openingMovie == nil { issue = "Preview unavailable. Reconnect its drive, then reopen this version." }
+        player = openingMovie == nil ? AVPlayer():AVPlayer(url: url); control.player = player;control.transportEnabled = false
+        if openingMovie == nil { issue = "Preview unavailable. Reconnect its drive, then Retry preview." }
         control.onSeekRequested = { [weak self] in self?.record(.seekRequested) }
         control.onSeekCompleted = { [weak self] completed in self?.record(completed ? .seekCompleted : .unavailable) }
-        if let item = player.currentItem {
-            observations.append(item.observe(\.status,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
-        }
+        observeCurrentItem()
         observations.append(player.observe(\.rate,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
         observations.append(player.observe(\.timeControlStatus,options: [.initial,.new]) { [weak self] _,_ in let session = self; Task { @MainActor in session?.refresh() } })
         clockObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1,preferredTimescale: 600),queue: .main) { [weak self] _ in let session = self; Task { @MainActor in session?.refresh() } }
-        jumpObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemTimeJumped,object: player.currentItem,queue: .main) { [weak self] _ in let session = self; Task { @MainActor in session?.record(session?.control.seeking == true ? .seekRequested : .unavailable) } }
+    }
+    private func observeCurrentItem() {
+        itemObservation = nil
+        if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) };jumpObserver = nil
+        guard let item = player.currentItem else { return }
+        itemObservation = item.observe(\.status,options: [.initial,.new]) { [weak self] _,_ in let session = self;Task { @MainActor in session?.refresh() } }
+        jumpObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemTimeJumped,object: item,queue: .main) { [weak self] _ in let session = self;Task { @MainActor in session?.record(session?.control.seeking == true ? .seekRequested:.unavailable) } }
     }
     var duration: Double { endpoint?.target.duration ?? 0 }
     var voice: VoiceReviewController? { store?.voiceReviews[project.id] }
@@ -55,30 +63,69 @@ import Observation
         self.router = router; router.inlineEndpointID = id; workspaceVisible = true; returningToWorkspace = false
         if let endpoint { router.register(endpoint); if router.intendedVersionID == version.id { router.select(id) }; return }
         guard preparing == nil, let store else { return }
+        checkingPreview = true
         preparing = Task { [weak self] in
             guard let self else { return }
-            defer { self.preparing = nil }
+            defer { self.preparing = nil;self.checkingPreview = false }
             do {
                 guard let openingMovie = self.openingMovie else { throw WorkflowFailure.invalid("The watched movie could not be pinned when this player opened.") }
                 let target = try await store.playbackTarget(version: self.version,project: self.project)
+                let savedSHA = try await store.savedPreviewSHA256(self.version,project: self.project)
                 guard !self.disposed else { return }
                 try openingMovie.check(target,project: self.project)
+                if let savedSHA,target.preview.sha256 != savedSHA { throw WorkflowFailure.invalid("The movie no longer matches this saved version's verified checksum.") }
+                self.expectedMovieSHA256 = target.preview.sha256
+                self.control.transportEnabled = self.issue == nil
                 self.endpoint = .init(id: self.id,project: self.project,target: target,driver: self.control)
                 if let endpoint = self.endpoint, self.workspaceVisible || self.presentation.detached { self.router?.register(endpoint); if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
                 await store.frameComment(for: self.project).load()
                 await store.voiceReview(for: self.project)?.load()
                 // Voice binding is explicit (Use this video); a background load cannot retarget capture.
-            } catch { self.issue = error.localizedDescription }
+            } catch { self.issue = error.localizedDescription;self.ready = false }
+        }
+    }
+    var canRetryPreview: Bool {
+        !disposed && !ownerClosed && !checkingPreview && !bindingVoice && preparing == nil && binding == nil && issue != nil && router?.editor == nil && voice?.active != true && voice?.mode != .finishing && !presentation.ownsExternalSurface
+    }
+    /// Reuses the session/player, preserving drafts and window ownership. A new
+    /// item is installed only after the expected saved bytes have been rechecked.
+    func retryPreview() {
+        guard canRetryPreview,let store else { return }
+        control.pause();control.transportEnabled = false;ready = false
+        router?.unregister(id);voice?.detach(id);endpoint = nil
+        player.replaceCurrentItem(with: nil);observeCurrentItem()
+        checkingPreview = true
+        preparing = Task { [weak self] in
+            guard let self else { return };defer { self.preparing = nil;self.checkingPreview = false }
+            do {
+                let savedSHA = try await store.savedPreviewSHA256(self.version,project: self.project)
+                guard let expected = self.expectedMovieSHA256 ?? savedSHA else { throw WorkflowFailure.invalid("This legacy preview has no retained checksum. Restore and verify its saved media before reopening; an arbitrary replacement will not be accepted.") }
+                let opening = try ReviewMovieOpeningIdentity.capture(url: self.url,project: self.project)
+                let target = try await store.playbackTarget(version: self.version,project: self.project)
+                try Task.checkCancellation()
+                guard !self.disposed,!self.ownerClosed,target.preview.sha256 == expected else { throw WorkflowFailure.invalid("The reconnected movie does not match this saved version. Its replacement was not accepted.") }
+                try opening.check(target,project: self.project)
+                guard self.router?.editor == nil,self.voice?.active != true,self.voice?.mode != .finishing,!self.presentation.ownsExternalSurface else { throw WorkflowFailure.invalid("Finish the active review or return external video to the editor before retrying.") }
+                self.router?.unregister(self.id);self.voice?.detach(self.id)
+                self.openingMovie = opening;self.expectedMovieSHA256 = expected
+                self.player.replaceCurrentItem(with: AVPlayerItem(url: self.url));self.observeCurrentItem()
+                self.endpoint = .init(id: self.id,project: self.project,target: target,driver: self.control)
+                self.issue = nil
+                self.control.transportEnabled = true
+                if let endpoint = self.endpoint,self.workspaceVisible { self.router?.register(endpoint);if self.router?.intendedVersionID == self.version.id { self.router?.select(self.id) } }
+                self.refresh()
+            } catch { self.issue = error.localizedDescription;self.ready = false }
         }
     }
     func selectForVoice() {
         guard binding == nil, let store, let voice = store.voiceReview(for: project) else { return }
-        guard let endpoint else { presentationNotice = "Wait for this saved video's identity to finish loading."; return }
+        guard ready,let endpoint,endpoint.ready else { presentationNotice = "Wait for this saved video's identity to finish loading, or retry its unavailable preview."; return }
         presentationNotice = nil
         let watchedTarget = endpoint.target
         voice.willAttach(id)
+        bindingVoice = true
         binding = Task { [weak self] in
-            guard let self else { return }; defer { self.binding = nil }
+            guard let self else { return }; defer { self.binding = nil;self.bindingVoice = false }
             guard !self.disposed, self.workspaceVisible || self.presentation.ownsExternalSurface else { return }
             // Bind the immutable snapshot already held by this decoder. A fresh
             // disk lookup could otherwise attach new provenance to an old item.
@@ -93,11 +140,11 @@ import Observation
     }
     func record(_ kind: VoiceTransportKind = .sample) { voice?.record(sample(),kind: kind,token: id) }
     private func refresh() {
-        ready = player.currentItem?.status == .readyToPlay
+        ready = endpoint != nil && issue == nil && player.currentItem?.status == .readyToPlay
         playing = player.timeControlStatus == .playing; rate = playing ? Double(player.rate) : 0
         let seconds = player.currentTime().seconds
         if seconds.isFinite { playhead = max(0,seconds) }
-        if player.currentItem?.status == .failed { player.pause(); issue = "Preview unavailable. Reconnect its drive, then reopen this version." }
+        if player.currentItem?.status == .failed { player.pause();control.transportEnabled = false;ready = false;router?.unregister(id);voice?.detach(id);endpoint = nil;issue = "Preview unavailable. Reconnect its drive, then Retry preview." }
         record()
     }
     func leaveWorkspace() {
@@ -122,7 +169,7 @@ import Observation
         return true
     }
     func invoke(_ command: EditorCommand) {
-        guard !disposed, let router else { return }
+        guard !disposed,ready,endpoint?.ready == true,let router,router.endpoints[id] != nil else { return }
         router.select(id); router.perform(command,explicitControl: true)
     }
     func dispose() {
@@ -131,6 +178,7 @@ import Observation
         if let clockObserver { player.removeTimeObserver(clockObserver) }; clockObserver = nil
         if let jumpObserver { NotificationCenter.default.removeObserver(jumpObserver) }; jumpObserver = nil
         observations.removeAll(); control.detach(player); voice?.detach(id); router?.unregister(id)
+        itemObservation = nil
     }
 }
 

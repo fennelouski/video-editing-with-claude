@@ -46,6 +46,10 @@ final class EditorStore {
     var defaultExportResolution: ExportResolution
     var runs: [UUID: EditRun] = [:]
     var cutVersions: [UUID: [CutVersion]] = [:]
+    var cutVersionIssues: [UUID:[CutVersionIssue]] = [:]
+    var currentCutIssues: [UUID:String] = [:]
+    var verifiedImportedCutIDs: [UUID:Set<UUID>] = [:]
+    func versionPresentation(_ version: CutVersion,projectID: UUID) -> CutVersionPresentation { .init(version,verifiedImport: verifiedImportedCutIDs[projectID]?.contains(version.id) == true) }
     var currentCuts: [UUID: CutVersion] = [:]
     var conversations: [UUID: [LocalMessage]] = [:]
     var cutFeedback: [UUID: [CutFeedback]] = [:]
@@ -97,9 +101,7 @@ final class EditorStore {
             })
         let next = LiveConversationController(project: project,localUpdates: updates,localTarget: { [weak self] in
             guard let self else { throw ProjectFailure.invalidProject }
-            let storedVersion = self.currentCuts[project.id]
-            let version: CutVersion?
-            if let storedVersion { version = storedVersion } else { version = try await self.workflow.current(project: project) }
+            let version = try await self.workflow.current(project: project)
             guard let version else {
                 throw WorkflowFailure.invalid("Create or select a saved cut in this project first.")
             }
@@ -111,6 +113,7 @@ final class EditorStore {
         liveConversations[project.id] = next;return next
     }
     var reviewPlayers: [UUID: ReviewPlayerSession] = [:]
+    func savedPreviewSHA256(_ version: CutVersion,project: Project) async throws -> String? { try await workflow.savedPreviewSHA256(version,project: project) }
     func reviewPlayer(project: Project,version: CutVersion,url: URL,ownerID: UUID) -> ReviewPlayerSession {
         if let session = reviewPlayers.values.first(where: { $0.ownerID == ownerID && $0.version.id == version.id && $0.project.id == project.id && $0.url == url }) { return session }
         let session = ReviewPlayerSession(project: project,version: version,url: url,store: self,ownerID: ownerID)
@@ -539,11 +542,15 @@ final class EditorStore {
     func loadWorkflow() async {
         guard let project = selected else { return }
         do {
+            let history = try await workflow.reviewHistory(project: project)
+            cutVersions[project.id] = history.catalog.versions
+            cutVersionIssues[project.id] = history.catalog.issues
+            verifiedImportedCutIDs[project.id] = history.catalog.verifiedImportedIDs
+            currentCuts[project.id] = history.current
+            currentCutIssues[project.id] = history.currentIssue
             conversations[project.id] = try await workflow.messages(project: project)
             cutFeedback[project.id] = try await workflow.feedback(project: project)
             derivedCuts[project.id] = try await workflow.derivatives(project: project)
-            cutVersions[project.id] = try await workflow.versions(project: project)
-            currentCuts[project.id] = try await workflow.current(project: project)
             if runningProjectID != project.id, var run = try await workflow.recentRun(project: project) {
                 if run.state == .running, kill(run.ownerProcessID, 0) != 0 {
                     run.state = .failed; run.failure = "The previous app session ended during this run. Start a new run; the previous cut is still available."

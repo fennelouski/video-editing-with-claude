@@ -48,7 +48,7 @@ import Testing
         let updates = ConversationLocalEditController(project: project,engine: engine,idleInterval: 0.02,onExport: { exported = $0 })
         let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
         await conversation.load();conversation.edit(text)
-        #expect(await conversation.submit())
+        await conversation.reviewLocalTarget();#expect(await conversation.submit())
         for _ in 0..<4000 {
             if exported != nil || updates.error != nil { break }
             try await Task.sleep(for: .milliseconds(5))
@@ -109,7 +109,7 @@ import Testing
         let updates = ConversationLocalEditController(project: project,engine: engine,idleInterval: 0.02,onExport: { exported = $0 })
         let conversation = LiveConversationController(project: project,clientLocator: { nil },localUpdates: updates,localTarget: { target })
         await conversation.load();conversation.edit("use 720p")
-        #expect(await conversation.submit())
+        await conversation.reviewLocalTarget();#expect(await conversation.submit())
         for _ in 0..<4000 {
             if exported != nil || updates.error != nil { break }
             try await Task.sleep(for: .milliseconds(5))

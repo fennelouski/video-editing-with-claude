@@ -166,3 +166,53 @@ struct ProjectExperienceTests {
     }
 }
 #endif
+
+#if !canImport(ClautoCore)
+extension ProjectExperienceNativeTests {
+    @Test func retryMissingPreviewRequiresSavedBytesAndKeepsSessionAndDraftOwnership() async throws {
+        let f = try await FrameReviewFixture.make();defer { try? FileManager.default.removeItem(at: f.root) }
+        let base = f.project.folder.appendingPathComponent("cuts/v001"),movie = base.appendingPathComponent("exports/review.mp4")
+        let movieBytes = try Data(contentsOf: movie),movieSHA = TranscriptSourceMap.sha(movieBytes)
+        let xml = Data(ReviewMovieImportService.flatReviewXML(movie: movie,frames: 36,width: 160,height: 90).utf8)
+        try xml.write(to: base.appendingPathComponent("exports/cut.fcpxml"))
+        try JSONSerialization.data(withJSONObject: ["saved_sha256":TranscriptSourceMap.sha(xml)]).write(to: base.appendingPathComponent("exports/cut.snapshot.json"))
+        let receipt = try JSONSerialization.data(withJSONObject: ["sha256":movieSHA,"technical_checks_passed":true])
+        try receipt.write(to: base.appendingPathComponent("inputs/original-verification.json"))
+        var version = CutVersion(number: 1,label: "Synthetic reconnect review",engineVersion: "synthetic",runID: UUID(),artifacts: ["exports/review.mp4","exports/cut.fcpxml","exports/cut.snapshot.json","plan/cut.plan.json","inputs/import-binding.json"],approvedPlanHash: f.target.approvedPlanSHA256,briefHash: f.target.approvedBriefSHA256,approvedScript: "inputs/script/approved.md")
+        version.id = f.target.versionID
+        let binding: [String:Any] = ["scope":"review_existing_movie_only","projectID":f.project.id.uuidString,"versionID":version.id.uuidString,"movieSHA256":movieSHA,"verificationReceiptSHA256":TranscriptSourceMap.sha(receipt)]
+        try JSONSerialization.data(withJSONObject: binding).write(to: base.appendingPathComponent("inputs/import-binding.json"))
+        let encoder = JSONEncoder();encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(version).write(to: base.appendingPathComponent("clauto-version.json"))
+        try encoder.encode(version.id).write(to: f.project.folder.appendingPathComponent("cuts/current.json"))
+        // A malformed peer must not prevent this independently verified review.
+        let bad = f.project.folder.appendingPathComponent("cuts/v002")
+        try FileManager.default.createDirectory(at: bad,withIntermediateDirectories: false)
+        try Data("bad peer metadata".utf8).write(to: bad.appendingPathComponent("clauto-version.json"))
+        let held = f.root.appendingPathComponent("held-original.mp4");try FileManager.default.moveItem(at: movie,to: held)
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let store = EditorStore(defaults: defaults),router = ReviewWindowRouter();router.store = store;router.intendedVersionID = version.id
+        let chat = store.liveConversation(for: f.project);await chat.load();chat.edit("Keep this unsent project draft")
+        let session = store.reviewPlayer(project: f.project,version: version,url: movie,ownerID: router.id),player = session.player
+        defer { session.dispose();store.reviewPlayers.removeValue(forKey: session.id) }
+        session.attach(to: router)
+        for _ in 0..<500 { if session.canRetryPreview { break };try await Task.sleep(for: .milliseconds(2)) }
+        #expect(session.issue != nil && !session.ready)
+        try FileManager.default.moveItem(at: held,to: movie)
+        session.retryPreview();session.retryPreview() // the in-flight retry owns one session
+        for _ in 0..<1000 { if session.ready { break };try await Task.sleep(for: .milliseconds(2)) }
+        #expect(session.ready && session.issue == nil && session.endpoint?.target.preview.sha256 == movieSHA)
+        #expect(session.player === player && store.reviewPlayers.count == 1 && !session.playing)
+        #expect(store.reviewPlayer(project: f.project,version: version,url: movie,ownerID: router.id) === session)
+        #expect(chat.draft.text == "Keep this unsent project draft")
+        try Data("different bytes at the same path".utf8).write(to: movie)
+        session.issue = "Synthetic disconnected preview"
+        for _ in 0..<1000 { if session.canRetryPreview { break };try await Task.sleep(for: .milliseconds(2)) }
+        session.retryPreview()
+        for _ in 0..<1000 { if session.canRetryPreview { break };try await Task.sleep(for: .milliseconds(2)) }
+        #expect(!session.ready && session.issue != nil && session.endpoint == nil && session.player.currentItem == nil)
+        #expect(chat.draft.text == "Keep this unsent project draft" && store.reviewPlayers.count == 1)
+        #expect(await store.flushReviewWorkForExit())
+    }
+}
+#endif

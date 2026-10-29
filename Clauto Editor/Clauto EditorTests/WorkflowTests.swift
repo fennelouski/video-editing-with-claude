@@ -1137,3 +1137,34 @@ struct WorkflowTests {
     }
 
 }
+
+extension WorkflowTests {
+    @Test func mixedValidityHistoryRetainsHealthyVersionsAndLeavesCurrentUnresolved() async throws {
+        let (root,_,project) = try await fixture();defer { try? FileManager.default.removeItem(at: root) }
+        let cuts = project.folder.appendingPathComponent("cuts"),encoder = JSONEncoder();encoder.dateEncodingStrategy = .iso8601
+        var valid: [CutVersion] = []
+        for number in [1,3] {
+            let version = CutVersion(number: number,label: "Healthy v\(number)",engineVersion: project.manifest.engineVersion,runID: UUID(),artifacts: [],approvedPlanHash: "fixture")
+            let folder = cuts.appendingPathComponent(version.folderName);try FileManager.default.createDirectory(at: folder,withIntermediateDirectories: true)
+            try encoder.encode(version).write(to: folder.appendingPathComponent("clauto-version.json"));valid.append(version)
+        }
+        let bad = cuts.appendingPathComponent("v002");try FileManager.default.createDirectory(at: bad,withIntermediateDirectories: false)
+        let damaged = Data("{bad version".utf8);try damaged.write(to: bad.appendingPathComponent("clauto-version.json"))
+        let pointer = cuts.appendingPathComponent("current.json"),pointerBytes = try encoder.encode(UUID());try pointerBytes.write(to: pointer)
+        let disk = WorkflowRepository(),history = try await disk.reviewHistory(project: project)
+        #expect(history.catalog.versions.map(\.id) == valid.map(\.id))
+        #expect(history.catalog.issues.map(\.folder) == ["v002"] && history.current == nil && history.currentIssue != nil)
+        #expect(try await disk.reviewHistory(project: project).catalog.versions.count == 2)
+        await #expect(throws: (any Error).self) { _ = try await disk.current(project: project) }
+        #expect(try Data(contentsOf: pointer) == pointerBytes && Data(contentsOf: bad.appendingPathComponent("clauto-version.json")) == damaged)
+        let unsafe = CutVersion(number: 4,label: "Unsafe",engineVersion: project.manifest.engineVersion,runID: UUID(),artifacts: ["../../outside"],approvedPlanHash: "fixture")
+        let outside = project.folder.appendingPathComponent("outside");try Data("unrelated source".utf8).write(to: outside)
+        let folder = cuts.appendingPathComponent("v004");try FileManager.default.createDirectory(at: folder,withIntermediateDirectories: false)
+        try encoder.encode(unsafe).write(to: folder.appendingPathComponent("clauto-version.json"))
+        let catalog = try await disk.versionCatalog(project: project)
+        #expect(catalog.versions.map(\.number) == [1,3] && Set(catalog.issues.map(\.folder)) == ["v002","v004"])
+        #expect(try String(contentsOf: outside,encoding: .utf8) == "unrelated source")
+        try FileManager.default.moveItem(at: cuts,to: project.folder.appendingPathComponent("retained-cuts"))
+        await #expect(throws: (any Error).self) { _ = try await disk.reviewHistory(project: project) }
+    }
+}
