@@ -153,27 +153,38 @@ final class EditorStore {
     var storage: StorageSetupController {
         if let storageController { return storageController }
         let controller = StorageSetupController(defaults: defaults,service: storageService,canLock: { [weak self] project in
-            guard let self,self.soundEditorProjects.isEmpty,self.runningProjectID == nil,!self.checking,!self.hasPendingReviewWork,!self.scriptWorkspaces.hasPendingWork,
-                  !self.reviewPlayers.values.contains(where: { $0.project.id == project.id }),
-                  self.projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
-            self.working = true;self.storageOwnsWorking = true;return true
+            self?.beginStorageWork(project) ?? false
         },release: { [weak self] in
-            guard let self,self.storageOwnsWorking else { return };self.storageOwnsWorking = false;self.working = false
+            self?.releaseStorageWork()
         },protectedPaths: { [weak self] in self?.protectedStoragePaths ?? [] },activate: { [weak self] project,journal in
             guard let self else { throw ProjectFailure.invalidProject };try await self.adoptStorageCopy(project,journal: journal)
         })
         storageController = controller;return controller
+    }
+    func beginStorageWork(_ project: Project) -> Bool {
+        guard soundEditorProjects.isEmpty,runningProjectID == nil,!checking,!hasPendingReviewWork,!scriptWorkspaces.hasPendingWork,
+              !reviewPlayers.values.contains(where: { $0.project.id == project.id }),
+              projects.contains(where: { ProjectPresentationState.sameRoot($0,project) }) else { return false }
+        working = true;storageOwnsWorking = true;return true
+    }
+    func releaseStorageWork() {
+        guard storageOwnsWorking else { return };storageOwnsWorking = false;working = false
     }
     private var protectedStoragePaths: [URL] {
         [Bundle.main.bundleURL,engineRoot]+projects.flatMap { project in
             [project.folder]+project.manifest.files.flatMap { [URL(fileURLWithPath: $0.originalPath),project.folder.appendingPathComponent($0.relativePath)] }
         }
     }
-    private func adoptStorageCopy(_ project: Project,journal: StorageMigrationJournal) async throws {
+    func adoptStorageCopy(_ project: Project,journal: StorageMigrationJournal) async throws {
         guard storageOwnsWorking,project.id == journal.plan.projectID,
               [.activated,.rolledBack].contains(journal.state),
               project.folder == (journal.state == .activated ? journal.destination:journal.plan.source),
               !scriptWorkspaces.hasPendingWork else { throw ProjectFailure.invalidProject }
+        // Settings can await copy verification while the main window edits this draft.
+        // Recheck on the main actor before any controller eviction or root change.
+        guard handwritingStudios[project.id]?.hasPendingWork != true else {
+            throw WorkflowFailure.invalid("Save handwriting changes before switching this project's storage.")
+        }
         try scriptWorkspaces.remove(projectID: project.id)
         transcriptReviews.removeValue(forKey: project.id);voiceReviews.removeValue(forKey: project.id);frameComments.removeValue(forKey: project.id)
         handwritingStudios.removeValue(forKey: project.id)

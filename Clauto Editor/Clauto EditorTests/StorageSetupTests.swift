@@ -348,6 +348,60 @@ extension StorageCacheTests {
 
 #if !canImport(ClautoCore)
 @MainActor @Suite(.serialized) struct StorageSetupNativeStoreTests {
+    private func openSyntheticHandwriting(_ store: EditorStore,project: Project) async throws -> HandwritingStudioController {
+        // Local synthetic mask pixels, never production artwork or an approved style.
+        var pixels = [UInt8](repeating: 0,count: 64*40*4)
+        for x in 12...51 {
+            let i = (20*64+x)*4
+            pixels[i] = 74;pixels[i+1] = 60;pixels[i+2] = 46;pixels[i+3] = 255
+        }
+        let original = try CutoutImageIO.png(.init(width: 64,height: 40,rgba: Data(pixels)))
+        var document = HandwritingDocument(projectID: project.id,exactText: "Synthetic storage draft")
+        document.provenance.kind = .fixture
+        document.provenance.sourceName = "synthetic-storage-ink.png"
+        document.provenance.sourceSHA256 = TranscriptSourceMap.sha(original)
+        _ = try await HandwritingRepository().save(project,document: document,original: original)
+        let controller = store.handwritingStudio(for: project)
+        await controller.load();controller.open(document.revisionID)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while (controller.busy != nil || controller.previewing),ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        try #require(controller.document == document && !controller.hasPendingWork && !controller.previewing,
+                     Comment(rawValue: controller.issue ?? "Synthetic saved handwriting did not finish opening."))
+        return controller
+    }
+    @Test func handwritingEditAfterStorageAdmissionPreservesOriginalRootAndDraft() async throws {
+        let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
+        let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
+        let (project,target) = try await nativeFixture(root)
+        defaults.set(project.folder.deletingLastPathComponent().path,forKey: "ClautoProjectsRoot")
+        defaults.set([project.folder.path],forKey: "ClautoRecentProjects")
+        let store = EditorStore(defaults: defaults);await store.restore();store.selectedID = project.id
+        let controller = try await openSyntheticHandwriting(store,project: project)
+        let storage = store.storage;storage.workload = smallWorkload()
+        await storage.planCopy(project: project,destination: target);await storage.confirmCopy(project: project)
+        await storage.reopenCopy();storage.humanCheckedPlayback = true;await storage.confirmPlayback()
+        let journal = try #require(storage.journal)
+        try #require(journal.state == .playbackChecked,Comment(rawValue: storage.error ?? "Copy validation did not finish."))
+        let copied = try await ProjectRepository().open(journal.destination)
+        let receipt = try await StorageMigrationService().activationReceipt(journal.destination)
+        let before = try fileBytes(project.folder),bookmarks = try CreativeAssetFiles.encoder().encode(store.projectBookmarks)
+        // Reproduce the interleaving deterministically at the real store boundary:
+        // clean admission, then an edit during asynchronous copy verification.
+        try #require(store.beginStorageWork(project))
+        defer { store.releaseStorageWork() }
+        controller.change({ $0.review.comments = "New edit while Settings verifies the copy" },visual: false)
+        let draft = try #require(controller.document)
+        try #require(controller.dirty)
+        await #expect(throws: (any Error).self) { try await store.adoptStorageCopy(copied,journal: receipt) }
+        #expect(store.selected?.folder == project.folder && store.projects.count == 1)
+        #expect(store.handwritingStudio(for: project) === controller && controller.document == draft && controller.dirty)
+        #expect(try CreativeAssetFiles.encoder().encode(store.projectBookmarks) == bookmarks)
+        #expect(try fileBytes(project.folder) == before && storage.journal?.state == .playbackChecked)
+        store.releaseStorageWork()
+        #expect(await controller.flushForExit())
+    }
     @Test func confirmedFutureLocationsPreserveLegacyProjectAndIntegratedNavigation() async throws {
         let root = try storageTestRoot();defer { try? FileManager.default.removeItem(at: root) }
         let suite = UUID().uuidString,defaults = try #require(UserDefaults(suiteName: suite));defer { defaults.removePersistentDomain(forName: suite) }
@@ -381,6 +435,7 @@ extension StorageCacheTests {
         let (project,target) = try await nativeFixture(root),other = try await ProjectRepository().create(name: "Other",root: project.folder.deletingLastPathComponent(),engine: root)
         defaults.set(project.folder.deletingLastPathComponent().path,forKey: "ClautoProjectsRoot");defaults.set([project.folder.path,other.folder.path],forKey: "ClautoRecentProjects")
         let store = EditorStore(defaults: defaults);await store.restore();store.selectedID = project.id
+        let handwriting = try await openSyntheticHandwriting(store,project: project)
         let before = try fileBytes(project.folder),otherBefore = try fileBytes(other.folder),originalController = store.scriptWorkspace(for: project)
         let storage = store.storage
         storage.workload = smallWorkload() // Synthetic local copy must fit this Mac's real reserve.
@@ -400,6 +455,8 @@ extension StorageCacheTests {
         #expect(storage.error == nil && storage.journal?.state == .activated)
         #expect(moved.id == project.id && moved.folder.path != project.folder.path)
         #expect(store.projects.count == 2 && store.scriptWorkspace(for: moved) !== originalController)
+        #expect(store.handwritingStudios[project.id] == nil)
+        #expect(store.handwritingStudio(for: moved) !== handwriting)
         #expect(store.projectBookmarks.first { $0.projectID == project.id }?.path == moved.folder.path)
         await storage.rollbackCopy(current: moved)
         #expect(storage.error == nil && store.selected?.folder.path == project.folder.path)
