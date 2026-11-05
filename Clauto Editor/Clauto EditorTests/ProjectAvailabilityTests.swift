@@ -31,6 +31,27 @@ import Testing
         #expect(monitor.availability(forProjectFolder: "/Volumes/Videos/Projects/Sugar — Katie 2026-10-24") == nil)
     }
 
+    @Test func newProjectsCanBeStartedAndPreviewsAreFoundOnlyIfPresent() throws {
+        let home = try toolHome(status: nil)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let movie = home.appendingPathComponent("A — A-Cam in order — 2026-11-05 2000.mp4")
+        try Data("x".utf8).write(to: movie)
+        try Data("""
+        {"nasConnected":true,"projects":[
+         {"name":"Fresh Idea","location":"new","clautoProjects":["Fresh Idea"]},
+         {"name":"A","location":"nas","preview":"\(movie.path)","clautoProjects":["P"]},
+         {"name":"B","location":"mac","preview":"/nonexistent/old.mp4","clautoProjects":["Q"]}]}
+        """.utf8).write(to: home.appendingPathComponent("status.json"))
+        let monitor = ProjectAvailabilityMonitor(toolHome: home)
+        monitor.reload()
+        // A project with no library yet gets the same "Start working here" as one on the NAS.
+        #expect(monitor.availability(forProjectFolder: "/x/Fresh Idea") == .onNAS)
+        #expect(monitor.preview(forProjectFolder: "/x/P") == movie)
+        // A listed preview that's gone from disk isn't offered.
+        #expect(monitor.preview(forProjectFolder: "/x/Q") == nil)
+        #expect(monitor.preview(forProjectFolder: "/x/Fresh Idea") == nil)
+    }
+
     @Test func missingOrDamagedStatusShowsNothing() throws {
         for status in [nil, "{not json", "{\"projects\":[]}"] {
             let home = try toolHome(status: status)

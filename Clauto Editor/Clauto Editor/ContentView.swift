@@ -1,4 +1,8 @@
+import AVKit
 import SwiftUI
+
+/// A handoff preview to play in a sheet.
+private struct PreviewMovie: Identifiable { let url: URL; var id: URL { url } }
 
 struct ContentView: View {
     @Bindable var store: EditorStore
@@ -12,6 +16,7 @@ struct ContentView: View {
     @State private var newProjectCover: Project?
     @State private var groupDraft: ProjectGroupEditorDraft?
     @State private var availability = ProjectAvailabilityMonitor.shared
+    @State private var previewMovie: PreviewMovie?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -171,6 +176,10 @@ struct ContentView: View {
                                 case .copying:
                                     Text(availability.progress ?? "Working on it…").font(ClautoDesign.caption).fixedSize(horizontal: false,vertical: true)
                                 }
+                                if place != .copying,let movie = folderPath.flatMap({ availability.preview(forProjectFolder: $0) }) {
+                                    ClautoAction("Watch the preview",icon: .play,kind: .quiet) { previewMovie = .init(url: movie) }
+                                        .accessibilityIdentifier("watchPreview")
+                                }
                             }.disabled(availability.runningLibrary != nil && place != .copying)
                                 .padding(.horizontal,10).padding(.bottom,6).frame(maxWidth: .infinity,alignment: .leading)
                                 .accessibilityElement(children: .contain).accessibilityIdentifier("projectHandoff")
@@ -210,6 +219,25 @@ struct ContentView: View {
 
         }.foregroundStyle(ClautoDesign.railText).background(ClautoDesign.rail)
             .onAppear { availability.startWatching() }
+            // New projects (Nathan's or made elsewhere) and moves made outside the
+            // app show up without pressing Refresh: every few minutes and whenever
+            // Clauto comes back to the front.
+            .task {
+                while !Task.isCancelled {
+                    await refreshQuietly()
+                    try? await Task.sleep(for: .seconds(180))
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task { await refreshQuietly() }
+            }
+            .sheet(item: $previewMovie) { movie in
+                VStack(spacing: 12) {
+                    Text(movie.url.deletingPathExtension().lastPathComponent).font(ClautoDesign.type(15, weight: .semibold))
+                    VideoPlayer(player: AVPlayer(url: movie.url)).frame(minWidth: 800, minHeight: 450)
+                    HStack { Spacer(); Button("Done") { previewMovie = nil }.keyboardShortcut(.defaultAction) }
+                }.padding(20).frame(minWidth: 840, minHeight: 540)
+            }
             .onChange(of: availability.failure) { _,failure in
                 guard let failure else { return }
                 store.notice = failure; availability.clearFailure()
@@ -218,6 +246,14 @@ struct ContentView: View {
                 guard let message else { return }
                 store.notice = message; store.noticeTitle = "Done"; availability.clearMessage()
             }
+    }
+    /// Background refresh: never interrupts a project being created, opened or
+    /// restored, and skips while the project drive isn't there.
+    private func refreshQuietly() async {
+        availability.refreshStatus()
+        guard !store.discoveringProjects, !store.working,
+              FileManager.default.fileExists(atPath: store.projectRoot.path) else { return }
+        await store.restore()
     }
     private func railAction(_ title: String, icon: ClautoIconName, action: @escaping () -> Void) -> some View {
         Button(action: action) { HStack(spacing: 10) { ClautoIcon(icon, size: 17); Text(title) }.padding(.horizontal, 8).padding(.vertical, 11).frame(maxWidth: .infinity, alignment: .leading) }

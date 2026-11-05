@@ -26,6 +26,8 @@ struct ProjectSyncSnapshot: Decodable, Sendable {
         var name: String
         var location: String
         var clautoProjects: [String]?
+        /// Newest viewing copy of Katie's timeline, made when she handed it off.
+        var preview: String?
     }
     var nasConnected: Bool
     var projects: [Library]
@@ -85,8 +87,28 @@ struct ProjectSyncSnapshot: Decodable, Sendable {
     func availability(forProjectFolder path: String) -> ProjectAvailability? {
         guard let library = library(forProjectFolder: path) else { return nil }
         if runningLibrary == library.name { return .copying }
-        return ProjectAvailability(rawValue: library.location)
+        // A project with no Final Cut library yet ("new") is started the same way
+        // as one waiting on the NAS; its library is made on first start.
+        return library.location == "new" ? .onNAS : ProjectAvailability(rawValue: library.location)
     }
+
+    /// The newest preview for a project, if one exists on this Mac.
+    func preview(forProjectFolder path: String) -> URL? {
+        guard let file = library(forProjectFolder: path)?.preview, FileManager.default.fileExists(atPath: file) else { return nil }
+        return URL(fileURLWithPath: file)
+    }
+
+    /// Asks Clauto Sync to rewrite status.json (new projects, previews, moves made
+    /// elsewhere), then re-reads it. Skipped while a handoff is running.
+    func refreshStatus() {
+        let tool = toolHome.appendingPathComponent("clauto-sync")
+        guard runningLibrary == nil, FileManager.default.isExecutableFile(atPath: tool.path) else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            _ = Self.execute(tool, ["status", "--json"]) { _ in }
+            await self?.forceReload()
+        }
+    }
+    private func forceReload() { statusModified = nil; reload() }
 
     /// "Start working on NAME here": brings the library to this Mac if needed and
     /// opens it in Final Cut on Katie's own timeline (or a new A-Cam timeline).
