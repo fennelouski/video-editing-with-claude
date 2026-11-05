@@ -319,5 +319,39 @@
 <g transform="translate(1298 1035)"><path d="M 6 3 L 21 3 L 21 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
 <path d="M 3 6 L 18 6 L 18 21 L 3 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
 <path d="M 6 13 L 9 17 L 15 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(64 1096) scale(1.5)"><path d="M 4 4 L 20 4 L 20 15 L 4 15 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 2 19 L 22 19 L 20 21 L 4 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 13 6 L 9 10 L 12 10 L 11 13 L 15 9 L 12 9 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<text x="64" y="1163" fill="#172925" font-family="Work Sans" font-size="17" font-weight="400">On this Mac</text>
+<g transform="translate(64 1181) scale(0.6666667)"><path d="M 4 4 L 20 4 L 20 15 L 4 15 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 2 19 L 22 19 L 20 21 L 4 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 13 6 L 9 10 L 12 10 L 11 13 L 15 9 L 12 9 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(102 1179) scale(0.8333333)"><path d="M 4 4 L 20 4 L 20 15 L 4 15 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 2 19 L 22 19 L 20 21 L 4 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 13 6 L 9 10 L 12 10 L 11 13 L 15 9 L 12 9 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(146 1177)"><path d="M 4 4 L 20 4 L 20 15 L 4 15 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 2 19 L 22 19 L 20 21 L 4 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 13 6 L 9 10 L 12 10 L 11 13 L 15 9 L 12 9 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(256 1096) scale(1.5)"><path d="M 3 3 L 21 3 L 21 10 L 3 10 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 3 14 L 21 14 L 21 21 L 3 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 12 10 L 12 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 6 L 8 6 L 8 8 L 6 8 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 17 L 8 17 L 8 19 L 6 19 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<text x="256" y="1163" fill="#172925" font-family="Work Sans" font-size="17" font-weight="400">On the NAS</text>
+<g transform="translate(256 1181) scale(0.6666667)"><path d="M 3 3 L 21 3 L 21 10 L 3 10 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 3 14 L 21 14 L 21 21 L 3 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 12 10 L 12 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 6 L 8 6 L 8 8 L 6 8 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 17 L 8 17 L 8 19 L 6 19 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(294 1179) scale(0.8333333)"><path d="M 3 3 L 21 3 L 21 10 L 3 10 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 3 14 L 21 14 L 21 21 L 3 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 12 10 L 12 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 6 L 8 6 L 8 8 L 6 8 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 17 L 8 17 L 8 19 L 6 19 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g transform="translate(338 1177)"><path d="M 3 3 L 21 3 L 21 10 L 3 10 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 3 14 L 21 14 L 21 21 L 3 21 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 12 10 L 12 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 6 L 8 6 L 8 8 L 6 8 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 6 17 L 8 17 L 8 19 L 6 19 Z" fill="currentColor" stroke="none" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter"/></g>
 <text x="64" y="1080" fill="#52675E" font-family="Work Sans" font-size="16" font-weight="400">Original Clauto artwork · Source and reproduction instructions: Design/Identity/PROVENANCE.md</text>
 </svg>

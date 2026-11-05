@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var coverProject: Project?
     @State private var newProjectCover: Project?
     @State private var groupDraft: ProjectGroupEditorDraft?
+    @State private var availability = ProjectAvailabilityMonitor.shared
 
     var body: some View {
         HStack(spacing: 0) {
@@ -113,11 +114,24 @@ struct ContentView: View {
                     ForEach(store.libraryEntries) { entry in
                         let selected = store.selectedID.map { entry.memberIDs.contains($0) } ?? false
                         let opened = store.projects.filter { entry.memberIDs.contains($0.id) }
+                        let folderPath = opened.first?.folder.path ?? store.projectBookmarks.first(where: { entry.memberIDs.contains($0.projectID) })?.path
+                        let place = folderPath.flatMap { availability.availability(forProjectFolder: $0) }
+                        let linkedLibrary = folderPath.flatMap { availability.library(forProjectFolder: $0) }
                         Button { Task { await store.selectLibraryEntry(entry) } } label: {
                             HStack(alignment: .center,spacing: 10) {
                                 ProjectCoverView(library: store.covers,projectIDs: (selected ? [store.selectedID!]:[])+entry.memberIDs)
                                 VStack(alignment: .leading,spacing: 6) {
-                                    Text(entry.name).font(ClautoDesign.type(14,weight: .medium)).lineLimit(3)
+                                    HStack(alignment: .firstTextBaseline,spacing: 6) {
+                                        Text(entry.name).font(ClautoDesign.type(14,weight: .medium)).lineLimit(3)
+                                        if let place {
+                                            // Instantly available projects get the Mac mark; NAS-only
+                                            // projects the server mark. Copying dims the Mac mark.
+                                            ClautoIcon(place == .onNAS ? .nas:.local,size: 13)
+                                                .opacity(place == .copying ? 0.45:1)
+                                                .help(place == .onThisMac ? "On this Mac: opens instantly":place == .onNAS ? "On the NAS: right-click → Open in Final Cut to bring it here":"Copying to this Mac…")
+                                                .accessibilityIdentifier("projectAvailability-"+place.rawValue)
+                                        }
+                                    }
                                     Text(entry.memberIDs.count > 1 ? "\(entry.memberIDs.count) versions":opened.first.flatMap { store.currentCuts[$0.id] }.map { "Cut v\($0.number)" } ?? (opened.isEmpty ? "Unavailable":"Draft")).font(ClautoDesign.caption)
                                     if opened.isEmpty { Text("Reconnect project drive").font(ClautoDesign.caption) }
                                 }.frame(maxWidth: .infinity,alignment: .leading)
@@ -125,7 +139,7 @@ struct ContentView: View {
                                 .background(selected ? ClautoDesign.citron:.clear,in: ClautoThemedShape(palette: ClautoThemeStore.shared.palette))
                         }.buttonStyle(ClautoInlineButtonStyle(onRail: true))
                             .accessibilityLabel(entry.name).accessibilityAddTraits(selected ? .isSelected:[])
-                            .accessibilityValue(opened.isEmpty ? "Unavailable. Reconnect the project drive.":entry.memberIDs.count > 1 ? "\(entry.memberIDs.count) versions":"Available")
+                            .accessibilityValue((opened.isEmpty ? "Unavailable. Reconnect the project drive.":entry.memberIDs.count > 1 ? "\(entry.memberIDs.count) versions":"Available")+(place.map { ". Final Cut library: \($0.label)" } ?? ""))
                             .accessibilityIdentifier(entry.groupID == nil ? "project-"+entry.id.uuidString:"project-group-"+entry.id.uuidString)
                             .contextMenu {
                                 if let project = opened.first(where: { $0.id == store.selectedID }) ?? opened.first {
@@ -133,7 +147,34 @@ struct ContentView: View {
                                     Button("Group project versions…") { groupDraft = .init(projectIDs: entry.memberIDs,name: entry.name) }
                                     if entry.groupID != nil { Button("Keep this version as a separate project") { store.ungroupProject(project.id) } }
                                 }
+                                if let linkedLibrary,let place {
+                                    Divider()
+                                    switch place {
+                                    case .onNAS: Button("Start working on \(linkedLibrary.name) here") { availability.startWorkingHere(linkedLibrary.name) }
+                                    case .onThisMac:
+                                        Button("Open in Final Cut") { availability.startWorkingHere(linkedLibrary.name) }
+                                        Button("Hand off to Nathan") { availability.handOffToNathan(linkedLibrary.name) }
+                                    case .copying: Button(availability.progress ?? "Working on it…") {}.disabled(true)
+                                    }
+                                }
                             }
+                        // The one action that matters for this project, spelled out, under
+                        // the selected project (and under any project mid-handoff).
+                        if let linkedLibrary,let place,selected || place == .copying {
+                            VStack(alignment: .leading,spacing: 6) {
+                                switch place {
+                                case .onNAS:
+                                    ClautoAction("Start working on \(linkedLibrary.name) here",icon: .local,kind: .primary) { availability.startWorkingHere(linkedLibrary.name) }
+                                case .onThisMac:
+                                    ClautoAction("Hand off to Nathan",icon: .nas,kind: .primary) { availability.handOffToNathan(linkedLibrary.name) }
+                                    ClautoAction("Open in Final Cut",kind: .quiet) { availability.startWorkingHere(linkedLibrary.name) }
+                                case .copying:
+                                    Text(availability.progress ?? "Working on it…").font(ClautoDesign.caption).fixedSize(horizontal: false,vertical: true)
+                                }
+                            }.disabled(availability.runningLibrary != nil && place != .copying)
+                                .padding(.horizontal,10).padding(.bottom,6).frame(maxWidth: .infinity,alignment: .leading)
+                                .accessibilityElement(children: .contain).accessibilityIdentifier("projectHandoff")
+                        }
                     }
                     ForEach(store.unopenedProjectIssues.filter { issue in !store.projectBookmarks.contains(where: { $0.path == issue.path }) }) { issue in
                         Button { Task { await store.open(URL(fileURLWithPath: issue.path,isDirectory: true)) } } label: {
@@ -168,6 +209,15 @@ struct ContentView: View {
             }.padding(.horizontal, 16).padding(.bottom, 22)
 
         }.foregroundStyle(ClautoDesign.railText).background(ClautoDesign.rail)
+            .onAppear { availability.startWatching() }
+            .onChange(of: availability.failure) { _,failure in
+                guard let failure else { return }
+                store.notice = failure; availability.clearFailure()
+            }
+            .onChange(of: availability.message) { _,message in
+                guard let message else { return }
+                store.notice = message; store.noticeTitle = "Done"; availability.clearMessage()
+            }
     }
     private func railAction(_ title: String, icon: ClautoIconName, action: @escaping () -> Void) -> some View {
         Button(action: action) { HStack(spacing: 10) { ClautoIcon(icon, size: 17); Text(title) }.padding(.horizontal, 8).padding(.vertical, 11).frame(maxWidth: .infinity, alignment: .leading) }

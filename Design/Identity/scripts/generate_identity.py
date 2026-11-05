@@ -137,6 +137,8 @@ struct ClautoIcon: View {
         case .close: "xmark"
         case .settings: "slider.horizontal.3"
         case .version: "square.stack"
+        case .local: "laptopcomputer"
+        case .nas: "server.rack"
         }
     }
 }

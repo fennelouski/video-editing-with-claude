@@ -168,6 +168,13 @@ including non-public footage, images, audio or transcripts in an external servic
 card importer is opt-in, accepts only explicitly enrolled volume UUIDs, preserves source
 cards, and requires a verified completion receipt before imported media is used.
 
+**Katie's MacBook (laptop editing).** Clauto's project folders stay on the NAS as above.
+Only Final Cut libraries and the clips they use are copied to the laptop for editing, by a
+separate tool, Clauto Sync (`~/Library/Application Support/Clauto Sync/`, rules in its
+`CLAUDE.md`). Clauto reads its `status.json` to mark each project in the rail as on this
+Mac or on the NAS (`Services/ProjectAvailability.swift`). It never moves media itself and
+shows no mark when that file is missing or unreadable.
+
 Anything added should be verifiable without a human watching a video:
 
 - Timing changes → assert frame-grid alignment and step quantisation.

@@ -1,8 +1,8 @@
 {
   "result": "passed",
   "native_mac_entries": 10,
-  "editable_svg_assets": 25,
-  "interface_icons": 21,
+  "editable_svg_assets": 27,
+  "interface_icons": 23,
   "contrast_ratios": {
     "ink/ivory": 13.335,
     "muted/ivory": 5.319,
@@ -215,7 +215,7 @@
   "sources": [
     {
       "path": "Design/Identity/geometry.json",
-      "sha256": "c8673532c7af166aaa793eff2bfe3628265cccf5482154810a03f4bac430a553"
+      "sha256": "746f167199f49ed9118418c8a28097cc987ba303c6b32c0b29c8feebf5aed9b2"
     },
     {
       "path": "Design/Identity/app-icon.svg",
@@ -223,7 +223,7 @@
     },
     {
       "path": "Design/Identity/scripts/generate_identity.py",
-      "sha256": "d053f955577d3f814bf806358281d34c39af007256f14259cf76a3dfb1b5170b"
+      "sha256": "25eb8abef5e034a510e63c0f8b316e80967e3eff7323cf4f6f3c49f20e9e39cf"
     },
     {
       "path": "Design/Identity/scripts/render_assets.swift",
@@ -231,7 +231,7 @@
     },
     {
       "path": "Clauto Editor/Clauto Editor/Views/ClautoIcon.swift",
-      "sha256": "1f10605457fa3c367d62ed2ee7ff9c106fe116b8c18b6bde2c64e6c196f94746"
+      "sha256": "c3bbf08a0894207979a02b009d032cdcd09d396bdf17efa7d930158a09a87f13"
     }
   ]
 }

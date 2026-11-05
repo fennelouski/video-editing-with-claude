@@ -4,7 +4,7 @@
 import SwiftUI
 
 enum ClautoIconName: String, CaseIterable, Sendable {
-    case project, brief, files, cut, conversation, add, folder, open, play, pause, seek, arrow, science, font, cutout, audio, export, check, close, settings, version
+    case project, brief, files, cut, conversation, add, folder, open, play, pause, seek, arrow, science, font, cutout, audio, export, check, close, settings, version, local, nas
 }
 
 /// An authored 24-unit icon. Supply the surrounding control's accessible label.
@@ -61,6 +61,8 @@ struct ClautoIcon: View {
         case .close: "xmark"
         case .settings: "slider.horizontal.3"
         case .version: "square.stack"
+        case .local: "laptopcomputer"
+        case .nas: "server.rack"
         }
     }
 }
@@ -357,6 +359,55 @@ struct ClautoIconShape: Shape {
                 path.move(to: CGPoint(x: 6, y: 13))
                 path.addLine(to: CGPoint(x: 9, y: 17))
                 path.addLine(to: CGPoint(x: 15, y: 10))
+            }
+        case .local:
+            if !filled {
+                path.move(to: CGPoint(x: 4, y: 4))
+                path.addLine(to: CGPoint(x: 20, y: 4))
+                path.addLine(to: CGPoint(x: 20, y: 15))
+                path.addLine(to: CGPoint(x: 4, y: 15))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 2, y: 19))
+                path.addLine(to: CGPoint(x: 22, y: 19))
+                path.addLine(to: CGPoint(x: 20, y: 21))
+                path.addLine(to: CGPoint(x: 4, y: 21))
+                path.closeSubpath()
+            }
+            if filled {
+                path.move(to: CGPoint(x: 13, y: 6))
+                path.addLine(to: CGPoint(x: 9, y: 10))
+                path.addLine(to: CGPoint(x: 12, y: 10))
+                path.addLine(to: CGPoint(x: 11, y: 13))
+                path.addLine(to: CGPoint(x: 15, y: 9))
+                path.addLine(to: CGPoint(x: 12, y: 9))
+                path.closeSubpath()
+            }
+        case .nas:
+            if !filled {
+                path.move(to: CGPoint(x: 3, y: 3))
+                path.addLine(to: CGPoint(x: 21, y: 3))
+                path.addLine(to: CGPoint(x: 21, y: 10))
+                path.addLine(to: CGPoint(x: 3, y: 10))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 3, y: 14))
+                path.addLine(to: CGPoint(x: 21, y: 14))
+                path.addLine(to: CGPoint(x: 21, y: 21))
+                path.addLine(to: CGPoint(x: 3, y: 21))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 12, y: 10))
+                path.addLine(to: CGPoint(x: 12, y: 14))
+            }
+            if filled {
+                path.move(to: CGPoint(x: 6, y: 6))
+                path.addLine(to: CGPoint(x: 8, y: 6))
+                path.addLine(to: CGPoint(x: 8, y: 8))
+                path.addLine(to: CGPoint(x: 6, y: 8))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 6, y: 17))
+                path.addLine(to: CGPoint(x: 8, y: 17))
+                path.addLine(to: CGPoint(x: 8, y: 19))
+                path.addLine(to: CGPoint(x: 6, y: 19))
+                path.closeSubpath()
             }
         }
         return path.applying(CGAffineTransform(scaleX: rect.width / 24, y: rect.height / 24))

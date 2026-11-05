@@ -75,9 +75,9 @@ def contrast(a, b):
 
 def main():
     geometry = json.loads((IDENTITY / "geometry.json").read_text())
-    assert len(geometry["icons"]) == 21
+    assert len(geometry["icons"]) == 23
     svgs = list(IDENTITY.glob("*.svg")) + list((IDENTITY / "icons").glob("*.svg"))
-    assert len(svgs) == 25
+    assert len(svgs) == 27
     for path in svgs:
         root = ET.parse(path).getroot()
         assert root.attrib["viewBox"]
@@ -111,11 +111,11 @@ def main():
     assert all(ratio >= 4.5 for ratio in ratios.values()), ratios
     source_paths = [IDENTITY / "geometry.json", IDENTITY / "app-icon.svg", IDENTITY / "scripts/generate_identity.py",
                     IDENTITY / "scripts/render_assets.swift", REPO / "Clauto Editor/Clauto Editor/Views/ClautoIcon.swift"]
-    report = {"result": "passed", "native_mac_entries": 10, "editable_svg_assets": 25, "interface_icons": 21,
+    report = {"result": "passed", "native_mac_entries": 10, "editable_svg_assets": 27, "interface_icons": 23,
               "contrast_ratios": ratios, "outputs": outputs,
               "sources": [{"path": str(path.relative_to(REPO)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in source_paths]}
     (IDENTITY / "previews/verification.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(f"Passed: 10 RGBA native app icons, 25 editable SVG assets, 21 interface icons. Contrast ratios: {ratios}")
+    print(f"Passed: 10 RGBA native app icons, 27 editable SVG assets, 23 interface icons. Contrast ratios: {ratios}")
 
 
 if __name__ == "__main__":
